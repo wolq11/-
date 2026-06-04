@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>问题反馈</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Microsoft YaHei','PingFang SC',sans-serif;background:#f4f5fb;min-height:100vh;color:#1a1a2e;padding:0}
+.topbar{background:#fff;padding:14px 24px;display:flex;align-items:center;gap:16px;border-bottom:1px solid #f0f0f8}
+.topbar a{color:#667eea;text-decoration:none;font-size:0.85em;transition:color .2s}
+.topbar a:hover{color:#5a6fd6}
+.topbar .sep{color:#d0d0d8}
+.topbar .current{color:#e84393;font-weight:600;font-size:0.9em}
+.topbar .right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.topbar .notif-btn{position:relative;background:#f0f0f8;border:1px solid #eee;color:#6b6d8a;padding:4px 10px;border-radius:8px;cursor:pointer;font-size:0.82em}
+.topbar .notif-badge{position:absolute;top:-4px;right:-4px;background:#e74c3c;color:#fff;font-size:0.6em;padding:1px 4px;border-radius:6px;min-width:14px;text-align:center;display:none}
+.container{max-width:800px;margin:0 auto;padding:32px 20px}
+.header{text-align:center;margin-bottom:32px}
+.header h1{font-size:1.5em;background:linear-gradient(135deg,#667eea,#764ba2);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px}
+.header p{color:#6b6d8a;font-size:0.88em}
+.feedback-form{background:#fafaff;border:1px solid #eee;border-radius:16px;padding:24px;margin-bottom:24px}
+.feedback-form h3{font-size:0.95em;color:#1a1a2e;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid #f0f0f8}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;color:#4a4d6a;font-size:0.82em;margin-bottom:6px}
+.form-group label .req{color:#e74c3c}
+.form-group select,.form-group input[type="text"],.form-group input[type="datetime-local"],.form-group textarea{width:100%;padding:10px 14px;border-radius:10px;border:1px solid #e0e0e8;background:#fff;color:#1a1a2e;font-size:0.88em;outline:none;font-family:inherit}
+.form-group select{appearance:none;cursor:pointer}
+.form-group select option{background:#fff;color:#1a1a2e}
+.form-group input:focus,.form-group textarea:focus,.form-group select:focus{border-color:#667eea}
+.form-group textarea{min-height:100px;resize:vertical;line-height:1.6}
+.form-group .hint{font-size:0.78em;color:#f39c12;margin-top:4px}
+.btn{padding:12px 32px;border-radius:10px;border:none;font-size:0.9em;cursor:pointer;font-weight:600;transition:all .2s}
+.btn-primary{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(102,126,234,0.3)}
+.btn-primary:disabled{opacity:0.4;cursor:not-allowed;transform:none;box-shadow:none}
+.btn-sm{padding:6px 14px;font-size:0.8em;border-radius:8px;border:none;cursor:pointer;font-weight:600;transition:all .2s}
+.btn-handle{background:rgba(102,126,234,0.15);color:#667eea;border:1px solid rgba(102,126,234,0.3)}
+.btn-handle:hover{background:rgba(102,126,234,0.25)}
+.club-group{margin-bottom:24px}
+.club-group h3{font-size:1em;color:#1a1a2e;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.club-group h3 .club-badge{background:rgba(102,126,234,0.1);color:#667eea;padding:2px 10px;border-radius:12px;font-size:0.75em}
+.fb-card{background:#fff;border:1px solid #f0f0f8;border-radius:12px;padding:14px;margin-bottom:10px}
+.fb-card .fb-top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px}
+.fb-card .fb-type{display:inline-block;padding:2px 10px;border-radius:10px;font-size:0.72em;font-weight:600}
+.fb-card .fb-type.teacher_checkin{background:rgba(243,156,18,0.1);color:#f39c12}
+.fb-card .fb-type.daily_activity{background:rgba(102,126,234,0.1);color:#667eea}
+.fb-card .fb-type.other{background:rgba(160,163,189,0.1);color:#6b6d8a}
+.fb-card .fb-type.system{background:rgba(232,67,147,0.1);color:#e84393}
+.fb-card .fb-type.activity{background:rgba(102,126,234,0.1);color:#667eea}
+.fb-card .fb-title{font-size:0.92em;font-weight:600;margin-bottom:6px;color:#1a1a2e}
+.fb-card .fb-body{font-size:0.83em;color:#6b6d8a;line-height:1.5;white-space:pre-wrap}
+.fb-card .fb-meta{font-size:0.72em;color:#a0a3bd;margin-top:8px;display:flex;justify-content:space-between;align-items:center}
+.fb-card .fb-activity{font-size:0.82em;color:#4a4d6a;margin-bottom:4px}
+.fb-card .fb-file{font-size:0.78em;color:#667eea;margin-top:6px}
+.status-tag{display:inline-block;padding:2px 8px;border-radius:8px;font-size:0.7em;font-weight:600}
+.status-tag.pending{background:rgba(255,193,7,0.15);color:#f39c12}
+.status-tag.resolved{background:rgba(0,184,148,0.15);color:#00b894}
+.result-box{background:rgba(0,184,148,0.06);border:1px solid rgba(0,184,148,0.15);border-radius:8px;padding:10px;margin-top:8px;font-size:0.82em;color:#00b894}
+.result-box .label{font-weight:600;margin-bottom:4px}
+.handle-area{margin-top:10px;display:none}
+.handle-area textarea{width:100%;padding:8px 12px;border-radius:8px;border:1px solid #e0e0e8;background:#fff;color:#1a1a2e;font-size:0.82em;outline:none;font-family:inherit;min-height:60px;resize:vertical;margin-bottom:8px}
+.handle-area .btns{display:flex;gap:8px}
+.empty{text-align:center;padding:24px;color:#a0a3bd;font-size:0.85em}
+.toast{position:fixed;top:20px;right:20px;padding:14px 24px;border-radius:12px;font-size:0.88em;z-index:9999;animation:slideIn .3s;max-width:360px}
+.toast.success{background:rgba(0,184,148,0.15);border:1px solid rgba(0,184,148,0.3);color:#00b894}
+.toast.error{background:rgba(231,76,60,0.15);border:1px solid rgba(231,76,60,0.3);color:#e74c3c}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+@media(max-width:768px){
+  .topbar{flex-wrap:wrap;gap:8px;padding:10px 14px}
+  .topbar .right{margin-left:0;width:100%;justify-content:flex-end}
+  .fb-card .fb-top{flex-wrap:wrap;gap:6px}
+  .fb-card .fb-meta{flex-wrap:wrap;gap:4px}
+  .card{padding:14px}
+  .form-group select,.form-group input[type="text"],.form-group input[type="datetime-local"],.form-group textarea{font-size:16px}
+  .btn-sm{padding:8px 14px;min-height:36px}
+  .btn{padding:14px 28px;min-height:44px}
+  .handle-area .btns{flex-wrap:wrap}
+  .btn{white-space:normal;word-break:break-word}
+}
+@media(max-width:480px){
+  .container{padding:16px 12px}
+  .header h1{font-size:1.2em}
+  .toast{max-width:90vw;right:10px;left:10px}
+  .form-group select,.form-group input[type="text"],.form-group input[type="datetime-local"],.form-group textarea{font-size:16px}
+}
+</style>
+</head>
+<body>
+<div class="topbar">
+    <a href="/login.html">主页</a><span class="sep">/</span><span class="current">问题反馈</span>
+    <div class="right"><button class="notif-btn" id="notifBtn">通知 <span class="notif-badge" id="notifBadge">0</span></button></div>
+</div>
+<div class="container">
+    <div class="header">
+        <h1>问题反馈</h1>
+        <p id="headerDesc">向管理员反馈问题</p>
+    </div>
+    <div id="feedbackForm" class="feedback-form">
+        <h3>提交反馈</h3>
+        <div class="form-group">
+            <label>问题类型 <span class="req">*</span></label>
+            <select id="typeSelect" onchange="onTypeChange()">
+                <option value="">— 请选择 —</option>
+                <option value="teacher_checkin">指导老师签到问题</option>
+                <option value="daily_activity">日常活动开展</option>
+                <option value="other">其他</option>
+            </select>
+        </div>
+        <div id="dynamicFields"></div>
+    </div>
+    <div id="feedbackList"></div>
+</div>
+<script>
+var api=window.location.origin;
+var currentUser=null;
+
+function toast(msg,type){var d=document.createElement('div');d.className='toast '+type;d.textContent=msg;document.body.appendChild(d);setTimeout(function(){d.remove()},3000)}
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function escHtml(s){if(!s)return '';return esc(s).replace(/\n/g,'<br>')}
+
+fetch(api+'/api/current-user').then(function(r){return r.json()}).then(function(res){
+    if(!res.loggedIn){history.back();return}
+    currentUser=res.user;
+    if(currentUser.role==='admin'){
+        document.getElementById('feedbackForm').style.display='none';
+        document.getElementById('headerDesc').textContent='查看所有社团的问题反馈，填写处理结果';
+    }
+    loadFeedbacks();
+    loadNotifBadge();
+    setInterval(loadNotifBadge,30000);
+}).catch(function(){history.back()});
+
+function onTypeChange(){
+    var type=document.getElementById('typeSelect').value;
+    var area=document.getElementById('dynamicFields');
+    var h='';
+    if(type==='teacher_checkin'){
+        h+='<div class="form-group"><label>活动名称 <span class="req">*</span></label><input type="text" id="fbActName" placeholder="请填写本次活动名称" oninput="checkForm()" /></div>';
+        h+='<div class="form-group"><label>活动时间 <span class="req">*</span></label><input type="datetime-local" id="fbActTime" onchange="checkForm()" /></div>';
+        h+='<div class="form-group"><label>需求简述 <span class="req">*</span></label><input type="text" id="fbTitle" placeholder="简要描述您的需求" oninput="checkForm()" /></div>';
+        h+='<div class="form-group"><label>原因阐述 <span class="req">*</span></label><textarea id="fbBody" placeholder="请详细阐述原因" oninput="checkForm()"></textarea></div>';
+        h+='<div class="form-group"><label>照片提交</label><input type="file" id="fbFile" accept="image/*" /><div class="hint">如果是忘记签到或签退请上传指导老师在场证明图片</div></div>';
+        h+='<div style="text-align:center"><button class="btn btn-primary" id="btnSubmit" disabled onclick="submitFeedback()">提交反馈</button></div>';
+    }else if(type==='daily_activity'){
+        h+='<div class="form-group"><label>活动名称 <span class="req">*</span></label><input type="text" id="fbActName" placeholder="请填写本次活动名称" oninput="checkForm()" /></div>';
+        h+='<div class="form-group"><label>活动时间 <span class="req">*</span></label><input type="datetime-local" id="fbActTime" onchange="checkForm()" /></div>';
+        h+='<div class="form-group"><label>问题阐述 <span class="req">*</span></label><textarea id="fbBody" placeholder="请详细阐述遇到的问题" oninput="checkForm()"></textarea></div>';
+        h+='<div class="form-group"><label>提交材料或照片</label><input type="file" id="fbFile" accept="image/*,.pdf,.doc,.docx" /></div>';
+        h+='<div style="text-align:center"><button class="btn btn-primary" id="btnSubmit" disabled onclick="submitFeedback()">提交反馈</button></div>';
+    }else if(type==='other'){
+        h+='<div class="form-group"><label>问题概括 <span class="req">*</span></label><input type="text" id="fbTitle" placeholder="简要概括问题" oninput="checkForm()" /></div>';
+        h+='<div class="form-group"><label>问题阐述 <span class="req">*</span></label><textarea id="fbBody" placeholder="请详细阐述问题" oninput="checkForm()"></textarea></div>';
+        h+='<div class="form-group"><label>上传材料或照片</label><input type="file" id="fbFile" accept="image/*,.pdf,.doc,.docx" /></div>';
+        h+='<div style="text-align:center"><button class="btn btn-primary" id="btnSubmit" disabled onclick="submitFeedback()">提交反馈</button></div>';
+    }
+    area.innerHTML=h;
+}
+
+function checkForm(){
+    var type=document.getElementById('typeSelect').value;
+    var btn=document.getElementById('btnSubmit');if(!btn)return;
+    var valid=false;
+    if(type==='teacher_checkin'){
+        var actName=(document.getElementById('fbActName')||{}).value||'';
+        var actTime=(document.getElementById('fbActTime')||{}).value||'';
+        var title=(document.getElementById('fbTitle')||{}).value||'';
+        var body=(document.getElementById('fbBody')||{}).value||'';
+        valid=actName.trim()&&actTime&&title.trim()&&body.trim();
+    }else if(type==='daily_activity'){
+        var actName=(document.getElementById('fbActName')||{}).value||'';
+        var actTime=(document.getElementById('fbActTime')||{}).value||'';
+        var body=(document.getElementById('fbBody')||{}).value||'';
+        valid=actName.trim()&&actTime&&body.trim();
+    }else if(type==='other'){
+        var title=(document.getElementById('fbTitle')||{}).value||'';
+        var body=(document.getElementById('fbBody')||{}).value||'';
+        valid=title.trim()&&body.trim();
+    }
+    btn.disabled=!valid;
+}
+
+function submitFeedback(){
+    var type=document.getElementById('typeSelect').value;
+    if(!type){toast('请选择问题类型','error');return}
+    var title='',body='',actName='',actTime='';
+    var fileInput=document.getElementById('fbFile');
+    if(type==='teacher_checkin'){
+        actName=(document.getElementById('fbActName')||{}).value||'';
+        actTime=(document.getElementById('fbActTime')||{}).value||'';
+        title=(document.getElementById('fbTitle')||{}).value||'';
+        body=(document.getElementById('fbBody')||{}).value||'';
+        if(!actName.trim()||!actTime||!title.trim()||!body.trim()){toast('请填写完整信息','error');return}
+    }else if(type==='daily_activity'){
+        actName=(document.getElementById('fbActName')||{}).value||'';
+        actTime=(document.getElementById('fbActTime')||{}).value||'';
+        body=(document.getElementById('fbBody')||{}).value||'';
+        title=actName;
+        if(!actName.trim()||!actTime||!body.trim()){toast('请填写完整信息','error');return}
+    }else{
+        title=(document.getElementById('fbTitle')||{}).value||'';
+        body=(document.getElementById('fbBody')||{}).value||'';
+        if(!title.trim()||!body.trim()){toast('请填写完整信息','error');return}
+    }
+    var fd=new FormData();
+    fd.append('type',type);
+    fd.append('title',title.trim());
+    fd.append('body',body.trim());
+    fd.append('activityName',actName.trim());
+    fd.append('activityTime',actTime);
+    if(fileInput&&fileInput.files&&fileInput.files[0])fd.append('file',fileInput.files[0]);
+    var btn=document.getElementById('btnSubmit');if(btn)btn.disabled=true;
+    fetch(api+'/api/submit-feedback',{method:'POST',body:fd}).then(function(r){return r.json()}).then(function(res){
+        if(res.success){toast('反馈提交成功','success');document.getElementById('typeSelect').value='';document.getElementById('dynamicFields').innerHTML='';loadFeedbacks()}
+        else{toast(res.error||'提交失败','error');if(btn)btn.disabled=false}
+    }).catch(function(){toast('提交失败','error');if(btn)btn.disabled=false});
+}
+
+function loadFeedbacks(){
+    fetch(api+'/api/all-feedbacks').then(function(r){return r.json()}).then(function(res){
+        if(!res.success)return;
+        renderFeedbacks(res.data||[]);
+    });
+}
+
+function renderFeedbacks(feedbacks){
+    var c=document.getElementById('feedbackList');
+    if(!feedbacks.length){c.innerHTML='<div class="empty">暂无反馈记录</div>';return}
+    var typeNames={'teacher_checkin':'指导老师签到问题','daily_activity':'日常活动开展','other':'其他','system':'线上系统问题','activity':'社团活动问题'};
+    var byClub={};
+    feedbacks.forEach(function(fb){
+        if(!byClub[fb.clubName])byClub[fb.clubName]=[];
+        byClub[fb.clubName].push(fb);
+    });
+    var h='';
+    Object.keys(byClub).forEach(function(club){
+        var fbs=byClub[club];
+        h+='<div class="club-group"><h3>'+esc(club)+' <span class="club-badge">'+fbs.length+'条</span></h3>';
+        fbs.forEach(function(fb){
+            h+='<div class="fb-card">';
+            h+='<div class="fb-top"><div><span class="fb-type '+fb.type+'">'+(typeNames[fb.type]||fb.type)+'</span> <span class="status-tag '+fb.status+'">'+(fb.status==='resolved'?'已处理':'待处理')+'</span></div></div>';
+            if(fb.activityName)h+='<div class="fb-activity">活动：'+esc(fb.activityName)+'</div>';
+            if(fb.activityTime)h+='<div class="fb-activity">时间：'+esc(fb.activityTime)+'</div>';
+            h+='<div class="fb-title">'+esc(fb.title)+'</div>';
+            if(fb.body)h+='<div class="fb-body">'+escHtml(fb.body)+'</div>';
+            if(fb.fileName)h+='<div class="fb-file">附件：<a href="'+api+fb.filePath+'" target="_blank" style="color:#667eea">'+esc(fb.fileName)+'</a></div>';
+            if(fb.status==='resolved'&&fb.result)h+='<div class="result-box"><div class="label">处理结果：</div>'+escHtml(fb.result)+'</div>';
+            h+='<div class="fb-meta"><span>'+fb.time+'</span>';
+            if(currentUser&&currentUser.role==='admin'&&fb.status!=='resolved'){
+                h+='<button class="btn-sm btn-handle" onclick="showHandle('+fb.id+',this)">处理</button>';
+            }
+            h+='</div>';
+            h+='<div class="handle-area" id="handle_'+fb.id+'"><textarea id="handleResult_'+fb.id+'" placeholder="请填写处理结果"></textarea><div class="btns"><button class="btn-sm btn-handle" onclick="submitHandle('+fb.id+')">提交处理结果</button><button class="btn-sm" style="background:#f0f0f8;color:#6b6d8a" onclick="hideHandle('+fb.id+')">取消</button></div></div>';
+            h+='</div>';
+        });
+        h+='</div>';
+    });
+    c.innerHTML=h;
+}
+
+function showHandle(id,btn){
+    document.getElementById('handle_'+id).style.display='block';
+    if(btn)btn.style.display='none';
+}
+function hideHandle(id){
+    document.getElementById('handle_'+id).style.display='none';
+}
+function submitHandle(id){
+    var result=document.getElementById('handleResult_'+id).value.trim();
+    if(!result){toast('请填写处理结果','error');return}
+    fetch(api+'/api/handle-feedback/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({result:result})})
+    .then(function(r){return r.json()}).then(function(res){
+        if(res.success){toast('处理结果已提交','success');loadFeedbacks()}
+        else{toast(res.error||'提交失败','error')}
+    }).catch(function(){toast('提交失败','error')});
+}
+
+function loadNotifBadge(){
+    fetch(api+'/api/notifications').then(function(r){return r.json()}).then(function(res){
+        if(!res.success)return;
+        var badge=document.getElementById('notifBadge');
+        if(res.unread>0){badge.textContent=res.unread;badge.style.display='inline'}
+        else{badge.style.display='none'}
+    });
+}
+</script>
+<script src="/ai-chat.js?v=4"></script>
+</body>
+</html>

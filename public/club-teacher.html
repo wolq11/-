@@ -1,0 +1,2265 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>指导老师 - 社团管理</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Microsoft YaHei','PingFang SC',sans-serif;background:#f4f5fb;color:#1a1a2e;display:flex}
+a{text-decoration:none;color:inherit}
+
+.sidebar{width:240px;background:#fff;height:100vh;display:flex;flex-direction:column;flex-shrink:0;border-right:1px solid #ececf5;position:relative;z-index:10}
+.sb-head{padding:20px 18px 16px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #f0f0f8}
+.sb-logo{width:38px;height:38px;border-radius:12px;background:linear-gradient(135deg,#00b894,#55efc4);display:flex;align-items:center;justify-content:center;font-size:1.1em;color:#fff;flex-shrink:0;box-shadow:0 4px 12px rgba(0,184,148,0.25)}
+.sb-title{font-size:1.05em;font-weight:800;color:#1a1a2e;line-height:1.2}
+.sb-subtitle{font-size:0.6em;color:#a0a3bd;font-weight:400;letter-spacing:1px}
+
+.sb-role{padding:12px 18px;border-bottom:1px solid #f0f0f8}
+.sb-role-badge{display:inline-flex;align-items:center;gap:5px;padding:5px 12px;border-radius:8px;font-size:0.74em;font-weight:700;background:linear-gradient(135deg,rgba(0,184,148,0.1),rgba(85,239,196,0.1));color:#00b894}
+
+.sb-club{padding:10px 18px;border-bottom:1px solid #f0f0f8}
+.sb-club-label{font-size:0.62em;font-weight:700;color:#c0c3d8;padding-bottom:6px;letter-spacing:1px}
+.sb-club-chips{display:flex;gap:4px;flex-wrap:wrap}
+.sb-club-chip{padding:4px 10px;border-radius:6px;font-size:0.72em;cursor:pointer;border:1px solid #eee;background:#fafaff;color:#a0a3bd;font-weight:600;transition:all .2s;word-break:break-all;max-width:100%}
+.sb-club-chip:hover{border-color:#b2f0e0;color:#00b894}
+.sb-club-chip.active{border-color:#00b894;background:rgba(0,184,148,0.06);color:#00b894}
+
+.sb-nav{flex:1;overflow-y:auto;padding:10px 10px}
+.sb-nav::-webkit-scrollbar{width:3px}
+.sb-nav::-webkit-scrollbar-thumb{background:#ececf5;border-radius:3px}
+.nav-sec{margin-bottom:6px}
+.nav-sec-label{font-size:0.62em;font-weight:700;color:#c0c3d8;padding:8px 10px 4px;text-transform:uppercase;letter-spacing:1px}
+.nav-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;font-size:0.84em;color:#6b6d8a;cursor:pointer;transition:all .2s;margin-bottom:1px;font-weight:500;position:relative}
+.nav-item:hover{background:#f0fdf9;color:#1a1a2e}
+.nav-item.active{background:linear-gradient(135deg,rgba(0,184,148,0.08),rgba(85,239,196,0.08));color:#00b894;font-weight:700}
+.nav-item.active::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:18px;border-radius:2px;background:linear-gradient(180deg,#00b894,#55efc4)}
+.nav-item .ni-emoji{font-size:1.1em;width:22px;text-align:center;flex-shrink:0}
+.nav-badge{min-width:18px;height:18px;border-radius:9px;background:#e74c3c;color:#fff;font-size:0.58em;font-weight:700;display:none;align-items:center;justify-content:center;padding:0 5px;margin-left:auto;flex-shrink:0;line-height:1}
+.nav-badge.show{display:flex}
+
+.sb-foot{padding:14px 18px;border-top:1px solid #f0f0f8}
+.sb-user{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.sb-avatar{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#00b894,#55efc4);display:flex;align-items:center;justify-content:center;color:#fff;font-size:0.82em;font-weight:700;flex-shrink:0;overflow:hidden}
+.sb-avatar img{width:100%;height:100%;object-fit:cover}
+.sb-uname{font-size:0.84em;font-weight:700;color:#1a1a2e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-uclub{font-size:0.64em;color:#a0a3bd;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn-logout{width:100%;padding:9px;border-radius:10px;border:1.5px solid #ececf5;background:#fafaff;color:#6b6d8a;font-size:0.78em;cursor:pointer;transition:all .2s;font-weight:600;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn-logout:hover{background:#fff5f5;border-color:#ffd6d6;color:#e74c3c}
+
+.main{flex:1;height:100vh;overflow-y:auto;padding:28px 32px;background:#f4f5fb}
+.main::-webkit-scrollbar{width:5px}
+.main::-webkit-scrollbar-thumb{background:#ddd;border-radius:3px}
+.page{display:none;animation:pageIn .3s ease}
+.page.active{display:block}
+@keyframes pageIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+.pg-title{font-size:1.4em;font-weight:800;color:#1a1a2e;margin-bottom:4px}
+.pg-desc{font-size:0.82em;color:#a0a3bd;margin-bottom:22px}
+
+.iframe-wrap{width:100%;height:calc(100vh - 180px);border:none;border-radius:12px;background:#fff}
+
+.card{background:#fff;border-radius:16px;padding:22px;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,0.03);border:1px solid #f0f0f8}
+.card-title{font-size:0.94em;font-weight:700;color:#1a1a2e;margin-bottom:16px;display:flex;align-items:center;gap:8px}
+.card-title .badge{background:linear-gradient(135deg,rgba(0,184,148,0.08),rgba(85,239,196,0.08));color:#00b894;padding:3px 10px;border-radius:6px;font-size:0.68em;font-weight:700}
+
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:14px;margin-bottom:20px}
+.stat-card{background:linear-gradient(135deg,#f0fdf9,#e8faf5);border-radius:14px;padding:18px;text-align:center;border:1px solid #d1fae5;transition:all .2s}
+.stat-card:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,184,148,0.08)}
+.stat-card .sc-num{font-size:1.8em;font-weight:900;background:linear-gradient(135deg,#00b894,#55efc4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.stat-card .sc-label{font-size:0.72em;color:#a0a3bd;margin-top:3px;font-weight:500}
+
+.cols-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+
+.form-row{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.form-row .field{flex:1;min-width:180px}
+.form-row .field:only-child{flex:1 1 100%;min-width:100%}
+.form-row .field label{display:block;color:#6b6d8a;font-size:0.76em;margin-bottom:5px;font-weight:600}
+.form-row .field input,.form-row .field textarea,.form-row .field select{width:100%;padding:10px 14px;border-radius:10px;border:1.5px solid #eee;color:#1a1a2e;font-size:0.86em;outline:none;font-family:inherit;transition:all .2s;background:#fafaff}
+.form-row .field input:focus,.form-row .field textarea:focus,.form-row .field select:focus{border-color:#00b894;background:#fff;box-shadow:0 0 0 3px rgba(0,184,148,0.08)}
+.form-row .field textarea{min-height:60px;resize:vertical}
+.form-row .field select option{background:#fff;color:#1a1a2e}
+
+.btn{padding:9px 20px;border-radius:10px;border:none;font-size:0.84em;cursor:pointer;font-weight:700;transition:all .2s}
+.btn-primary{background:linear-gradient(135deg,#00b894,#55efc4);color:#fff;box-shadow:0 3px 12px rgba(0,184,148,0.25)}
+.btn-primary:hover{box-shadow:0 5px 20px rgba(0,184,148,0.35);transform:translateY(-1px)}
+.btn-success{background:linear-gradient(135deg,#00b894,#55efc4);color:#fff;box-shadow:0 3px 12px rgba(0,184,148,0.25)}
+.btn-danger{background:#fff5f5;color:#e74c3c;border:1.5px solid #ffd6d6}
+.btn-danger:hover{background:#ffe8e8}
+.btn-ghost{background:transparent;color:#6b6d8a;border:1.5px solid #e8e8f0}
+.btn-ghost:hover{background:#f5f5ff}
+.btn-sm{padding:5px 12px;font-size:0.76em;border-radius:8px}
+
+.session-row{padding:12px 14px;background:#fafaff;border-radius:10px;border:1px solid #f0f0f8;margin-bottom:6px;cursor:pointer;transition:all .2s}
+.session-row:hover{border-color:#b2f0e0;background:#f0fdf9}
+.session-row.active{border-color:#00b894;background:rgba(0,184,148,0.03)}
+.session-info{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.session-name{font-size:0.88em;font-weight:600;color:#1a1a2e}
+.session-meta{display:flex;gap:10px;flex-wrap:wrap;font-size:0.74em;color:#a0a3bd;margin-top:4px}
+.session-status{font-size:0.76em;font-weight:600;padding:4px 10px;border-radius:6px}
+.session-status.open{background:rgba(0,184,148,0.08);color:#00b894}
+.session-status.closed{background:rgba(108,117,125,0.08);color:#6c757d}
+.session-detail{max-height:0;overflow:hidden;transition:max-height .3s}
+.session-detail.show{max-height:3000px;margin-top:8px}
+
+.checkin-action-area{margin-top:12px;padding:14px;background:#f0fdf9;border:1px solid #d1fae5;border-radius:12px}
+.checkin-action-area h4{font-size:0.88em;font-weight:700;color:#1a1a2e;margin-bottom:10px}
+.checkin-status-tag{display:inline-flex;align-items:center;gap:4px;padding:4px 12px;border-radius:8px;font-size:0.76em;font-weight:700}
+.checkin-status-tag.pending{background:rgba(253,203,110,0.12);color:#f39c12}
+.checkin-status-tag.checked_in{background:rgba(0,184,148,0.1);color:#00b894}
+.checkin-status-tag.checked_out{background:linear-gradient(135deg,rgba(102,126,234,0.1),rgba(118,75,162,0.1));color:#667eea}
+
+.location-hint{font-size:0.76em;color:#a0a3bd;margin-top:6px;display:flex;align-items:center;gap:4px}
+.location-hint .loc-ok{color:#00b894}
+.location-hint .loc-far{color:#e74c3c}
+
+.teacher-guidance-card{padding:14px;background:#fafaff;border-radius:10px;border:1px solid #f0f0f8;margin-bottom:8px;display:flex;align-items:center;gap:12px}
+.teacher-guidance-card .tg-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,rgba(0,184,148,0.1),rgba(85,239,196,0.1));display:flex;align-items:center;justify-content:center;font-size:1.2em;color:#00b894;flex-shrink:0;overflow:hidden;border:1px solid #f0f0f8}
+.teacher-guidance-card .tg-avatar img{width:100%;height:100%;object-fit:cover}
+.teacher-guidance-card .tg-info{flex:1;min-width:0}
+.teacher-guidance-card .tg-name{font-size:0.88em;font-weight:600;color:#1a1a2e}
+.teacher-guidance-card .tg-count{font-size:0.74em;color:#a0a3bd;margin-top:2px}
+.teacher-guidance-card .tg-bar{height:6px;background:#f0f0f8;border-radius:3px;margin-top:6px;overflow:hidden}
+.teacher-guidance-card .tg-bar-fill{height:100%;border-radius:3px;background:linear-gradient(90deg,#00b894,#55efc4);transition:width .6s}
+
+.club-info-section{background:#fafaff;border:1px solid #f0f0f8;border-radius:10px;padding:16px;margin-bottom:12px}
+.club-info-section .ci-label{font-size:0.74em;color:#a0a3bd;font-weight:600;margin-bottom:4px}
+.club-info-section .ci-value{font-size:0.86em;color:#1a1a2e;line-height:1.6}
+
+.dept-item{padding:10px 14px;background:#fafaff;border-radius:8px;border:1px solid #f0f0f8;margin-bottom:6px}
+.dept-item .di-name{font-size:0.86em;font-weight:600;color:#1a1a2e}
+.dept-item .di-desc{font-size:0.74em;color:#6b6d8a;margin-top:4px;line-height:1.6}
+
+.profile-avatar{width:72px;height:72px;border-radius:50%;overflow:hidden;background:linear-gradient(135deg,rgba(0,184,148,0.1),rgba(85,239,196,0.1));display:flex;align-items:center;justify-content:center;font-size:2em;color:#b2f0e0;flex-shrink:0;border:2px solid #f0f0f8}
+.profile-avatar img{width:100%;height:100%;object-fit:cover}
+
+.club-check-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;max-height:280px;overflow-y:auto;padding:8px;background:#fafaff;border-radius:10px;border:1.5px solid #eee}
+.club-check-list label{display:inline-flex;align-items:center;gap:4px;padding:6px 12px;background:#fff;border:1px solid #eee;border-radius:8px;font-size:0.82em;cursor:pointer;color:#1a1a2e;transition:all .2s;max-width:100%}
+.club-check-list label span{word-break:break-all}
+.club-check-list label:hover{border-color:#00b894;background:#f0fdf9}
+.club-check-list input:checked+span{color:#00b894;font-weight:600}
+
+.viz-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin-top:12px}
+.viz-card{background:#fafaff;border:1px solid #f0f0f8;border-radius:8px;padding:12px;text-align:center}
+.viz-card .vc-num{font-size:1.6em;font-weight:800;background:linear-gradient(90deg,#00b894,#55efc4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.viz-card .vc-label{font-size:0.72em;color:#a0a3bd;margin-top:2px}
+
+.chart-container{position:relative;height:260px;margin-top:12px}
+
+.finance-row{display:flex;align-items:center;gap:12px;padding:12px 14px;background:#fafaff;border-radius:10px;border:1px solid #f0f0f8;margin-bottom:6px;transition:all .2s}
+.finance-row:hover{border-color:#b2f0e0;background:#f0fdf9}
+.finance-row .fr-type{font-size:0.68em;padding:3px 8px;border-radius:6px;font-weight:700}
+.finance-row .fr-type.income{background:rgba(0,184,148,0.1);color:#00b894}
+.finance-row .fr-type.expense{background:rgba(232,67,147,0.08);color:#e84393}
+.finance-row .fr-info{flex:1;min-width:0}
+.finance-row .fr-cat{font-size:0.86em;font-weight:600;color:#1a1a2e}
+.finance-row .fr-desc{font-size:0.74em;color:#a0a3bd;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.finance-row .fr-amount{font-size:0.92em;font-weight:800;flex-shrink:0}
+.finance-row .fr-amount.income{color:#00b894}
+.finance-row .fr-amount.expense{color:#e84393}
+.finance-row .fr-date{font-size:0.72em;color:#c8cade;flex-shrink:0}
+.finance-summary{display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.finance-summary .fs-card{flex:1;min-width:120px;padding:14px;border-radius:12px;text-align:center}
+.finance-summary .fs-card.income{background:rgba(0,184,148,0.06);border:1px solid rgba(0,184,148,0.12)}
+.finance-summary .fs-card.expense{background:rgba(232,67,147,0.04);border:1px solid rgba(232,67,147,0.08)}
+.finance-summary .fs-card.balance{background:rgba(102,126,234,0.04);border:1px solid rgba(102,126,234,0.08)}
+.finance-summary .fs-num{font-size:1.4em;font-weight:900}
+.finance-summary .fs-num.income{color:#00b894}
+.finance-summary .fs-num.expense{color:#e84393}
+.finance-summary .fs-num.balance{color:#667eea}
+.finance-summary .fs-label{font-size:0.68em;color:#a0a3bd;margin-top:2px}
+
+.feedback-item{padding:14px;background:#fafaff;border-radius:10px;border:1px solid #f0f0f8;margin-bottom:8px}
+.feedback-item .fb-status{font-size:0.68em;padding:3px 8px;border-radius:6px;font-weight:700;display:inline-block;margin-bottom:6px}
+.feedback-item .fb-status.pending{background:rgba(253,203,110,0.12);color:#f39c12}
+.feedback-item .fb-status.resolved{background:rgba(0,184,148,0.1);color:#00b894}
+.feedback-item .fb-content{font-size:0.86em;color:#1a1a2e;line-height:1.6}
+.feedback-item .fb-time{font-size:0.72em;color:#c8cade;margin-top:6px}
+.feedback-item .fb-reply{margin-top:8px;padding:8px 12px;background:#f0fdf9;border-radius:8px;font-size:0.82em;color:#00b894;line-height:1.5}
+
+.empty{text-align:center;padding:28px;color:#c8cade;font-size:0.86em}
+.toast{position:fixed;top:20px;right:20px;padding:12px 20px;border-radius:12px;font-size:0.84em;z-index:10000;animation:slideIn .3s;box-shadow:0 4px 16px rgba(0,0,0,0.08)}
+.toast.success{background:#e8f8f0;border:1px solid #b8e6cc;color:#00b894}
+.toast.error{background:#fff5f5;border:1px solid #ffd6d6;color:#e74c3c}
+@keyframes slideIn{from{opacity:0;transform:translateY(-12px)}to{opacity:1;transform:translateY(0)}}
+
+.modal-bg{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.3);backdrop-filter:blur(4px);z-index:10001;display:none;justify-content:center;align-items:center}
+.modal-bg.show{display:flex}
+.modal-box{background:#fff;border:1px solid #f0f0f8;border-radius:14px;padding:24px;width:90%;max-width:480px;max-height:80vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,0.1)}
+.modal-box h3{font-size:0.95em;color:#1a1a2e;margin-bottom:14px}
+
+.rec-list{max-height:400px;overflow-y:auto}
+.rec-row{padding:10px 12px;background:#fafaff;border-radius:8px;border:1px solid #f0f0f8;margin-bottom:4px;display:flex;align-items:center;gap:10px}
+.rec-row .rr-info{flex:1;min-width:0}
+.rec-row .rr-name{font-size:0.86em;font-weight:600;color:#1a1a2e}
+.rec-row .rr-meta{font-size:0.72em;color:#a0a3bd;margin-top:2px}
+.rec-status-tag{padding:2px 8px;border-radius:5px;font-size:0.68em;font-weight:600}
+.rec-status-tag.pending{background:rgba(253,203,110,0.12);color:#f39c12}
+.rec-status-tag.approved{background:rgba(0,184,148,0.1);color:#00b894}
+.rec-status-tag.rejected{background:rgba(232,67,147,0.08);color:#e84393}
+
+.carousel{position:relative;width:100%;height:340px;border-radius:16px;overflow:hidden;margin-bottom:24px;background:#1a1a2e}
+.carousel-track{display:flex;height:100%;transition:transform .5s ease}
+.carousel-slide{min-width:100%;height:100%;position:relative;background-size:cover;background-position:center}
+.carousel-slide .cs-overlay{position:absolute;bottom:0;left:0;right:0;padding:24px 28px;background:linear-gradient(transparent,rgba(0,0,0,0.7))}
+.carousel-slide .cs-title{color:#fff;font-size:1.4em;font-weight:700;margin-bottom:6px}
+.carousel-slide .cs-desc{color:rgba(255,255,255,0.85);font-size:0.92em;line-height:1.5}
+.carousel-dots{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);display:flex;gap:6px;z-index:2}
+.carousel-dot{width:8px;height:8px;border-radius:50%;background:rgba(255,255,255,0.4);cursor:pointer;transition:all .3s}
+.carousel-dot.active{background:#fff;width:20px;border-radius:4px}
+.carousel-arrow{position:absolute;top:50%;transform:translateY(-50%);width:40px;height:40px;border-radius:50%;background:rgba(255,255,255,0.2);border:none;color:#fff;font-size:1.2em;cursor:pointer;z-index:2;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px);transition:background .2s}
+.carousel-arrow:hover{background:rgba(255,255,255,0.4)}
+.carousel-arrow.prev{left:14px}
+.carousel-arrow.next{right:14px}
+.club-news{flex:1;min-width:0}
+.club-news .cn-item{padding:12px 0;border-bottom:1px solid #f0f0f8;cursor:pointer;transition:background .2s}
+.club-news .cn-item:hover{background:#fafaff}
+.club-news .cn-item:last-child{border-bottom:none}
+.club-news .cn-title{font-size:0.92em;font-weight:600;color:#1a1a2e;margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.club-news .cn-meta{font-size:0.74em;color:#a0a3bd}
+.excellent-clubs{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:20px;padding:8px 0}
+.ec-card{text-align:center;cursor:pointer;transition:transform .2s}
+.ec-card:hover{transform:translateY(-4px)}
+.ec-emblem{width:72px;height:72px;border-radius:50%;margin:0 auto 10px;background:linear-gradient(135deg,#00b894,#55efc4);display:flex;align-items:center;justify-content:center;font-size:1.8em;color:#fff;box-shadow:0 4px 12px rgba(0,184,148,0.2);overflow:hidden}
+.ec-emblem img{width:100%;height:100%;object-fit:cover}
+.ec-name{font-size:0.84em;font-weight:600;color:#1a1a2e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+.mobile-menu-btn{display:none;position:fixed;top:12px;left:12px;z-index:99;width:44px;height:44px;border-radius:12px;background:#fff;border:1px solid #eee;align-items:center;justify-content:center;font-size:1.2em;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.08)}
+
+@media(max-width:768px){
+  .sidebar{position:fixed;left:-260px;width:240px;transition:left .3s ease;z-index:100;box-shadow:4px 0 20px rgba(0,0,0,0.1)}
+  .sidebar.open{left:0}
+  .mobile-menu-btn{display:flex !important}
+  .sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:99}
+  .sidebar-overlay.show{display:block}
+  .main{padding:16px 12px;padding-top:56px}
+  html,body{overflow-y:auto;height:auto}
+  .cols-2{grid-template-columns:1fr}
+  .carousel{height:200px}
+  .carousel-slide .cs-title{font-size:1.1em}
+  .carousel-slide .cs-desc{font-size:0.82em;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .carousel-slide .cs-overlay{padding:16px}
+  .carousel-arrow{width:44px;height:44px}
+  .iframe-wrap{height:calc(100vh - 140px)}
+  .form-row .field input,.form-row .field textarea,.form-row .field select{font-size:16px}
+  .form-row .field{min-width:0;flex:1 1 100%}
+  .toast{left:16px;right:16px;text-align:center}
+  .card{padding:14px;overflow-x:auto}
+  .btn{min-height:36px}
+  .btn-sm{padding:8px 14px;min-height:36px}
+  table{font-size:0.72em}
+  table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  th[style*="white-space:nowrap"],td[style*="white-space:nowrap"]{white-space:normal!important}
+  [style*="min-width"]{min-width:0!important}
+  [style*="display:flex"][style*="justify-content:space-between"]{flex-wrap:wrap!important}
+  [style*="grid-template-columns:1fr 1fr"]{grid-template-columns:1fr!important}
+  .btn{white-space:normal;word-break:break-word}
+  .card,.page{overflow-x:hidden}
+  .finance-row{flex-wrap:wrap}
+  .finance-row .fr-amount,.finance-row .fr-date{flex-shrink:1}
+  .teacher-guidance-card{flex-wrap:wrap}
+  .rec-row{flex-wrap:wrap}
+  .club-info-section .ci-value{word-break:break-word;overflow-wrap:break-word}
+  .tan-content-preview{word-break:break-word;overflow-wrap:break-word}
+  .carousel-slide .cs-desc{word-break:break-word;overflow-wrap:break-word}
+  .feedback-item .fb-content{word-break:break-word;overflow-wrap:break-word}
+  .score-review-table th,.score-review-table td{white-space:nowrap!important}
+  .ma-stats-table th,.ma-stats-table td{white-space:nowrap!important}
+  .checkin-input-area,.checkin-scan-area{min-width:100%!important}
+}
+@media(max-width:480px){
+  .stat-grid{gap:8px}
+  .stat-card{padding:12px}
+  .stat-card .sc-num{font-size:1.4em}
+  .viz-grid{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
+  .finance-summary .fs-card{min-width:80px;padding:10px}
+  .finance-summary .fs-num{font-size:1.1em}
+  .carousel{height:200px}
+  table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  th[style*="white-space:nowrap"],td[style*="white-space:nowrap"]{white-space:normal!important}
+  [style*="min-width"]{min-width:0!important}
+  [style*="display:flex"][style*="justify-content:space-between"]{flex-wrap:wrap!important}
+  [style*="grid-template-columns:1fr 1fr"]{grid-template-columns:1fr!important}
+  .btn{white-space:normal;word-break:break-word}
+  .card,.page{overflow-x:hidden}
+  .finance-row{flex-wrap:wrap}
+  .finance-row .fr-amount,.finance-row .fr-date{flex-shrink:1}
+  .teacher-guidance-card{flex-wrap:wrap}
+  .rec-row{flex-wrap:wrap}
+  .club-info-section .ci-value{word-break:break-word;overflow-wrap:break-word}
+  .tan-content-preview{word-break:break-word;overflow-wrap:break-word}
+  .carousel-slide .cs-desc{word-break:break-word;overflow-wrap:break-word}
+  .feedback-item .fb-content{word-break:break-word;overflow-wrap:break-word}
+  #checkoutCodeDisplay{font-size:1.6em!important;letter-spacing:4px!important;padding:12px 16px!important}
+  .chart-container{height:200px}
+  .score-review-table th,.score-review-table td{white-space:nowrap!important}
+  .ma-stats-table th,.ma-stats-table td{white-space:nowrap!important}
+  .checkin-input-area,.checkin-scan-area{min-width:100%!important}
+}
+</style>
+</head>
+<body>
+<button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+<div class="sidebar-overlay" id="sidebarOverlay" onclick="closeSidebar()"></div>
+
+<div class="sidebar">
+    <div class="sb-head">
+        <div class="sb-logo">👨‍🏫</div>
+        <div><div class="sb-title">济幼社团</div><div class="sb-subtitle">TEACHER PORTAL</div></div>
+    </div>
+    <div class="sb-role"><span class="sb-role-badge">👨‍🏫 <span>指导老师</span></span></div>
+    <div class="sb-club" id="sbClub">
+        <div class="sb-club-label">切换社团</div>
+        <div class="sb-club-chips" id="sbClubChips"></div>
+    </div>
+    <div class="sb-nav" id="sbNav"></div>
+    <div class="sb-foot">
+        <div class="sb-user" id="sbUser"></div>
+        <button class="btn-logout" onclick="doLogout()">🚪 <span>退出登录</span></button>
+    </div>
+</div>
+
+<div class="main" id="mainArea"></div>
+
+<div class="modal-bg" id="imageModal" onclick="closeModal('imageModal')">
+    <div class="modal-box" onclick="event.stopPropagation()">
+        <img id="imageModalSrc" style="max-width:100%;border-radius:8px" />
+    </div>
+</div>
+
+<div class="modal-bg" id="checkoutQrModal" onclick="closeModal('checkoutQrModal')">
+    <div class="modal-box" onclick="event.stopPropagation()" style="text-align:center">
+        <h3>📱 签退码</h3>
+        <div id="checkoutQrContainer" style="display:inline-block;padding:16px;background:#fff;border-radius:12px;border:2px solid #f0f0f8;margin-bottom:12px"></div>
+        <div id="checkoutCodeDisplay" style="font-size:2.4em;font-weight:900;letter-spacing:8px;color:#00b894;background:rgba(0,184,148,0.06);padding:16px 32px;border-radius:12px;display:inline-block;border:2px dashed rgba(0,184,148,0.2)"></div>
+        <div style="margin-top:12px;font-size:0.78em;color:#a0a3bd">请在活动地点200m范围内完成签退</div>
+    </div>
+</div>
+
+<script>
+function toggleSidebar(){document.querySelector('.sidebar').classList.toggle('open');document.getElementById('sidebarOverlay').classList.toggle('show')}
+function closeSidebar(){document.querySelector('.sidebar').classList.remove('open');document.getElementById('sidebarOverlay').classList.remove('show')}
+var api=window.location.origin;
+var currentUser=null;
+var currentClub='';
+var myClubs=[];
+var allClubs=[];
+var guidanceChart=null;
+var guidanceClubChartInstance=null;
+var _dismissedBadges={};
+var _dismissedCounts={};
+try{var _sd=localStorage.getItem('dismissedBadges');if(_sd)_dismissedCounts=JSON.parse(_sd)}catch(e){}
+function _saveDismissed(){try{localStorage.setItem('dismissedBadges',JSON.stringify(_dismissedCounts))}catch(e){}}
+function dismissBadge(feature){
+    _dismissedBadges[feature]=true;
+    var b=document.getElementById('navBadge-'+feature);
+    if(b){_dismissedCounts[feature]=parseInt(b.textContent)||0;b.classList.remove('show')}
+    _saveDismissed();
+    fetch(api+'/api/feature-read/'+feature,{method:'POST'}).then(function(){delete _dismissedBadges[feature]}).catch(function(){delete _dismissedBadges[feature]});
+}
+
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function escHtml(s){if(!s)return '';return esc(s).replace(/\n/g,'<br>')}
+function safeHtml(h){if(!h)return '';var d=document.createElement('div');d.innerHTML=h;var scripts=d.querySelectorAll('script,iframe,object,embed,form');for(var i=0;i<scripts.length;i++){scripts[i].remove()}return d.innerHTML}
+function toast(msg,type){var d=document.createElement('div');d.className='toast '+type;d.textContent=msg;document.body.appendChild(d);setTimeout(function(){d.remove()},3000)}
+function showImageModal(src){document.getElementById('imageModalSrc').src=src;document.getElementById('imageModal').classList.add('show')}
+function closeModal(id){document.getElementById(id).classList.remove('show')}
+
+function buildSidebar(){
+    var navs=[
+        {sec:'首页',items:[
+            {id:'home',emoji:'🏠',name:'首页'},
+            {id:'personal',emoji:'👤',name:'个人中心'}
+        ]},
+        {sec:'活动',items:[
+            {id:'checkin',emoji:'✅',name:'活动签到签退'},
+            {id:'activity',emoji:'📋',name:'活动记录'},
+            {id:'joint',emoji:'🤝',name:'联合活动'}
+        ]},
+        {sec:'数据',items:[
+    {id:'guidance',emoji:'📊',name:'指导情况'},
+            {id:'recruit',emoji:'🎯',name:'招募管理'},
+            {id:'memberAnalysis',emoji:'📈',name:'成员分析'}
+        ]},
+        {sec:'管理',items:[
+            {id:'clubInvite',emoji:'📨',name:'社团邀请'},
+            {id:'clubHome',emoji:'🏫',name:'社团主页'},
+            {id:'finance',emoji:'💰',name:'财务登记'},
+            {id:'scoringReview',emoji:'⚖️',name:'赋分审核'},
+            {id:'adminNotify',emoji:'📨',name:'管理员通知'},
+            {id:'feedback',emoji:'💬',name:'问题反馈'}
+        ]}
+    ];
+    var h='';
+    navs.forEach(function(sec){
+        h+='<div class="nav-sec"><div class="nav-sec-label">'+sec.sec+'</div>';
+        sec.items.forEach(function(item){
+            h+='<div class="nav-item'+(item.id==='home'?' active':'')+'" data-page="'+item.id+'" onclick="switchPage(\''+item.id+'\')">';
+            h+='<span class="ni-emoji">'+item.emoji+'</span><span>'+item.name+'</span><span class="nav-badge" id="navBadge-'+item.id+'"></span></div>';
+        });
+        h+='</div>';
+    });
+    document.getElementById('sbNav').innerHTML=h;
+}
+
+function switchPage(id){
+    document.querySelectorAll('.nav-item').forEach(function(n){n.classList.toggle('active',n.dataset.page===id)});
+    document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active')});
+    var page=document.getElementById('page-'+id);
+    if(page)page.classList.add('active');
+    var _featureMap={'joint':'joint','recruit':'recruit','scoringReview':'scoringReview'};
+    if(_featureMap[id])dismissBadge(_featureMap[id]);
+    if(id==='joint'){
+        var jf=document.querySelector('#page-joint iframe');
+        if(jf)jf.src='/club-tools.html?panel=joint&club='+encodeURIComponent(currentClub||'')+'&t='+Date.now();
+    }
+    if(id==='home')loadTeacherHomeData();
+    if(id==='checkin')loadCheckinSessions();
+    if(id==='activity')loadActivityList();
+    if(id==='guidance')loadGuidanceStats();
+    if(id==='memberAnalysis')loadMemberAnalysis();
+    if(id==='adminNotify')loadTeacherAdminNotify();
+    if(id==='finance')loadFinanceRecords();
+    if(id==='feedback')loadFeedbacks();
+    if(id==='clubInvite')loadClubInvites();
+    if(id==='clubHome')loadClubHome();
+    if(id==='personal')loadTeacherProfile();
+    if(id==='scoringReview')loadScoringReviewList();
+}
+
+function renderClubSwitch(){
+    var box=document.getElementById('sbClubChips');
+    var h='';
+    myClubs.forEach(function(cn){
+        h+='<div class="sb-club-chip'+(cn===currentClub?' active':'')+'" onclick="switchClub(\''+esc(cn).replace(/'/g,"\\'")+'\')">'+esc(cn)+'</div>';
+    });
+    box.innerHTML=h;
+}
+
+function switchClub(cn){
+    currentClub=cn;
+    renderClubSwitch();
+    var sbUser=document.getElementById('sbUser');
+    if(sbUser){
+        var clubEl=sbUser.querySelector('.sb-uclub');
+        if(clubEl)clubEl.textContent=cn;
+    }
+    var descEl=document.querySelector('#page-memberAnalysis .pg-desc');
+    if(descEl)descEl.textContent=cn+' · 成员数据可视化';
+    var jointIframe=document.querySelector('#page-joint iframe');
+    if(jointIframe){
+        jointIframe.src='/club-tools.html?panel=joint&club='+encodeURIComponent(cn)+'&t='+Date.now();
+    }
+    var recruitIframe=document.querySelector('#page-recruit iframe');
+    if(recruitIframe){
+        recruitIframe.src='/club-tools.html?panel=recruit&club='+encodeURIComponent(cn);
+    }
+    var activePage=document.querySelector('.nav-item.active');
+    if(activePage)switchPage(activePage.dataset.page);
+}
+
+function doLogout(){
+    fetch(api+'/api/logout',{method:'POST'}).then(function(){window.location.replace('/')});
+}
+
+function buildPages(){
+    var pages={
+        home:teacherHomePage(),
+        checkin:checkinPage(),
+        activity:activityPage(),
+        guidance:guidancePage(),
+        recruit:recruitPage(),
+        memberAnalysis:memberAnalysisPage(),
+        adminNotify:teacherAdminNotifyPage(),
+        finance:financePage(),
+        scoringReview:scoringReviewPage(),
+        feedback:feedbackPage(),
+        clubInvite:clubInvitePage(),
+        clubHome:clubHomePage(),
+        joint:'<div class="pg-title">联合活动广场</div><div class="pg-desc">社团合作与交流</div><iframe src="/club-tools.html?panel=joint&club='+encodeURIComponent(currentClub||'')+'" class="iframe-wrap"></iframe>',
+        personal:personalPage()
+    };
+    var main=document.getElementById('mainArea');
+    var h='';
+    for(var id in pages){
+        h+='<div class="page'+(id==='home'?' active':'')+'" id="page-'+id+'">'+pages[id]+'</div>';
+    }
+    main.innerHTML=h;
+}
+
+function teacherHomePage(){
+    return '<div class="carousel" id="homeCarousel">'+
+    '<div class="carousel-track" id="carouselTrack"></div>'+
+    '<button class="carousel-arrow prev" onclick="carouselPrev()">‹</button>'+
+    '<button class="carousel-arrow next" onclick="carouselNext()">›</button>'+
+    '<div class="carousel-dots" id="carouselDots"></div>'+
+    '</div>'+
+    '<div class="cols-2" style="margin-bottom:24px">'+
+    '<div class="card"><div class="card-title">📰 热点资讯</div><div id="homeNews" class="club-news" style="max-height:400px;overflow-y:auto"><div class="empty">加载中...</div></div></div>'+
+    '<div class="card"><div class="card-title">🌟 优秀社团活动</div><div id="homeActivities" class="club-news" style="max-height:400px;overflow-y:auto"><div class="empty">加载中...</div></div></div>'+
+    '</div>'+
+    '<div class="card"><div class="card-title">🏫 优秀社团</div><div id="homeExcellentClubs" class="excellent-clubs"><div class="empty">加载中...</div></div></div>';
+}
+
+var carouselSlides=[];
+var carouselIdx=0;
+var carouselTimer=null;
+var carouselTransitioning=false;
+
+function loadTeacherHomeData(){
+    fetch(api+'/api/notices').then(function(r){return r.json()}).then(function(res){
+        var box=document.getElementById('homeNews');if(!box)return;
+        if(!res.success||!res.data||!res.data.length){box.innerHTML='<div class="empty">暂无资讯</div>';return}
+        var h='';res.data.slice(0,8).forEach(function(n){
+            h+='<div class="cn-item" style="cursor:pointer" onclick="showNoticeDetail(\''+n.id+'\')">';
+            h+='<div class="cn-title">';
+            if(n.isTop)h+='<span style="background:linear-gradient(135deg,#fd79a8,#e84393);color:#fff;padding:1px 5px;border-radius:3px;font-size:0.6em;margin-right:4px">置顶</span>';
+            h+=esc(n.title)+'</div><div class="cn-meta">'+esc(n.time||'')+'</div></div>';
+        });box.innerHTML=h;
+    });
+    fetch(api+'/api/excellent-activities').then(function(r){return r.json()}).then(function(res){
+        var box=document.getElementById('homeActivities');if(!box)return;
+        if(res.success&&res.data&&res.data.length){
+            var h='';res.data.forEach(function(d){
+                h+='<div class="cn-item" style="cursor:pointer" onclick="showMaterialDetail(\''+esc(d.groupId)+'\')">';
+                h+='<div class="cn-title">'+esc(d.title||d.clubName+'的活动')+'</div><div class="cn-meta">'+esc(d.clubName||'')+' · '+esc(d.time||'')+'</div></div>';
+            });box.innerHTML=h;
+        }else{
+            fetch(api+'/api/all-materials').then(function(r2){return r2.json()}).then(function(res2){
+                if(!res2.success||!res2.data||!res2.data.length){box.innerHTML='<div class="empty">暂无活动</div>';return}
+                var approved=res2.data.filter(function(m){return m.status==='approved'}).slice(0,8);
+                if(!approved.length){box.innerHTML='<div class="empty">暂无优秀活动</div>';return}
+                var h='';approved.forEach(function(m){
+                    h+='<div class="cn-item" style="cursor:pointer" onclick="showMaterialDetail(\''+esc(m.groupId)+'\')">';
+                    h+='<div class="cn-title">'+esc(m.title||m.clubName+'的活动')+'</div><div class="cn-meta">'+esc(m.clubName||'')+' · '+esc(m.time||'')+'</div></div>';
+                });box.innerHTML=h;
+            });
+        }
+    });
+    fetch(api+'/api/excellent-clubs').then(function(r){return r.json()}).then(function(res){
+        var box=document.getElementById('homeExcellentClubs');if(!box)return;
+        if(!res.success||!res.data||!res.data.length){box.innerHTML='<div class="empty">暂无优秀社团</div>';return}
+        var h='';res.data.forEach(function(d){
+            var emblem='<span>'+esc((d.clubName||'社')[0])+'</span>';
+            if(d.emblemUrl)emblem='<img src="'+d.emblemUrl+'" />';
+            h+='<div class="ec-card" onclick="showClubIntro(\''+esc(d.clubName).replace(/'/g,"\\'")+'\')">';
+            h+='<div class="ec-emblem">'+emblem+'</div>';
+            h+='<div class="ec-name">'+esc(d.clubName)+'</div>';
+            if(d.starRating&&d.starRating>0)h+='<div style="color:#f39c12;font-size:0.72em;margin-top:2px">'+'★'.repeat(d.starRating)+'☆'.repeat(5-d.starRating)+'</div>';
+            h+='</div>';
+        });box.innerHTML=h;
+    });
+    fetch(api+'/api/showcase').then(function(r){return r.json()}).then(function(res){
+        carouselSlides=[];
+        if(res.success&&res.data&&res.data.length){
+            res.data.forEach(function(s){carouselSlides.push({title:s.clubName,desc:s.description||'',img:s.imageUrl||''})});
+        }
+        if(!carouselSlides.length){
+            carouselSlides=[{title:'欢迎来到济幼社团',desc:'发现精彩社团活动',img:''}];
+        }
+        renderCarousel();
+        startCarouselTimer();
+    });
+}
+
+function renderCarousel(){
+    var track=document.getElementById('carouselTrack');if(!track)return;
+    var dots=document.getElementById('carouselDots');if(!dots)return;
+    if(carouselSlides.length<=1){
+        var h='';carouselSlides.forEach(function(s){
+            var bg=s.img?'background-image:url('+api+s.img+')':'background:linear-gradient(135deg,#00b894,#55efc4)';
+            h+='<div class="carousel-slide" style="'+bg+'"><div class="cs-overlay"><div class="cs-title">'+esc(s.title)+'</div>';
+            if(s.desc)h+='<div class="cs-desc">'+safeHtml(s.desc)+'</div>';
+            h+='</div></div>';
+        });track.innerHTML=h;dots.innerHTML='';return;
+    }
+    var h='';
+    var last=carouselSlides[carouselSlides.length-1];
+    var bgL=last.img?'background-image:url('+api+last.img+')':'background:linear-gradient(135deg,#00b894,#55efc4)';
+    h+='<div class="carousel-slide" style="'+bgL+'"><div class="cs-overlay"><div class="cs-title">'+esc(last.title)+'</div>';
+    if(last.desc)h+='<div class="cs-desc">'+safeHtml(last.desc)+'</div>';
+    h+='</div></div>';
+    carouselSlides.forEach(function(s){
+        var bg=s.img?'background-image:url('+api+s.img+')':'background:linear-gradient(135deg,#00b894,#55efc4)';
+        h+='<div class="carousel-slide" style="'+bg+'"><div class="cs-overlay"><div class="cs-title">'+esc(s.title)+'</div>';
+        if(s.desc)h+='<div class="cs-desc">'+safeHtml(s.desc)+'</div>';
+        h+='</div></div>';
+    });
+    var first=carouselSlides[0];
+    var bgF=first.img?'background-image:url('+api+first.img+')':'background:linear-gradient(135deg,#00b894,#55efc4)';
+    h+='<div class="carousel-slide" style="'+bgF+'"><div class="cs-overlay"><div class="cs-title">'+esc(first.title)+'</div>';
+    if(first.desc)h+='<div class="cs-desc">'+safeHtml(first.desc)+'</div>';
+    h+='</div></div>';
+    track.innerHTML=h;
+    var dh='';carouselSlides.forEach(function(_,i){
+        dh+='<div class="carousel-dot'+(i===0?' active':'')+'" onclick="carouselGo('+i+')"></div>';
+    });dots.innerHTML=dh;
+    carouselGo(0,true);
+    track.addEventListener('transitionend',function(){
+        carouselTransitioning=false;
+        if(carouselIdx===carouselSlides.length){
+            track.style.transition='none';
+            carouselIdx=0;
+            track.style.transform='translateX(0%)';
+            track.offsetHeight;
+            track.style.transition='transform .5s ease';
+            updateCarouselDots();
+        }else if(carouselIdx===-1){
+            track.style.transition='none';
+            carouselIdx=carouselSlides.length-1;
+            track.style.transform='translateX(-'+carouselIdx*100+'%)';
+            track.offsetHeight;
+            track.style.transition='transform .5s ease';
+            updateCarouselDots();
+        }
+    });
+}
+
+function updateCarouselDots(){
+    var realIdx=carouselIdx;
+    if(realIdx<0)realIdx=carouselSlides.length-1;
+    if(realIdx>=carouselSlides.length)realIdx=0;
+    document.querySelectorAll('.carousel-dot').forEach(function(d,i){d.classList.toggle('active',i===realIdx)});
+}
+
+function carouselGo(idx,instant){
+    carouselIdx=idx;
+    var track=document.getElementById('carouselTrack');if(!track)return;
+    if(instant){
+        track.style.transition='none';
+        track.style.transform='translateX(-'+(idx+1)*100+'%)';
+        track.offsetHeight;
+        track.style.transition='transform .5s ease';
+    }else{
+        carouselTransitioning=true;
+        track.style.transform='translateX(-'+(idx+1)*100+'%)';
+    }
+    updateCarouselDots();
+}
+function carouselPrev(){if(carouselTransitioning)return;carouselGo(carouselIdx-1);resetCarouselTimer()}
+function carouselNext(){if(carouselTransitioning)return;carouselGo(carouselIdx+1);resetCarouselTimer()}
+function startCarouselTimer(){carouselTimer=setInterval(function(){if(!carouselTransitioning)carouselNext()},8000)}
+function resetCarouselTimer(){clearInterval(carouselTimer);startCarouselTimer()}
+
+var clubDetailsMap={};
+function showClubIntro(clubName){
+    fetch(api+'/api/club-detail/'+encodeURIComponent(clubName)).then(function(r){return r.json()}).then(function(res){
+        if(!res.success){toast('未找到社团信息','error');return}
+        var d=res.data;var mid='ciModal_'+Date.now();
+        var h='<div id="'+mid+'" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">';
+        h+='<div style="background:#fff;border-radius:16px;padding:28px;max-width:480px;width:90%;max-height:75vh;overflow-y:auto" onclick="event.stopPropagation()">';
+        h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">';
+        h+='<div style="display:flex;align-items:center;gap:12px;min-width:0;flex:1">';
+        if(d.profile&&d.profile.emblemUrl)h+='<img src="'+api+d.profile.emblemUrl+'" style="width:48px;height:48px;border-radius:50%;object-fit:cover;flex-shrink:0" />';
+        else h+='<div style="width:48px;height:48px;border-radius:50%;background:linear-gradient(135deg,#00b894,#55efc4);display:flex;align-items:center;justify-content:center;font-size:1.2em;color:#fff;flex-shrink:0">🏫</div>';
+        h+='<div style="min-width:0"><h3 style="font-size:1.1em;color:#1a1a2e;word-break:break-word">'+esc(clubName)+'</h3>';
+        if(d.profile&&d.profile.president)h+='<div style="font-size:0.72em;color:#a0a3bd;margin-top:2px">👤 社长：'+esc(d.profile.president)+(d.profile.starRating&&d.profile.starRating>0?' <span style="color:#f39c12">'+'★'.repeat(d.profile.starRating)+'☆'.repeat(5-d.profile.starRating)+'</span>':'')+'</div>';
+        h+='</div></div>';
+        h+='<button style="border:none;background:#f0f0f8;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:1em;color:#6b6d8a;flex-shrink:0" onclick="var m=document.getElementById(\''+mid+'\');if(m)m.remove();event.stopPropagation()">✕</button></div>';
+        if(d.profile&&d.profile.description)h+='<div style="font-size:0.86em;color:#4a4d6a;line-height:1.7;margin-bottom:12px;word-break:break-word">'+d.profile.description+'</div>';
+        if(d.teachers&&d.teachers.length){
+            h+='<div style="margin-bottom:12px"><div style="font-size:0.82em;font-weight:600;color:#1a1a2e;margin-bottom:6px">👨‍🏫 指导老师</div>';
+            d.teachers.forEach(function(t){
+                h+='<div style="display:flex;align-items:center;gap:8px;padding:4px 0">';
+                if(t.photo)h+='<img src="'+api+t.photo+'" style="width:28px;height:28px;border-radius:50%;object-fit:cover" />';
+                else h+='<div style="width:28px;height:28px;border-radius:50%;background:#f0f0f8;display:flex;align-items:center;justify-content:center;font-size:0.8em">👤</div>';
+                h+='<span style="font-size:0.82em;font-weight:500;color:#1a1a2e">'+esc(t.name)+'</span></div>';
+            });
+            h+='</div>';
+        }
+        h+='</div></div>';
+        document.body.insertAdjacentHTML('beforeend',h);
+    });
+}
+
+function showNoticeDetail(id){
+    fetch(api+'/api/notices').then(function(r){return r.json()}).then(function(res){
+        if(!res.success||!res.data)return;
+        var n=res.data.find(function(item){return String(item.id)===String(id)});
+        if(!n){toast('未找到通知','error');return}
+        var mid='ndModal_'+Date.now();
+        var h='<div id="'+mid+'" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">';
+        h+='<div style="background:#fff;border-radius:16px;padding:28px;max-width:500px;width:90%;max-height:70vh;overflow-y:auto" onclick="event.stopPropagation()">';
+        h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px"><div style="flex:1"><h3 style="font-size:1.1em;color:#1a1a2e;line-height:1.4">';
+        if(n.isTop)h+='<span style="background:linear-gradient(135deg,#fd79a8,#e84393);color:#fff;padding:2px 6px;border-radius:4px;font-size:0.6em;margin-right:4px;vertical-align:middle">置顶</span>';
+        h+=esc(n.title)+'</h3><div style="font-size:0.72em;color:#c8cade;margin-top:4px">'+esc(n.time||'')+'</div></div>';
+        h+='<button style="border:none;background:#f0f0f8;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:1em;color:#6b6d8a;flex-shrink:0;margin-left:12px" onclick="var m=document.getElementById(\''+mid+'\');if(m)m.remove();event.stopPropagation()">✕</button></div>';
+        if(n.content)h+='<div style="font-size:0.88em;color:#4a4d6a;line-height:1.7;margin-bottom:12px">'+n.content+'</div>';
+        if(n.attachmentName)h+='<div style="margin-top:8px"><a href="'+api+'/api/notice-file/'+n.id+'" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;background:rgba(0,184,148,0.06);color:#00b894;font-size:0.82em;font-weight:600;text-decoration:none">📎 '+esc(n.attachmentName)+'</a></div>';
+        h+='</div></div>';
+        document.body.insertAdjacentHTML('beforeend',h);
+    }).catch(function(){toast('加载通知详情失败','error')});
+}
+
+function showMaterialDetail(groupId){
+    fetch(api+'/api/excellent-activity-detail/'+encodeURIComponent(groupId)).then(function(r){return r.json()}).then(function(res){
+        if(!res.success||!res.data){toast('未找到活动详情','error');return}
+        var d=res.data;
+        var mid='mtModal_'+Date.now();
+        var h='<div id="'+mid+'" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center" onclick="if(event.target===this)this.remove()">';
+        h+='<div style="background:#fff;border-radius:16px;padding:28px;max-width:520px;width:90%;max-height:70vh;overflow-y:auto" onclick="event.stopPropagation()">';
+        h+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px"><div style="flex:1"><h3 style="font-size:1.1em;color:#1a1a2e;line-height:1.4">'+esc(d.title)+'</h3>';
+        h+='<div style="font-size:0.72em;color:#c8cade;margin-top:4px">🏫 '+esc(d.clubName||'')+(d.time?' · '+esc(d.time):'')+'</div></div>';
+        h+='<button style="border:none;background:#f0f0f8;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:1em;color:#6b6d8a;flex-shrink:0;margin-left:12px" onclick="var m=document.getElementById(\''+mid+'\');if(m)m.remove();event.stopPropagation()">✕</button></div>';
+        if(d.locationName)h+='<div style="font-size:0.84em;color:#6b6d8a;margin-bottom:8px">📍 '+esc(d.locationName)+'</div>';
+        if(d.activityContent)h+='<div style="font-size:0.88em;color:#4a4d6a;line-height:1.7;margin-bottom:12px">'+escHtml(d.activityContent)+'</div>';
+        if(d.body)h+='<div style="font-size:0.88em;color:#4a4d6a;line-height:1.7;margin-bottom:12px">'+escHtml(d.body)+'</div>';
+        if(d.startTime||d.endTime)h+='<div style="font-size:0.8em;color:#a0a3bd;margin-bottom:8px">⏰ '+(d.startTime||'')+' ~ '+(d.endTime||'')+'</div>';
+        if(d.checkinCount!==undefined)h+='<div style="font-size:0.8em;color:#667eea;font-weight:600">✅ 签到 '+d.checkinCount+' 人</div>';
+        if(d.photos&&d.photos.length){
+            h+='<div style="margin-top:12px"><div style="font-size:0.82em;font-weight:600;color:#1a1a2e;margin-bottom:8px">📷 活动照片</div>';
+            h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px">';
+            d.photos.forEach(function(p){
+                h+='<img src="'+api+p.url+'" style="width:100%;height:100px;object-fit:cover;border-radius:8px;cursor:pointer" onclick="event.stopPropagation()" />';
+            });
+            h+='</div></div>';
+        }
+        h+='</div></div>';
+        document.body.insertAdjacentHTML('beforeend',h);
+    }).catch(function(){toast('加载活动详情失败','error')});
+}
+
+function checkinPage(){
+    return '<div class="pg-title">✅ 活动签到签退</div><div class="pg-desc">输入签到码完成签到，活动结束后拍照签退</div>'+
+    '<div class="card" style="background:linear-gradient(135deg,rgba(0,184,148,0.04),rgba(85,239,196,0.04));border-color:rgba(0,184,148,0.15)">'+
+    '<div class="card-title" style="font-size:1.05em">🔐 快速签到</div>'+
+    '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">'+
+    '<div class="checkin-input-area" style="flex:1;min-width:200px"><div style="font-size:0.78em;color:#6b6d8a;margin-bottom:6px;font-weight:600">🔢 输入签到码</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap"><input type="text" id="quickCheckinCode" placeholder="输入6位签到码" maxlength="6" style="flex:1;min-width:120px;padding:12px 16px;border-radius:12px;border:1.5px solid #d1fae5;font-size:1.1em;letter-spacing:4px;font-weight:700;text-align:center;background:#fff;outline:none;color:#1a1a2e" onfocus="this.style.borderColor=\'#00b894\';this.style.boxShadow=\'0 0 0 3px rgba(0,184,148,0.1)\'" onblur="this.style.borderColor=\'#d1fae5\';this.style.boxShadow=\'none\'" />'+
+    '<button class="btn btn-primary" style="padding:12px 24px;font-size:0.92em;white-space:nowrap" onclick="quickCheckinOrCheckout()">确认</button></div></div>'+
+    '<div class="checkin-scan-area" style="flex:1;min-width:200px"><div style="font-size:0.78em;color:#6b6d8a;margin-bottom:6px;font-weight:600">📱 扫描二维码</div>'+
+    '<button class="btn btn-primary" style="padding:12px 24px;font-size:0.92em;width:100%" onclick="openTeacherScanner()">📷 打开摄像头扫码</button></div>'+
+    '</div>'+
+    '<div id="quickCheckinResult" style="display:none"></div>'+
+    '</div>'+
+    '<div id="checkinQuickAction" style="margin-bottom:16px"></div>'+
+    '<div class="card"><div class="card-title">📋 进行中的活动 <span class="badge">点击签到/签退</span></div>'+
+    '<div id="openSessionList"><div class="empty">加载中...</div></div></div>'+
+    '<div class="card"><div class="card-title">📜 已结束的活动</div>'+
+    '<div id="closedSessionList"><div class="empty">加载中...</div></div></div>';
+}
+
+function activityPage(){
+    return '<div class="pg-title">📋 活动记录</div><div class="pg-desc">查看社团所有活动记录</div>'+
+    '<div class="card"><div class="card-title" style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px"><span>📜 活动列表 <span class="badge">点击查看详情</span></span>'+
+    '<div style="display:flex;gap:6px;align-items:center">'+
+    '<input type="date" id="actStartDate" style="padding:4px 8px;border-radius:6px;border:1px solid #eee;font-size:0.8em" />'+
+    '<span style="color:#a0a3bd;font-size:0.8em">至</span>'+
+    '<input type="date" id="actEndDate" style="padding:4px 8px;border-radius:6px;border:1px solid #eee;font-size:0.8em" />'+
+    '<button class="btn btn-sm btn-primary" onclick="loadActivityList()" style="font-size:0.78em">筛选</button>'+
+    '</div></div>'+
+    '<div id="allSessionList"><div class="empty">加载中...</div></div></div>';
+}
+
+function guidancePage(){
+    return '<div class="pg-title">📊 指导情况</div><div class="pg-desc">您的社团指导活动统计与可视化</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:16px">'+
+    '<span style="font-size:0.84em;color:#667eea;font-weight:600">📅 日期筛选</span>'+
+    '<input type="date" id="gdStartDate" style="padding:6px 10px;border-radius:8px;border:1px solid #eee;font-size:0.84em" />'+
+    '<span style="color:#a0a3bd;font-size:0.84em">至</span>'+
+    '<input type="date" id="gdEndDate" style="padding:6px 10px;border-radius:8px;border:1px solid #eee;font-size:0.84em" />'+
+    '<button class="btn btn-sm btn-primary" onclick="loadGuidanceStats()">筛选</button>'+
+    '<button class="btn btn-sm" style="background:rgba(102,126,234,0.08);color:#667eea;font-size:0.8em" onclick="document.getElementById(\'gdStartDate\').value=\'\';document.getElementById(\'gdEndDate\').value=\'\';loadGuidanceStats()">重置</button>'+
+    '</div>'+
+    '<div class="stat-grid" id="guidanceStatGrid"></div>'+
+    '<div class="cols-2">'+
+    '<div class="card"><div class="card-title">📈 月度指导趋势</div><div class="chart-container"><canvas id="guidanceTrendChart"></canvas></div></div>'+
+    '<div class="card"><div class="card-title">🏫 各社团指导次数</div><div class="chart-container"><canvas id="guidanceClubChart"></canvas></div></div>'+
+    '</div>'+
+    '<div class="card"><div class="card-title">📋 指导记录明细</div><div id="guidanceRecordList"><div class="empty">加载中...</div></div></div>';
+}
+
+function recruitPage(){
+    return '<div class="pg-title">🎯 招募管理</div><div class="pg-desc">社团招募信息管理</div><iframe src="/club-tools.html?panel=recruit&club='+encodeURIComponent(currentClub||'')+'" class="iframe-wrap"></iframe>'
+}
+
+function memberAnalysisPage(){
+    return '<div class="pg-title">📈 成员分析</div><div class="pg-desc">'+esc(currentClub||'')+' · 成员数据可视化</div>'+
+    '<div class="stat-grid">'+
+    '<div class="stat-card"><div class="sc-num" id="maTotal">0</div><div class="sc-label">成员总数</div></div>'+
+    '<div class="stat-card"><div class="sc-num" id="maDepts">0</div><div class="sc-label">部门数</div></div>'+
+    '<div class="stat-card"><div class="sc-num" id="maActs">0</div><div class="sc-label">活动场次</div></div>'+
+    '</div>'+
+    '<div class="cols-2">'+
+    '<div class="card"><div class="card-title">🏢 部门分布</div><div id="maDeptChart"><div class="empty">加载中...</div></div></div>'+
+    '<div class="card"><div class="card-title">🏫 学院分布</div><div id="maClassChart"><div class="empty">加载中...</div></div></div>'+
+    '</div>'+
+    '<div class="card" style="margin-top:16px"><div class="card-title">📋 社员活动参与统计 <span class="badge">基于签到数据</span></div>'+
+    '<div id="maCheckinStats"><div class="empty">加载中...</div></div></div>';
+}
+
+function financePage(){
+    return '<div class="pg-title">💰 财务登记</div><div class="pg-desc">记录社团收支</div>'+
+    '<div class="finance-summary" id="financeSummary"></div>'+
+    '<div class="card"><div class="card-title">📝 新增财务记录</div>'+
+    '<div class="form-row"><div class="field"><label>类型 *</label><select id="finType"><option value="income">收入</option><option value="expense">支出</option></select></div>'+
+    '<div class="field"><label>分类 *</label><input type="text" id="finCategory" placeholder="如：会费、赞助、活动支出" /></div></div>'+
+    '<div class="form-row"><div class="field"><label>金额 (元) *</label><input type="number" id="finAmount" placeholder="0.00" step="0.01" min="0.01" /></div>'+
+    '<div class="field"><label>日期 *</label><input type="date" id="finDate" /></div></div>'+
+    '<div class="form-row"><div class="field"><label>说明</label><textarea id="finDesc" placeholder="可选，补充说明" rows="2"></textarea></div></div>'+
+    '<button class="btn btn-primary" onclick="submitFinanceRecord()">✅ 提交记录</button></div>'+
+    '<div class="card"><div class="card-title">📜 财务记录</div>'+
+    '<div id="financeList"><div class="empty">加载中...</div></div></div>';
+}
+
+function feedbackPage(){
+    return '<div class="pg-title">💬 问题反馈</div><div class="pg-desc">提交问题或建议</div>'+
+    '<div class="card"><div class="card-title">📝 提交反馈</div>'+
+    '<div class="form-row"><div class="field" style="flex:1 1 100%;min-width:100%"><label>反馈内容 *</label><textarea id="fbContent" placeholder="请描述您遇到的问题或建议" rows="4"></textarea></div></div>'+
+    '<button class="btn btn-primary" onclick="submitFeedback()">📤 提交反馈</button></div>'+
+    '<div class="card"><div class="card-title">📋 我的反馈</div>'+
+    '<div id="feedbackList"><div class="empty">加载中...</div></div></div>';
+}
+
+function clubInvitePage(){
+    return '<div class="pg-title">📨 社团邀请</div><div class="pg-desc">社团负责人邀请您担任指导老师</div>'+
+    '<div class="card"><div class="card-title">📨 待处理邀请</div><div id="clubInviteList"><div class="empty">加载中...</div></div></div>';
+}
+
+function loadClubInvites(){
+    fetch(api+'/api/teacher-club-requests').then(function(r){return r.json()}).then(function(res){
+        var box=document.getElementById('clubInviteList');
+        if(!box)return;
+        if(!res.success){box.innerHTML='<div class="empty">加载失败</div>';return}
+        var data=res.data||[];
+        var badge=document.getElementById('navBadge-clubInvite');
+        if(badge){badge.textContent=data.length;badge.classList.toggle('show',data.length>0)}
+        if(!data.length){box.innerHTML='<div class="empty">暂无待处理邀请</div>';return}
+        var h='';
+        data.forEach(function(d){
+            h+='<div style="padding:14px;background:#fafaff;border-radius:10px;border:1px solid #f0f0f8;margin-bottom:8px">';
+            h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">';
+            h+='<div style="width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,rgba(0,184,148,0.1),rgba(85,239,196,0.1));display:flex;align-items:center;justify-content:center;font-size:1.2em;flex-shrink:0">🏫</div>';
+            h+='<div><div style="font-size:0.9em;font-weight:600;color:#1a1a2e">'+esc(d.clubName)+'</div>';
+            h+='<div style="font-size:0.74em;color:#a0a3bd">'+esc(d.createdAt)+'</div></div></div>';
+            if(d.introduction)h+='<div style="font-size:0.82em;color:#6b6d8a;margin-bottom:10px;padding:8px 12px;background:#fff;border-radius:8px;border:1px solid #f0f0f8">'+esc(d.introduction)+'</div>';
+            h+='<div style="display:flex;gap:8px">';
+            h+='<button class="btn btn-primary btn-sm" onclick="handleClubInvite('+d.id+',\'approve\')">同意</button>';
+            h+='<button class="btn btn-danger btn-sm" onclick="handleClubInvite('+d.id+',\'reject\')">拒绝</button>';
+            h+='</div></div>';
+        });
+        box.innerHTML=h;
+    });
+}
+
+function handleClubInvite(reqId,action){
+    fetch(api+'/api/teacher-club-requests/'+reqId,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:action})})
+    .then(function(r){return r.json()}).then(function(res){
+        if(res.success){toast(res.message,'success');loadClubInvites();loadTeacherProfile();loadClubInviteBadge()}
+        else toast(res.error||'操作失败','error');
+    });
+}
+
+function loadClubInviteBadge(){
+    fetch(api+'/api/teacher-club-requests').then(function(r){return r.json()}).then(function(res){
+        var badge=document.getElementById('navBadge-clubInvite');
+        if(badge&&res.success){
+            var count=(res.data||[]).length;
+            badge.textContent=count;
+            badge.classList.toggle('show',count>0);
+        }
+    });
+}
+
+function clubHomePage(){
+    return '<div class="pg-title">🏠 社团主页</div><div class="pg-desc">查看社团信息</div>'+
+    '<div class="card"><div class="card-title">🏠 社团信息</div><div id="clubHomeInfo"><div class="empty">加载中...</div></div></div>'+
+    '<div class="card"><div class="card-title">👨‍🏫 指导老师</div><div id="clubHomeTeachers"><div class="empty">加载中...</div></div></div>'+
+    '<div class="card"><div class="card-title">🏢 部门结构</div><div id="clubHomeDepts"><div class="empty">加载中...</div></div></div>';
+}
+
+function personalPage(){
+    return '<div class="pg-title">👤 个人中心</div><div class="pg-desc">修改个人信息</div>'+
+    '<div class="card"><div class="card-title">👤 个人信息 <span class="badge">修改后自动同步到社团主页</span></div>'+
+    '<div class="form-row"><div class="field"><label>头像</label><div style="display:flex;align-items:center;gap:12px;margin-top:4px"><div class="profile-avatar" id="avatarPreview">👨‍🏫</div>'+
+    '<label class="btn btn-sm" style="background:rgba(0,184,148,0.06);color:#00b894;cursor:pointer;padding:6px 14px;border-radius:8px;font-size:0.82em;font-weight:600">📷 更换头像<input type="file" accept="image/*" style="display:none" onchange="uploadAvatar(this)" /></label></div></div></div>'+
+    '<div class="form-row"><div class="field"><label>工号 *</label><input type="text" id="profileWorkId" placeholder="请输入工号" /></div>'+
+    '<div class="field"><label>姓名 *</label><input type="text" id="profileRealName" placeholder="请输入真实姓名" /></div></div>'+
+    '<div class="form-row"><div class="field"><label>联系电话</label><input type="text" id="profilePhone" placeholder="请输入联系电话" /></div>'+
+    '<div class="field"><label>邮箱</label><input type="text" id="profileEmail" placeholder="请输入邮箱" /></div></div>'+
+    '<div class="form-row"><div class="field" style="flex:1 1 100%;min-width:100%"><label>个人简介</label><textarea id="profileIntro" placeholder="请输入个人简介"></textarea></div></div>'+
+    '<div class="form-row"><div class="field" style="flex:1 1 100%;min-width:100%;position:relative"><label>指导社团</label><div id="profileClubDisplay" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-height:32px;padding:8px 0"></div><div id="profileClubEditor" style="display:none"><div class="club-check-list" id="profileClubList"><span style="font-size:0.76em;color:#c8cade">加载中...</span></div></div><a href="javascript:void(0)" id="editClubBtn" onclick="enableClubEdit()" style="position:absolute;top:0;right:0;font-size:0.72em;color:#667eea;text-decoration:none">修改指导社团</a></div></div>'+
+    '<button class="btn btn-primary" onclick="saveTeacherProfile()">保存信息</button></div>';
+}
+
+function loadCheckinSessions(){
+    if(!currentClub&&!myClubs.length)return;
+    var clubs=myClubs.length?myClubs:[currentClub];
+    var allSessions=[];
+    var pending=clubs.length;
+    clubs.forEach(function(cn){
+        fetch(api+'/api/checkin-sessions?club='+encodeURIComponent(cn)).then(function(r){return r.json()}).then(function(res){
+            if(res.success&&res.data){
+                res.data.forEach(function(s){allSessions.push(s)});
+            }
+            pending--;
+            if(pending===0)renderCheckinSessions(allSessions);
+        });
+    });
+}
+
+function renderCheckinSessions(sessions){
+    var openH='',closedH='';
+    sessions.sort(function(a,b){return b.id-a.id});
+    var openSessions=sessions.filter(function(s){return s.status==='open'});
+    var quickBox=document.getElementById('checkinQuickAction');
+    if(quickBox&&openSessions.length){
+        var qh='<div style="background:linear-gradient(135deg,rgba(0,184,148,0.06),rgba(85,239,196,0.06));border:1.5px solid rgba(0,184,148,0.15);border-radius:14px;padding:18px">';
+        qh+='<div style="font-size:0.94em;font-weight:700;color:#1a1a2e;margin-bottom:10px">🔔 当前有 '+openSessions.length+' 个活动正在进行</div>';
+        openSessions.forEach(function(s){
+            qh+='<div style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:#fff;border:1px solid #d1fae5;border-radius:8px;margin-right:6px;margin-bottom:6px;cursor:pointer;font-size:0.82em;font-weight:600;color:#00b894" onclick="toggleCheckinSession('+s.id+')">';
+            qh+='✅ '+esc(s.activityName||'未命名活动')+' <span style="color:#a0a3bd;font-weight:400">('+esc(s.clubName||'')+')</span></div>';
+        });
+        qh+='</div>';
+        quickBox.innerHTML=qh;
+    }else if(quickBox){
+        quickBox.innerHTML='';
+    }
+    sessions.forEach(function(s){
+        if(s.status!=='open'){
+            var sessionDate=new Date(s.time);
+            if(isNaN(sessionDate.getTime()))sessionDate=new Date(s.createdAt||'');
+            if(!isNaN(sessionDate.getTime())){
+                var now=new Date();
+                var diffMs=now-sessionDate;
+                var diffDays=diffMs/(1000*60*60*24);
+                if(diffDays>7)return;
+            }
+        }
+        var isExpired=false;
+        if(s.status==='open'){
+            var endTime=s.endTime||'';
+            if(!endTime&&s.activityTime){
+                var parts=s.activityTime.split('~');
+                if(parts.length>1)endTime=parts[parts.length-1].trim();
+            }
+            if(endTime){
+                var et=new Date(endTime.replace(/-/g,'/'));
+                if(!isNaN(et.getTime())&&et<new Date())isExpired=true;
+            }
+        }
+        var statusCls=(s.status==='open'&&!isExpired)?'open':'closed';
+        var statusText='';
+        if(s.status==='open'&&isExpired){
+            statusText='⏹ 活动已结束';
+        }else if(s.status==='open'){
+            statusText='🟢 进行中';
+        }else if(s.isCompleted){
+            statusText='✅ 已完成';
+        }else{
+            statusText='⏹ 已结束';
+        }
+        var methodTag=s.checkinMethod==='code'?'🔢 签到码':'📱 二维码';
+        var row='<div class="session-row" id="csRow-'+s.id+'" onclick="if(event.target.closest(\'input,select,textarea,button,a,.checkin-action-area,.session-detail\'))return;toggleCheckinSession('+s.id+')">';
+        row+='<div class="session-info">';
+        row+='<div><div class="session-name">'+esc(s.activityName||'未命名活动')+'</div>';
+        row+='<div class="session-meta">';
+        row+='<span>🏫 '+esc(s.clubName||'')+'</span>';
+        row+='<span>'+methodTag+'</span>';
+        if(s.locationName)row+='<span>📍 '+esc(s.locationName)+'</span>';
+        if(s.activityTime)row+='<span>📅 '+esc(s.activityTime)+'</span>';
+        row+='<span>🕐 '+s.time+'</span>';
+        row+='</div></div>';
+        row+='<div class="session-status '+statusCls+'">'+statusText+'</div>';
+        row+='</div>';
+        row+='<div class="session-detail" id="csDetail-'+s.id+'" onclick="event.stopPropagation()"></div>';
+        row+='</div>';
+        if(s.status==='open'&&!isExpired)openH+=row;
+        else closedH+=row;
+    });
+    document.getElementById('openSessionList').innerHTML=openH||'<div class="empty">暂无进行中的活动</div>';
+    document.getElementById('closedSessionList').innerHTML=closedH||'<div class="empty">暂无已结束的活动</div>';
+}
+
+function toggleCheckinSession(sid){
+    var detail=document.getElementById('csDetail-'+sid);
+    var row=document.getElementById('csRow-'+sid);
+    if(!detail)return;
+    var isShown=detail.classList.contains('show');
+    document.querySelectorAll('.session-detail').forEach(function(d){d.classList.remove('show')});
+    document.querySelectorAll('.session-row').forEach(function(r){r.classList.remove('active')});
+    if(!isShown){
+        detail.classList.add('show');
+        row.classList.add('active');
+        loadCheckinSessionDetail(sid);
+    }
+}
+
+function loadCheckinSessionDetail(sid){
+    var detail=document.getElementById('csDetail-'+sid);
+    if(!detail)return;
+    var clubs=myClubs.length?myClubs:[currentClub];
+    var found=null;
+    var pending=clubs.length;
+    clubs.forEach(function(cn){
+        if(found)return;
+        fetch(api+'/api/checkin-sessions?club='+encodeURIComponent(cn)).then(function(r){return r.json()}).then(function(res){
+            if(found)return;
+            if(!res.success||!res.data)return;
+            var session=res.data.find(function(s){return String(s.id)===String(sid)});
+            if(session){found=session}
+            pending--;
+            if(pending===0||found){
+                if(!found){detail.innerHTML='<div class="empty">会话不存在</div>';return}
+                renderCheckinSessionDetail(found,detail);
+            }
+        });
+    });
+}
+
+function renderCheckinSessionDetail(session,detail){
+        var h='<div style="margin-top:8px;padding-top:8px;border-top:1px solid #f0f0f8">';
+        h+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">';
+        h+='<div style="font-size:0.82em;color:#1a1a2e"><b>活动名称：</b>'+esc(session.activityName||'未命名')+'</div>';
+        if(session.locationName)h+='<div style="font-size:0.82em;color:#6b6d8a"><b>地点：</b>'+esc(session.locationName)+'</div>';
+        if(session.activityTime)h+='<div style="font-size:0.82em;color:#6b6d8a"><b>时间：</b>'+esc(session.activityTime)+'</div>';
+        h+='</div>';
+        if(session.activityContent){
+            h+='<div style="font-size:0.82em;color:#4a4d6a;background:#fafaff;padding:8px 12px;border-radius:8px;margin-bottom:8px;line-height:1.6"><strong>📝 活动内容：</strong>'+escHtml(session.activityContent.substring(0,500))+'</div>';
+        }
+        if(session.planText||session.planPath){
+            h+='<div style="margin-bottom:8px">';
+            if(session.planPath){
+                var planFn=session.planPath.replace(/^.*[\\\/]/,'');
+                h+='<a href="'+api+'/api/activity-plan-file/'+encodeURIComponent(planFn)+'" target="_blank" style="display:inline-block;font-size:0.82em;color:#667eea;text-decoration:none;padding:6px 14px;background:rgba(102,126,234,0.06);border-radius:8px;border:1px solid rgba(102,126,234,0.15)">📎 下载活动计划文件</a>';
+            }else{
+                h+='<button class="btn btn-sm" style="font-size:0.82em;color:#667eea;background:rgba(102,126,234,0.06);border:1px solid rgba(102,126,234,0.15);padding:6px 14px;border-radius:8px;cursor:pointer" onclick="downloadPlanText('+session.id+')">📎 下载活动计划</button>';
+            }
+            h+='</div>';
+        }
+        if(session.summaryText||session.summaryPath){
+            h+='<div style="margin-bottom:8px">';
+            if(session.summaryPath){
+                var summaryFn=session.summaryPath.replace(/^.*[\\\/]/,'');
+                h+='<a href="'+api+'/api/activity-summary-file/'+encodeURIComponent(summaryFn)+'" target="_blank" style="display:inline-block;font-size:0.82em;color:#00b894;text-decoration:none;padding:6px 14px;background:rgba(0,184,148,0.06);border-radius:8px;border:1px solid rgba(0,184,148,0.15)">📎 下载活动总结文件</a>';
+            }else{
+                h+='<button class="btn btn-sm" style="font-size:0.82em;color:#00b894;background:rgba(0,184,148,0.06);border:1px solid rgba(0,184,148,0.15);padding:6px 14px;border-radius:8px;cursor:pointer" onclick="downloadSummaryText('+session.id+')">📎 下载活动总结</button>';
+            }
+            h+='</div>';
+        }
+        if(session.completionPhoto){
+            var photoFn=session.completionPhoto.replace(/^.*[\\\/]/,'');
+            h+='<div style="margin-top:8px"><img src="'+api+'/api/activity-photo/'+encodeURIComponent(photoFn)+'" style="max-width:240px;max-height:180px;border-radius:8px;border:1px solid #eee;cursor:pointer" onclick="showImageModal(this.src)" /></div>';
+        }
+        h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;margin-bottom:8px">';
+        h+='<div style="font-size:0.84em;font-weight:600;color:#1a1a2e">📋 签到记录</div>';
+        h+='<button class="btn btn-sm" style="background:rgba(102,126,234,0.06);color:#667eea;border:1px solid rgba(102,126,234,0.15)" onclick="showTeacherAddStudentForm('+session.id+')">➕ 添加学生</button>';
+        h+='</div>';
+        h+='<div id="teacherSessionRecords-'+session.id+'"><div class="empty">加载中...</div></div>';
+        h+='<div id="teacherAddStudentForm-'+session.id+'" style="display:none;border-top:1px solid #f0f0f8;padding-top:10px;margin-top:8px">';
+        h+='<div style="font-size:0.82em;font-weight:600;color:#1a1a2e;margin-bottom:8px">➕ 手动添加签到学生</div>';
+        h+='<div class="form-row" style="display:flex;gap:8px;flex-wrap:wrap"><div style="flex:1;min-width:120px"><label style="font-size:0.76em;color:#6b6d8a">姓名 *</label><input type="text" id="tAddName-'+session.id+'" placeholder="学生姓名" style="width:100%;padding:6px 10px;border:1px solid #e8e8f0;border-radius:6px;font-size:0.84em" /></div>';
+        h+='<div style="flex:1;min-width:120px"><label style="font-size:0.76em;color:#6b6d8a">学院</label><select id="tAddCollege-'+session.id+'" style="width:100%;padding:6px 10px;border:1px solid #e8e8f0;border-radius:6px;font-size:0.84em">'+teacherCollegeOptions('')+'</select></div>';
+        h+='<div style="flex:1;min-width:120px"><label style="font-size:0.76em;color:#6b6d8a">班级</label><input type="text" id="tAddClass-'+session.id+'" placeholder="24级大数据1班" style="width:100%;padding:6px 10px;border:1px solid #e8e8f0;border-radius:6px;font-size:0.84em" /></div>';
+        h+='<div style="flex:1;min-width:120px"><label style="font-size:0.76em;color:#6b6d8a">学号</label><input type="text" id="tAddId-'+session.id+'" placeholder="学号" style="width:100%;padding:6px 10px;border:1px solid #e8e8f0;border-radius:6px;font-size:0.84em" /></div></div>';
+        h+='<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-primary btn-sm" onclick="teacherAddStudent('+session.id+')">✅ 添加</button>';
+        h+='<button class="btn btn-sm" style="background:#f0f0f8;color:#6b6d8a" onclick="document.getElementById(\'teacherAddStudentForm-'+session.id+'\').style.display=\'none\'">取消</button></div>';
+        h+='</div>';
+        h+='<div class="checkin-action-area" id="checkinAction-'+session.id+'"><div class="empty">加载签到状态...</div></div>';
+        h+='</div>';
+        detail.innerHTML=h;
+        loadTeacherCheckinStatus(session.id,session);
+        loadTeacherSessionRecords(session.id);
+}
+
+function loadTeacherCheckinStatus(sid,session){
+    var box=document.getElementById('checkinAction-'+sid);
+    if(!box)return;
+    fetch(api+'/api/teacher-checkin-status?sessionId='+sid).then(function(r){return r.json()}).then(function(res){
+        if(!res.success){box.innerHTML='<div class="empty">获取状态失败</div>';return}
+        var status=res.status;
+        var h='<h4>👨‍🏫 我的签到签退状态</h4>';
+        if(session.status==='open'){
+            if(!status||status==='none'){
+                h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span class="checkin-status-tag pending">⏳ 待签到</span></div>';
+                h+='<div class="location-hint" id="locHint-'+sid+'">📍 正在获取位置...</div>';
+                h+='<button class="btn btn-primary" onclick="doTeacherCheckin('+sid+')" id="checkinBtn-'+sid+'" style="margin-top:8px">✅ 签到</button>';
+                h+='<div style="font-size:0.72em;color:#e8876a;margin-top:6px">⚠️ 签到必须获取位置信息，请确保已开启定位权限</div>';
+                getLocation(sid);
+            }else if(status==='checked_in'){
+                h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span class="checkin-status-tag checked_in">已签到</span></div>';
+                h+='<div class="location-hint" id="locHint-'+sid+'">📍 正在获取位置...</div>';
+                h+='<div style="margin-top:10px;padding:10px 12px;background:rgba(102,126,234,0.04);border:1px solid rgba(102,126,234,0.12);border-radius:8px">';
+                h+='<div style="font-size:0.82em;color:#4a4d6a;font-weight:600;margin-bottom:6px">🔑 签退码</div>';
+                h+='<div style="font-size:0.74em;color:#a0a3bd;margin-bottom:8px">请向社团负责人获取签退码，负责人在「活动开展」签到信息面板中点击「生成签退码」</div>';
+                h+='<input type="text" id="checkoutCode-'+sid+'" placeholder="输入6位签退码" style="width:100%;padding:10px 14px;border:1.5px solid #e8e8f0;border-radius:10px;font-size:1.1em;letter-spacing:6px;text-align:center;box-sizing:border-box;font-weight:700" maxlength="6" onclick="event.stopPropagation()" onfocus="event.stopPropagation()" /></div>';
+                h+='<button class="btn btn-primary" onclick="doTeacherCheckout('+sid+')" id="checkoutBtn-'+sid+'" style="margin-top:8px">签退</button>';
+                h+='<div style="font-size:0.72em;color:#e8876a;margin-top:6px">⚠️ 签退必须获取位置信息，请确保已开启定位权限</div>';
+                getLocation(sid);
+            }else if(status==='checked_out'){
+                h+='<div style="display:flex;align-items:center;gap:8px"><span class="checkin-status-tag checked_out">🏁 已完成签到签退</span></div>';
+                h+='<div style="font-size:0.78em;color:#00b894;margin-top:6px">✅ 本次活动指导已记录</div>';
+            }
+        }else{
+            if(status==='checked_out'){
+                h+='<div style="display:flex;align-items:center;gap:8px"><span class="checkin-status-tag checked_out">🏁 已完成签到签退</span></div>';
+            }else if(status==='checked_in'){
+                h+='<div style="display:flex;align-items:center;gap:8px"><span class="checkin-status-tag checked_in">✅ 已签到（未签退）</span></div>';
+            }else{
+                h+='<div style="display:flex;align-items:center;gap:8px"><span class="checkin-status-tag pending">⏳ 未签到</span></div>';
+            }
+        }
+        box.innerHTML=h;
+    });
+}
+
+var cachedLocation={lat:0,lng:0,ready:false,address:''};
+var locationWatchId=null;
+var locationError='';
+var isSecureContext=window.isSecureContext;
+
+function startLocationWatch(){
+    if(!navigator.geolocation){
+        locationError='浏览器不支持定位功能';
+        return;
+    }
+    if(!isSecureContext){
+        locationError='定位需要HTTPS安全环境，当前为HTTP访问，定位功能不可用。请使用 https:// 访问或使用 localhost';
+        return;
+    }
+    var opts={enableHighAccuracy:true,timeout:15000,maximumAge:0};
+    navigator.geolocation.getCurrentPosition(function(pos){
+        cachedLocation={lat:pos.coords.latitude,lng:pos.coords.longitude,ready:true,address:''};
+        locationError='';
+        reverseGeocode(pos.coords.latitude,pos.coords.longitude,function(addr){
+            if(addr)cachedLocation.address=addr;
+        });
+    },function(err){
+        cachedLocation.ready=false;
+        if(err.code===1)locationError='定位权限被拒绝，请在浏览器设置中允许定位权限';
+        else if(err.code===2)locationError='无法获取位置信息，请检查设备定位是否开启';
+        else if(err.code===3)locationError='定位超时，请稍后重试';
+        else locationError='定位失败，错误码：'+err.code;
+    },opts);
+    if(locationWatchId!==null){navigator.geolocation.clearWatch(locationWatchId)}
+    locationWatchId=navigator.geolocation.watchPosition(function(pos){
+        cachedLocation={lat:pos.coords.latitude,lng:pos.coords.longitude,ready:true,address:''};
+        locationError='';
+        reverseGeocode(pos.coords.latitude,pos.coords.longitude,function(addr){
+            if(addr)cachedLocation.address=addr;
+        });
+    },function(err){
+        cachedLocation.ready=false;
+        if(err.code===1)locationError='定位权限被拒绝，请在浏览器设置中允许定位权限';
+        else if(err.code===2)locationError='无法获取位置信息，请检查设备定位是否开启';
+        else if(err.code===3)locationError='定位超时，请稍后重试';
+        else locationError='定位失败';
+    },opts);
+}
+
+function reverseGeocode(lat,lng,callback){
+    fetch(api+'/api/reverse-geocode?lat='+lat+'&lng='+lng).then(function(r){return r.json()}).then(function(res){
+        if(res.success&&res.address){callback(res.address)}else{callback('')}
+    }).catch(function(){callback('')});
+}
+
+function getLocation(sid){
+    var hint=document.getElementById('locHint-'+sid);
+    if(!hint)return;
+    if(cachedLocation.ready){
+        var addrText=cachedLocation.address?' ('+esc(cachedLocation.address.substring(0,30))+')':'';
+        hint.innerHTML='📍 已获取位置 <span class="loc-ok">✔</span>'+addrText;
+    }else if(locationError){
+        hint.innerHTML='<span class="loc-far">⚠️ '+esc(locationError)+'</span>';
+    }else{
+        hint.innerHTML='📍 正在获取位置...';
+    }
+}
+
+function downloadPlanText(sid){
+    window.open(api+'/api/activity-plan-text/'+sid,'_blank');
+}
+
+function downloadSummaryText(sid){
+    window.open(api+'/api/activity-summary-text/'+sid,'_blank');
+}
+
+var TEACHER_COLLEGES=['数智科技产业学院','信息商务学院','学前教育学院','育婴育幼学院','人文教育学院','艺术学院','体育学院'];
+function teacherCollegeOptions(selected){
+    var h='<option value="">请选择学院</option>';
+    TEACHER_COLLEGES.forEach(function(c){h+='<option value="'+esc(c)+'"'+(c===selected?' selected':'')+'>'+esc(c)+'</option>'});
+    return h;
+}
+
+function loadTeacherSessionRecords(sid){
+    var box=document.getElementById('teacherSessionRecords-'+sid);
+    if(!box)return;
+    fetch(api+'/api/checkin-records-by-session/'+sid).then(function(r){return r.json()}).then(function(res){
+        if(!res.success||!res.data||!res.data.length){box.innerHTML='<div class="empty">暂无签到记录</div>';return}
+        var h='<table style="width:100%;border-collapse:collapse;font-size:0.78em">';
+        h+='<tr style="border-bottom:1px solid #f0f0f8;color:#a0a3bd"><th style="padding:6px;text-align:left">姓名</th><th style="text-align:left">学院</th><th style="text-align:left">班级</th><th style="text-align:left">学号</th><th style="text-align:left">方式</th><th style="text-align:left">时间</th><th style="text-align:left">操作</th></tr>';
+        res.data.forEach(function(r){
+            h+='<tr style="border-bottom:1px solid #fafaff">';
+            h+='<td style="padding:5px 4px;color:#1a1a2e;font-weight:500">'+esc(r.studentName)+'</td>';
+            h+='<td style="color:#6b6d8a">'+esc(r.studentCollege||'-')+'</td>';
+            h+='<td style="color:#6b6d8a">'+esc(r.studentClass||'-')+'</td>';
+            h+='<td style="color:#6b6d8a">'+esc(r.studentId||'-')+'</td>';
+            h+='<td style="color:#c0c3d8">'+(r.method==='qrcode'?'📷扫码':r.method==='location'?'📍定位':r.method==='manual'?'✋手动':'🔢码')+'</td>';
+            h+='<td style="color:#c8cade;font-size:0.9em">'+r.time+'</td>';
+            h+='<td><button class="btn btn-danger btn-sm" style="padding:2px 6px;font-size:0.66em" onclick="deleteTeacherCheckinRecord('+r.id+','+sid+')">🗑️</button></td>';
+            h+='</tr>';
+        });
+        h+='</table>';
+        h+='<div style="font-size:0.72em;color:#a0a3bd;margin-top:6px">共 '+res.data.length+' 人签到</div>';
+        box.innerHTML=h;
+    });
+}
+
+function showTeacherAddStudentForm(sid){
+    var form=document.getElementById('teacherAddStudentForm-'+sid);
+    if(form)form.style.display='block';
+}
+
+function teacherAddStudent(sid){
+    var nameEl=document.getElementById('tAddName-'+sid);
+    var collegeEl=document.getElementById('tAddCollege-'+sid);
+    var classEl=document.getElementById('tAddClass-'+sid);
+    var idEl=document.getElementById('tAddId-'+sid);
+    if(!nameEl||!nameEl.value.trim()){toast('请输入学生姓名','error');return}
+    var data={sessionId:sid,studentName:nameEl.value.trim(),studentCollege:collegeEl?collegeEl.value.trim():'',studentClass:classEl?classEl.value.trim():'',studentId:idEl?idEl.value.trim():'',method:'manual'};
+    fetch(api+'/api/add-checkin-record',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
+    .then(function(r){return r.json()}).then(function(res){
+        if(res.success){toast('添加成功','success');nameEl.value='';if(collegeEl)collegeEl.selectedIndex=0;if(classEl)classEl.value='';if(idEl)idEl.value='';loadTeacherSessionRecords(sid)}
+        else{toast(res.error||'添加失败','error')}
+    }).catch(function(){toast('添加失败','error')});
+}
+
+function deleteTeacherCheckinRecord(recordId,sessionId){
+    if(!confirm('确定删除该签到记录？'))return;
+    fetch(api+'/api/checkin-record/'+recordId,{method:'DELETE'}).then(function(r){return r.json()}).then(function(res){
+        if(res.success){toast('已删除','success');loadTeacherSessionRecords(sessionId)}
+        else{toast(res.error||'删除失败','error')}
+    });
+}
+
+function fetchIpLocation(callback){
+    fetch(api+'/api/ip-location').then(function(r){return r.json()}).then(function(res){
+        if(res.success){callback(res.lat,res.lon,res.address||'')}
+        else{callback(null,null,res.error||'')}
+    }).catch(function(){callback(null,null,'')});
+}
+
+function doTeacherCheckin(sid){
+    var btn=document.getElementById('checkinBtn-'+sid);
+    var hint=document.getElementById('locHint-'+sid);
+    if(btn){btn.disabled=true;btn.textContent='定位中...'}
+    function doCheckin(lat,lng,addr){
+        if(btn){btn.textContent='签到中...'}
+        fetch(api+'/api/teacher-checkin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:sid,lat:lat,lng:lng,address:addr})})
+        .then(function(r){return r.json()}).then(function(res){
+            if(res.error){toast(res.error,'error');if(btn){btn.disabled=false;btn.textContent='✅ 签到'}return}
+            toast('签到成功！','success');
+            toggleCheckinSession(sid);
+            setTimeout(function(){toggleCheckinSession(sid)},100);
+        }).catch(function(){toast('签到失败','error');if(btn){btn.disabled=false;btn.textContent='✅ 签到'}});
+    }
+    function tryIpFallback(errMsg){
+        if(btn){btn.textContent='IP定位中...'}
+        if(hint)hint.innerHTML='<span style="color:#f0ad4e">⚠️ GPS定位失败，正在尝试网络定位...</span>';
+        fetchIpLocation(function(ipLat,ipLng,ipAddr){
+            if(ipLat!==null&&ipLng!==null){
+                if(hint)hint.innerHTML='<span style="color:#f0ad4e">📍 已通过网络获取大致位置 '+esc(ipAddr||'')+'</span>';
+                cachedLocation={lat:ipLat,lng:ipLng,ready:true,address:ipAddr||''};
+                doCheckin(ipLat,ipLng,ipAddr||'');
+            }else{
+                if(hint)hint.innerHTML='<span style="color:#f0ad4e">⚠️ 定位不可用，将以手动签到方式记录</span>';
+                doCheckin(0,0,'');
+            }
+        });
+    }
+    if(cachedLocation.ready){
+        doCheckin(cachedLocation.lat,cachedLocation.lng,cachedLocation.address||'');
+    }else if(isSecureContext&&navigator.geolocation){
+        navigator.geolocation.getCurrentPosition(function(pos){
+            var lat=pos.coords.latitude,lng=pos.coords.longitude;
+            reverseGeocode(lat,lng,function(addr){
+                cachedLocation={lat:lat,lng:lng,ready:true,address:addr||''};
+                doCheckin(lat,lng,addr||'');
+            });
+        },function(err){
+            var msg=err.code===1?'定位权限被拒绝':err.code===2?'无法获取位置信息':'定位超时';
+            tryIpFallback(msg);
+        },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+    }else{
+        tryIpFallback(isSecureContext?'浏览器不支持定位':'当前非HTTPS环境，无法使用GPS定位');
+    }
+}
+
+function quickCheckinOrCheckout(){
+    var code=document.getElementById('quickCheckinCode').value.trim();
+    if(!code){toast('请输入签到码或签退码','error');return}
+    var resultBox=document.getElementById('quickCheckinResult');
+    resultBox.style.display='block';
+    resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#a0a3bd">正在查找活动...</div>';
+    var clubs=myClubs.length?myClubs:[currentClub];
+    var allSessions=[];
+    var pending=clubs.length;
+    clubs.forEach(function(cn){
+        fetch(api+'/api/checkin-sessions?club='+encodeURIComponent(cn)).then(function(r){return r.json()}).then(function(res){
+            if(res.success&&res.data){
+                res.data.forEach(function(s){allSessions.push(s)});
+            }
+            pending--;
+            if(pending===0)handleQuickCheckinOrCheckout(code,allSessions,resultBox);
+        });
+    });
+}
+
+function handleQuickCheckinOrCheckout(code,allSessions,resultBox){
+    var openSession=allSessions.find(function(s){return s.checkinCode===code&&s.status==='open'});
+    if(!openSession){
+        resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#e74c3c;font-weight:600">未找到匹配的活动，请检查签到码</div>';
+        return;
+    }
+    fetch(api+'/api/teacher-checkin-status?sessionId='+openSession.id).then(function(r){return r.json()}).then(function(res){
+        if(!res.success){resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#e74c3c">查询状态失败</div>';return}
+        if(res.status==='none'){
+            resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#a0a3bd">正在获取位置并签到...</div>';
+            doQuickCheckin(openSession,resultBox);
+        }else if(res.status==='checked_in'){
+            resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#a0a3bd">';
+            resultBox.innerHTML+='<div style="font-weight:600;margin-bottom:8px">您已签到，请输入签退码完成签退</div>';
+            resultBox.innerHTML+='<input type="text" id="quickCheckoutCode" placeholder="请输入签退码" maxlength="6" style="padding:8px 12px;border:1px solid #e8e8f0;border-radius:8px;font-size:1em;text-align:center;letter-spacing:4px;width:200px" onclick="event.stopPropagation()" onfocus="event.stopPropagation()" />';
+            resultBox.innerHTML+='<br><button class="btn btn-primary" style="margin-top:8px" onclick="doQuickCheckoutWithCode('+openSession.id+')">确认签退</button>';
+            resultBox.innerHTML+='</div>';
+        }else{
+            resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#6b6d8a">您已完成签到签退</div>';
+        }
+    });
+}
+
+function doQuickCheckin(session,resultBox){
+    function doCheckin(lat,lng,addr){
+        fetch(api+'/api/teacher-checkin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:session.id,lat:lat,lng:lng,address:addr})})
+        .then(function(r){return r.json()}).then(function(res){
+            if(res.error){resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#e74c3c;font-weight:600">❌ '+esc(res.error)+'</div>';return}
+            resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#00b894;font-weight:600">✅ 签到成功！<br><span style="font-size:0.82em;font-weight:400;color:#6b6d8a">'+esc(session.activityName)+' · '+esc(session.clubName)+'</span></div>';
+            document.getElementById('quickCheckinCode').value='';
+            loadCheckinSessions();
+        });
+    }
+    function tryIpFallback(errMsg){
+        resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#f0ad4e">⚠️ GPS定位失败，正在尝试网络定位...</div>';
+        fetchIpLocation(function(ipLat,ipLng,ipAddr){
+            if(ipLat!==null&&ipLng!==null){
+                cachedLocation={lat:ipLat,lng:ipLng,ready:true,address:ipAddr||''};
+                doCheckin(ipLat,ipLng,ipAddr||'');
+            }else{
+                resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#f0ad4e">⚠️ 定位不可用，将以手动签到方式记录</div>';
+                doCheckin(0,0,'');
+            }
+        });
+    }
+    if(cachedLocation.ready){
+        doCheckin(cachedLocation.lat,cachedLocation.lng,cachedLocation.address||'');
+    }else if(isSecureContext&&navigator.geolocation){
+        navigator.geolocation.getCurrentPosition(function(pos){
+            var lat=pos.coords.latitude,lng=pos.coords.longitude;
+            reverseGeocode(lat,lng,function(addr){
+                cachedLocation={lat:lat,lng:lng,ready:true,address:addr||''};
+                doCheckin(lat,lng,addr||'');
+            });
+        },function(err){
+            var msg=err.code===1?'定位权限被拒绝':err.code===2?'无法获取位置信息':'定位超时';
+            tryIpFallback(msg);
+        },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+    }else{
+        tryIpFallback(isSecureContext?'浏览器不支持定位':'当前非HTTPS环境');
+    }
+}
+
+function doQuickCheckoutWithCode(sessionId){
+    var codeEl=document.getElementById('quickCheckoutCode');
+    var code=codeEl?codeEl.value.trim():'';
+    if(!code){toast('请输入签退码','error');return}
+    var resultBox=document.getElementById('quickCheckinResult');
+    function doCheckout(lat,lng,addr){
+        var fd=new FormData();
+        fd.append('sessionId',sessionId);
+        fd.append('lat',lat);
+        fd.append('lng',lng);
+        fd.append('address',addr);
+        fd.append('checkoutCode',code);
+        fetch(api+'/api/teacher-checkout',{method:'POST',body:fd})
+        .then(function(r){return r.json()}).then(function(res){
+            if(res.error){resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#e74c3c;font-weight:600">'+esc(res.error)+'</div>';return}
+            resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#667eea;font-weight:600">签退成功！本次指导已记录</div>';
+            document.getElementById('quickCheckinCode').value='';
+            loadCheckinSessions();
+        });
+    }
+    function tryIpFallback(errMsg){
+        resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#f0ad4e">⚠️ GPS定位失败，正在尝试网络定位...</div>';
+        fetchIpLocation(function(ipLat,ipLng,ipAddr){
+            if(ipLat!==null&&ipLng!==null){
+                cachedLocation={lat:ipLat,lng:ipLng,ready:true,address:ipAddr||''};
+                doCheckout(ipLat,ipLng,ipAddr||'');
+            }else{
+                resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#f0ad4e">⚠️ 定位不可用，将以手动签到方式记录</div>';
+                doCheckout(0,0,'');
+            }
+        });
+    }
+    if(cachedLocation.ready){
+        doCheckout(cachedLocation.lat,cachedLocation.lng,cachedLocation.address||'');
+    }else if(isSecureContext&&navigator.geolocation){
+        navigator.geolocation.getCurrentPosition(function(pos){
+            var lat=pos.coords.latitude,lng=pos.coords.longitude;
+            reverseGeocode(lat,lng,function(addr){
+                cachedLocation={lat:lat,lng:lng,ready:true,address:addr||''};
+                doCheckout(lat,lng,addr||'');
+            });
+        },function(err){
+            var msg=err.code===1?'定位权限被拒绝':err.code===2?'无法获取位置信息':'定位超时';
+            tryIpFallback(msg);
+        },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+    }else{
+        tryIpFallback(isSecureContext?'浏览器不支持定位':'当前非HTTPS环境');
+    }
+}
+
+var teacherScannerStream=null;
+var teacherScannerAnim=null;
+
+function openTeacherScanner(){
+    var modal=document.getElementById('teacherScannerModal');
+    if(modal){modal.classList.add('show');startTeacherScanner();return}
+    var h='<div class="modal-bg show" id="teacherScannerModal" onclick="closeTeacherScanner()">';
+    h+='<div class="modal-box" style="max-width:400px;text-align:center" onclick="event.stopPropagation()">';
+    h+='<h3 style="margin-bottom:12px">📷 扫描签到二维码</h3>';
+    h+='<div style="position:relative;width:280px;height:280px;margin:0 auto;border-radius:12px;overflow:hidden;background:#000">';
+    h+='<video id="teacherScanVideo" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover"></video>';
+    h+='<canvas id="teacherScanCanvas" style="display:none"></canvas>';
+    h+='<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:200px;height:200px;border:2px solid rgba(0,184,148,0.6);border-radius:12px;pointer-events:none"></div>';
+    h+='</div>';
+    h+='<div id="teacherScanResult" style="margin-top:12px;font-size:0.84em;color:#a0a3bd">正在扫描...</div>';
+    h+='<button class="btn btn-danger" style="margin-top:12px" onclick="closeTeacherScanner()">关闭</button>';
+    h+='</div></div>';
+    document.body.insertAdjacentHTML('beforeend',h);
+    startTeacherScanner();
+}
+
+function startTeacherScanner(){
+    var video=document.getElementById('teacherScanVideo');
+    var canvas=document.getElementById('teacherScanCanvas');
+    if(!video||!canvas)return;
+    var constraints={video:{facingMode:'environment'}};
+    navigator.mediaDevices.getUserMedia(constraints).then(function(stream){
+        teacherScannerStream=stream;
+        video.srcObject=stream;
+        var playPromise=video.play();
+        if(playPromise!==undefined){
+            playPromise.catch(function(e){console.warn('video.play() rejected:',e.message)});
+        }
+        var ctx=canvas.getContext('2d');
+        function scanFrame(){
+            if(!teacherScannerStream){return}
+            try{
+                if(video.readyState>=video.HAVE_CURRENT_DATA&&video.videoWidth>0){
+                    canvas.width=video.videoWidth;
+                    canvas.height=video.videoHeight;
+                    ctx.drawImage(video,0,0,canvas.width,canvas.height);
+                    var imageData=ctx.getImageData(0,0,canvas.width,canvas.height);
+                    var code=null;
+                    if(typeof jsQR==='function'){code=jsQR(imageData.data,imageData.width,imageData.height)}
+                    if(code&&code.data){
+                        var url=code.data;
+                        var codeMatch=url.match(/code=([A-Za-z0-9]{4,6})/);
+                        if(codeMatch){
+                            closeTeacherScanner();
+                            document.getElementById('quickCheckinCode').value=codeMatch[1];
+                            quickCheckinOrCheckout();
+                            return;
+                        }
+                        if(/^[A-Za-z0-9]{4,6}$/.test(url)){
+                            closeTeacherScanner();
+                            document.getElementById('quickCheckinCode').value=url;
+                            quickCheckinOrCheckout();
+                            return;
+                        }
+                    }
+                }
+            }catch(e){}
+            teacherScannerAnim=requestAnimationFrame(scanFrame);
+        }
+        scanFrame();
+    }).catch(function(err){
+        var res=document.getElementById('teacherScanResult');
+        var msg='无法打开摄像头';
+        if(err.name==='NotAllowedError')msg='摄像头权限被拒绝，请在浏览器设置中允许';
+        else if(err.name==='NotFoundError')msg='未检测到摄像头设备';
+        else if(err.name==='NotReadableError')msg='摄像头被其他应用占用';
+        else if(err.name==='OverconstrainedError')msg='摄像头不支持请求的配置';
+        else if(err.message)msg+='：'+err.message;
+        if(res)res.innerHTML='<span style="color:#e74c3c">'+esc(msg)+'</span>';
+    });
+}
+
+function closeTeacherScanner(){
+    if(teacherScannerStream){teacherScannerStream.getTracks().forEach(function(t){t.stop()});teacherScannerStream=null}
+    if(teacherScannerAnim){cancelAnimationFrame(teacherScannerAnim);teacherScannerAnim=null}
+    var modal=document.getElementById('teacherScannerModal');
+    if(modal)modal.remove();
+}
+
+function doTeacherCheckout(sid){
+    var codeEl=document.getElementById('checkoutCode-'+sid);
+    var code=codeEl?codeEl.value.trim():'';
+    if(!code){toast('请输入签退码','error');return}
+    var btn=document.getElementById('checkoutBtn-'+sid);
+    var hint=document.getElementById('locHint-'+sid);
+    if(btn){btn.disabled=true;btn.textContent='定位中...'}
+    function doCheckout(lat,lng,addr){
+        if(btn){btn.textContent='签退中...'}
+        var fd=new FormData();
+        fd.append('sessionId',sid);
+        fd.append('lat',lat);
+        fd.append('lng',lng);
+        fd.append('address',addr);
+        fd.append('checkoutCode',code);
+        fetch(api+'/api/teacher-checkout',{method:'POST',body:fd})
+        .then(function(r){return r.json()}).then(function(res){
+            if(res.error){toast(res.error,'error');if(btn){btn.disabled=false;btn.textContent='签退'}return}
+            toast('签退成功！本次指导已记录','success');
+            toggleCheckinSession(sid);
+            setTimeout(function(){toggleCheckinSession(sid)},100);
+        }).catch(function(){toast('签退失败','error');if(btn){btn.disabled=false;btn.textContent='签退'}});
+    }
+    function tryIpFallback(errMsg){
+        if(btn){btn.textContent='IP定位中...'}
+        if(hint)hint.innerHTML='<span style="color:#f0ad4e">⚠️ GPS定位失败，正在尝试网络定位...</span>';
+        fetchIpLocation(function(ipLat,ipLng,ipAddr){
+            if(ipLat!==null&&ipLng!==null){
+                if(hint)hint.innerHTML='<span style="color:#f0ad4e">📍 已通过网络获取大致位置 '+esc(ipAddr||'')+'</span>';
+                cachedLocation={lat:ipLat,lng:ipLng,ready:true,address:ipAddr||''};
+                doCheckout(ipLat,ipLng,ipAddr||'');
+            }else{
+                if(hint)hint.innerHTML='<span style="color:#f0ad4e">⚠️ 定位不可用，将以手动签到方式记录</span>';
+                doCheckout(0,0,'');
+            }
+        });
+    }
+    if(cachedLocation.ready){
+        doCheckout(cachedLocation.lat,cachedLocation.lng,cachedLocation.address||'');
+    }else if(isSecureContext&&navigator.geolocation){
+        navigator.geolocation.getCurrentPosition(function(pos){
+            var lat=pos.coords.latitude,lng=pos.coords.longitude;
+            reverseGeocode(lat,lng,function(addr){
+                cachedLocation={lat:lat,lng:lng,ready:true,address:addr||''};
+                doCheckout(lat,lng,addr||'');
+            });
+        },function(err){
+            var msg=err.code===1?'定位权限被拒绝':err.code===2?'无法获取位置信息':'定位超时';
+            tryIpFallback(msg);
+        },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+    }else{
+        tryIpFallback(isSecureContext?'浏览器不支持定位':'当前非HTTPS环境，无法使用GPS定位');
+    }
+}
+
+function loadActivityList(){
+    if(!currentClub&&!myClubs.length)return;
+    var clubs=myClubs.length?myClubs:[currentClub];
+    var actStart=(document.getElementById('actStartDate')||{}).value||'';
+    var actEnd=(document.getElementById('actEndDate')||{}).value||'';
+    var allSessions=[];
+    var pending=clubs.length;
+    clubs.forEach(function(cn){
+        var url=api+'/api/checkin-sessions?club='+encodeURIComponent(cn);
+        if(actStart)url+='&start_date='+encodeURIComponent(actStart);
+        if(actEnd)url+='&end_date='+encodeURIComponent(actEnd);
+        fetch(url).then(function(r){return r.json()}).then(function(res){
+            if(res.success&&res.data){
+                res.data.forEach(function(s){allSessions.push(s)});
+            }
+            pending--;
+            if(pending===0){
+                if(!allSessions.length){document.getElementById('allSessionList').innerHTML='<div class="empty">暂无活动记录</div>';return}
+                allSessions.sort(function(a,b){return b.id-a.id});
+                var h='';
+                allSessions.forEach(function(s){
+                    var isExpired2=false;
+                    if(s.status==='open'){
+                        var et2=s.endTime||'';
+                        if(!et2&&s.activityTime){var p2=s.activityTime.split('~');if(p2.length>1)et2=p2[p2.length-1].trim()}
+                        if(et2){var etd=new Date(et2.replace(/-/g,'/'));if(!isNaN(etd.getTime())&&etd<new Date())isExpired2=true}
+                    }
+                    var statusCls=(s.status==='open'&&!isExpired2)?'open':'closed';
+                    var statusText='';
+                    if(s.status==='open'&&isExpired2){statusText='⏹ 活动已结束'}
+                    else if(s.status==='open'){statusText='🟢 进行中'}
+                    else if(s.isCompleted){statusText='✅ 已完成'}
+                    else{statusText='⏹ 已结束'}
+                    h+='<div class="session-row" id="actRow-'+s.id+'" onclick="if(event.target.closest(\'input,select,textarea,button,a,.session-detail\'))return;toggleActivityDetail('+s.id+')">';
+                    h+='<div class="session-info">';
+                    h+='<div><div class="session-name">'+esc(s.activityName||'未命名活动')+'</div>';
+                    h+='<div class="session-meta">';
+                    h+='<span>🏫 '+esc(s.clubName||'')+'</span>';
+                    if(s.locationName)h+='<span>📍 '+esc(s.locationName)+'</span>';
+                    if(s.activityTime)h+='<span>📅 '+esc(s.activityTime)+'</span>';
+                    h+='<span>🕐 '+s.time+'</span>';
+                    h+='</div></div>';
+                    h+='<div class="session-status '+statusCls+'">'+statusText+'</div>';
+                    h+='</div>';
+                    h+='<div class="session-detail" id="actDetail-'+s.id+'" onclick="event.stopPropagation()"></div>';
+                    h+='</div>';
+                });
+                document.getElementById('allSessionList').innerHTML=h;
+            }
+        });
+    });
+}
+
+function toggleActivityDetail(sid){
+    var detail=document.getElementById('actDetail-'+sid);
+    var row=document.getElementById('actRow-'+sid);
+    if(!detail)return;
+    var isShown=detail.classList.contains('show');
+    document.querySelectorAll('#allSessionList .session-detail').forEach(function(d){d.classList.remove('show')});
+    document.querySelectorAll('#allSessionList .session-row').forEach(function(r){r.classList.remove('active')});
+    if(!isShown){
+        detail.classList.add('show');
+        row.classList.add('active');
+        loadActivitySessionDetail(sid);
+    }
+}
+
+function loadActivitySessionDetail(sid){
+    var detail=document.getElementById('actDetail-'+sid);
+    var clubs=myClubs.length?myClubs:[currentClub];
+    var found=null;
+    var pending=clubs.length;
+    clubs.forEach(function(cn){
+        if(found)return;
+        fetch(api+'/api/checkin-sessions?club='+encodeURIComponent(cn)).then(function(r){return r.json()}).then(function(res){
+            if(found)return;
+            if(!res.success||!res.data)return;
+            var session=res.data.find(function(s){return String(s.id)===String(sid)});
+            if(session){found=session}
+            pending--;
+            if(pending===0||found){
+                if(!found){detail.innerHTML='<div class="empty">会话不存在</div>';return}
+                var h='<div style="margin-top:8px;padding-top:8px;border-top:1px solid #f0f0f8">';
+                if(found.activityContent)h+='<div style="font-size:0.82em;color:#4a4d6a;background:#fafaff;padding:8px 12px;border-radius:8px;margin-bottom:8px;line-height:1.6"><strong>📝 活动内容：</strong>'+escHtml(found.activityContent.substring(0,500))+'</div>';
+                if(found.planText||found.planPath){
+                    h+='<div style="margin-bottom:8px">';
+                    if(found.planPath){
+                        var planFn2=found.planPath.replace(/^.*[\\\/]/,'');
+                        h+='<a href="'+api+'/api/activity-plan-file/'+encodeURIComponent(planFn2)+'" target="_blank" style="display:inline-block;font-size:0.82em;color:#667eea;text-decoration:none;padding:6px 14px;background:rgba(102,126,234,0.06);border-radius:8px;border:1px solid rgba(102,126,234,0.15)">📎 下载活动计划文件</a>';
+                    }else{
+                        h+='<button class="btn btn-sm" style="font-size:0.82em;color:#667eea;background:rgba(102,126,234,0.06);border:1px solid rgba(102,126,234,0.15);padding:6px 14px;border-radius:8px;cursor:pointer" onclick="downloadPlanText('+found.id+')">📎 下载活动计划</button>';
+                    }
+                    h+='</div>';
+                }
+                if(found.summaryText||found.summaryPath){
+                    h+='<div style="margin-bottom:8px">';
+                    if(found.summaryPath){
+                        var summaryFn2=found.summaryPath.replace(/^.*[\\\/]/,'');
+                        h+='<a href="'+api+'/api/activity-summary-file/'+encodeURIComponent(summaryFn2)+'" target="_blank" style="display:inline-block;font-size:0.82em;color:#00b894;text-decoration:none;padding:6px 14px;background:rgba(0,184,148,0.06);border-radius:8px;border:1px solid rgba(0,184,148,0.15)">📎 下载活动总结文件</a>';
+                    }else{
+                        h+='<button class="btn btn-sm" style="font-size:0.82em;color:#00b894;background:rgba(0,184,148,0.06);border:1px solid rgba(0,184,148,0.15);padding:6px 14px;border-radius:8px;cursor:pointer" onclick="downloadSummaryText('+found.id+')">📎 下载活动总结</button>';
+                    }
+                    h+='</div>';
+                }
+                if(found.completionPhoto){
+                    var photoFn=found.completionPhoto.replace(/^.*[\\\/]/,'');
+                    h+='<div style="margin-top:8px"><img src="'+api+'/api/activity-photo/'+encodeURIComponent(photoFn)+'" style="max-width:240px;max-height:180px;border-radius:8px;border:1px solid #eee;cursor:pointer" onclick="showImageModal(this.src)" /></div>';
+                }
+                h+='</div>';
+                detail.innerHTML=h;
+            }
+        });
+    });
+}
+
+function loadGuidanceStats(){
+    var gdStart=(document.getElementById('gdStartDate')||{}).value||'';
+    var gdEnd=(document.getElementById('gdEndDate')||{}).value||'';
+    var dp='';
+    if(gdStart)dp+=(dp?'&':'')+'start_date='+encodeURIComponent(gdStart);
+    if(gdEnd)dp+=(dp?'&':'')+'end_date='+encodeURIComponent(gdEnd);
+    fetch(api+'/api/teacher-guidance-stats?'+dp).then(function(r){return r.json()}).then(function(res){
+        if(!res.success)return;
+        var data=res.data||{};
+        var total=data.totalGuidance||0;
+        var totalClubs=Object.keys(data.byClub||{}).length;
+        var thisMonth=data.thisMonth||0;
+        var totalHours=data.totalHours||0;
+        document.getElementById('guidanceStatGrid').innerHTML=
+            '<div class="stat-card"><div class="sc-num">'+total+'</div><div class="sc-label">总指导次数</div></div>'+
+            '<div class="stat-card"><div class="sc-num">'+totalClubs+'</div><div class="sc-label">指导社团数</div></div>'+
+            '<div class="stat-card"><div class="sc-num">'+thisMonth+'</div><div class="sc-label">本月指导次数</div></div>'+
+            '<div class="stat-card"><div class="sc-num">'+totalHours+'</div><div class="sc-label">指导时长(h)</div></div>';
+        renderGuidanceCharts(data);
+    });
+    fetch(api+'/api/teacher-guidance-records?'+dp).then(function(r){return r.json()}).then(function(res){
+        if(!res.success||!res.data||!res.data.length){document.getElementById('guidanceRecordList').innerHTML='<div class="empty">暂无指导记录</div>';return}
+        var h='';
+        res.data.forEach(function(rec){
+            h+='<div class="session-row" style="cursor:default">';
+            h+='<div class="session-info">';
+            h+='<div><div class="session-name">'+esc(rec.activityName||'活动指导')+'</div>';
+            h+='<div class="session-meta">';
+            h+='<span>🏫 '+esc(rec.clubName||'')+'</span>';
+            if(rec.checkinTime)h+='<span>签到：'+esc(rec.checkinTime)+'</span>';
+            if(rec.checkoutTime)h+='<span>签退：'+esc(rec.checkoutTime)+'</span>';
+            h+='</div></div>';
+            h+='<span class="checkin-status-tag checked_out">✅ 已完成</span>';
+            h+='</div></div>';
+        });
+        document.getElementById('guidanceRecordList').innerHTML=h;
+    });
+}
+
+function renderGuidanceCharts(data){
+    var byClub=data.byClub||{};
+    var byMonth=data.byMonth||{};
+    var clubLabels=Object.keys(byClub);
+    var clubValues=clubLabels.map(function(k){return byClub[k]});
+    var monthLabels=Object.keys(byMonth).sort();
+    var monthValues=monthLabels.map(function(k){return byMonth[k]});
+    if(guidanceChart)guidanceChart.destroy();
+    if(guidanceClubChartInstance)guidanceClubChartInstance.destroy();
+    guidanceChart=null;
+    guidanceClubChartInstance=null;
+    var trendCtx=document.getElementById('guidanceTrendChart');
+    if(trendCtx&&monthLabels.length){
+        guidanceChart=new Chart(trendCtx,{type:'line',data:{labels:monthLabels,datasets:[{label:'指导次数',data:monthValues,borderColor:'#00b894',backgroundColor:'rgba(0,184,148,0.1)',fill:true,tension:0.4,pointBackgroundColor:'#00b894'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{stepSize:1}}}}});
+    }
+    var clubCtx=document.getElementById('guidanceClubChart');
+    if(clubCtx&&clubLabels.length){
+        guidanceClubChartInstance=new Chart(clubCtx,{type:'doughnut',data:{labels:clubLabels,datasets:[{data:clubValues,backgroundColor:['#00b894','#667eea','#f39c12','#e84393','#0984e3','#6c5ce7','#fdcb6e','#74b9ff']}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11}}}}}});
+    }
+}
+
+
+function loadMemberAnalysis(){
+    if(!currentClub)return;
+    fetch(api+'/api/member-analysis/'+encodeURIComponent(currentClub)).then(function(r){return r.json()}).then(function(res){
+        if(!res.success)return;
+        var d=res.data;
+        var el1=document.getElementById('maTotal');if(el1)el1.textContent=d.total||0;
+        var el2=document.getElementById('maDepts');if(el2)el2.textContent=d.deptCount||0;
+        var deptBox=document.getElementById('maDeptChart');
+        if(deptBox&&d.deptStats){
+            var h='';var maxVal=1;Object.values(d.deptStats).forEach(function(v){if(v>maxVal)maxVal=v});
+            Object.entries(d.deptStats).forEach(function(e){
+                var pct=Math.round(e[1]/maxVal*100);
+                h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:60px;font-size:0.76em;color:#6b6d8a;text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(e[0])+'</span>';
+                h+='<div style="flex:1;height:18px;background:#f0f0f8;border-radius:4px;overflow:hidden"><div style="width:'+pct+'%;height:100%;border-radius:4px;background:linear-gradient(90deg,#667eea,#764ba2);display:flex;align-items:center;padding-left:6px;font-size:0.66em;font-weight:600;color:#fff;min-width:20px">'+e[1]+'</div></div></div>';
+            });
+            deptBox.innerHTML=h||'<div class="empty">暂无数据</div>';
+        }
+        var classBox=document.getElementById('maClassChart');
+        if(classBox&&d.collegeStats){
+            var ch='';var sorted=Object.entries(d.collegeStats).sort(function(a,b){return b[1]-a[1]}).slice(0,8);
+            var maxVal2=1;sorted.forEach(function(e){if(e[1]>maxVal2)maxVal2=e[1]});
+            sorted.forEach(function(e){
+                var pct=Math.round(e[1]/maxVal2*100);
+                ch+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="width:90px;font-size:0.72em;color:#6b6d8a;text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(e[0])+'</span>';
+                ch+='<div style="flex:1;height:18px;background:#f0f0f8;border-radius:4px;overflow:hidden"><div style="width:'+pct+'%;height:100%;border-radius:4px;background:linear-gradient(90deg,#00b894,#55efc4);display:flex;align-items:center;padding-left:6px;font-size:0.66em;font-weight:600;color:#fff;min-width:20px">'+e[1]+'</div></div></div>';
+            });
+            classBox.innerHTML=ch||'<div class="empty">暂无数据</div>';
+        }
+    });
+    fetch(api+'/api/checkin-stats/'+encodeURIComponent(currentClub)).then(function(r){return r.json()}).then(function(res){
+        var box=document.getElementById('maCheckinStats');if(!box)return;
+        var el3=document.getElementById('maActs');if(el3)el3.textContent=res.totalSessions||0;
+        if(!res.success||!res.data||!res.data.length){box.innerHTML='<div class="empty">暂无签到数据</div>';return}
+        var maxCount=res.data[0].activityCount||1;
+        var h='<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="ma-stats-table" style="width:100%;border-collapse:collapse;font-size:0.78em">';
+        h+='<tr style="border-bottom:1px solid #f0f0f8;color:#a0a3bd"><th style="padding:6px;text-align:left;white-space:nowrap">姓名</th><th style="text-align:left;white-space:nowrap">学院</th><th style="text-align:left;white-space:nowrap">班级</th><th style="text-align:left;white-space:nowrap">学号</th><th style="text-align:center;white-space:nowrap">参与次数</th><th style="text-align:center;white-space:nowrap">参与率</th></tr>';
+        res.data.forEach(function(s){
+            var rate=res.totalSessions?Math.round(s.activityCount/res.totalSessions*100):0;
+            var rateColor=rate>=80?'#00b894':rate>=50?'#f39c12':'#e74c3c';
+            h+='<tr style="border-bottom:1px solid #fafaff">';
+            h+='<td style="padding:5px 4px;color:#1a1a2e;font-weight:500;white-space:nowrap">'+esc(s.studentName)+'</td>';
+            h+='<td style="color:#6b6d8a;font-size:0.9em;white-space:nowrap">'+esc(s.studentCollege||'-')+'</td>';
+            h+='<td style="color:#6b6d8a;font-size:0.9em;white-space:nowrap">'+esc(s.studentClass)+'</td>';
+            h+='<td style="color:#6b6d8a;font-size:0.9em;white-space:nowrap">'+esc(s.studentId)+'</td>';
+            h+='<td style="text-align:center;white-space:nowrap"><span style="display:inline-block;min-width:24px;padding:2px 8px;border-radius:4px;font-weight:700;color:#667eea;background:rgba(102,126,234,0.06)">'+s.activityCount+'</span></td>';
+            h+='<td style="text-align:center;white-space:nowrap"><span style="color:'+rateColor+';font-weight:600;font-size:0.9em">'+rate+'%</span></td>';
+            h+='</tr>';
+        });
+        h+='</table></div>';
+        h+='<div style="margin-top:16px"><div style="font-size:0.82em;font-weight:600;color:#1a1a2e;margin-bottom:8px">📊 活动参与排行</div>';
+        res.data.slice(0,10).forEach(function(s,i){
+            var barPct=Math.round(s.activityCount/maxCount*100);
+            h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">';
+            h+='<span style="width:20px;font-size:0.72em;color:#a0a3bd;text-align:right;flex-shrink:0">'+(i+1)+'</span>';
+            h+='<span style="width:50px;font-size:0.76em;color:#1a1a2e;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0">'+esc(s.studentName)+'</span>';
+            h+='<div style="flex:1;height:14px;background:#f0f0f8;border-radius:4px;overflow:hidden"><div style="width:'+barPct+'%;height:100%;border-radius:4px;background:linear-gradient(90deg,#667eea,#764ba2)"></div></div>';
+            h+='<span style="font-size:0.7em;color:#667eea;font-weight:600;flex-shrink:0">'+s.activityCount+'次</span></div>';
+        });
+        h+='</div>';
+        box.innerHTML=h;
+    });
+}
+
+function loadFinanceRecords(){
+    if(!currentClub)return;
+    fetch(api+'/api/finance-records?club='+encodeURIComponent(currentClub)).then(function(r){return r.json()}).then(function(res){
+        if(!res.success)return;
+        var records=res.data||[];
+        var summary=res.summary||{};
+        document.getElementById('financeSummary').innerHTML=
+            '<div class="fs-card income"><div class="fs-num income">'+(summary.totalIncome||0).toFixed(2)+'</div><div class="fs-label">总收入</div></div>'+
+            '<div class="fs-card expense"><div class="fs-num expense">'+(summary.totalExpense||0).toFixed(2)+'</div><div class="fs-label">总支出</div></div>'+
+            '<div class="fs-card balance"><div class="fs-num balance">'+(summary.balance||0).toFixed(2)+'</div><div class="fs-label">余额</div></div>';
+        if(!records.length){document.getElementById('financeList').innerHTML='<div class="empty">暂无财务记录</div>';return}
+        var h='';
+        records.forEach(function(r){
+            h+='<div class="finance-row">';
+            h+='<span class="fr-type '+r.type+'">'+(r.type==='income'?'收入':'支出')+'</span>';
+            h+='<div class="fr-info"><div class="fr-cat">'+esc(r.category||'')+'</div>';
+            if(r.description)h+='<div class="fr-desc">'+esc(r.description)+'</div>';
+            h+='</div>';
+            h+='<div class="fr-amount '+r.type+'">'+(r.type==='income'?'+':'-')+r.amount.toFixed(2)+'</div>';
+            h+='<div class="fr-date">'+esc(r.recordDate||'')+'</div>';
+            h+='</div>';
+        });
+        document.getElementById('financeList').innerHTML=h;
+    });
+}
+
+function submitFinanceRecord(){
+    var type=document.getElementById('finType').value;
+    var category=document.getElementById('finCategory').value.trim();
+    var amount=document.getElementById('finAmount').value;
+    var recordDate=document.getElementById('finDate').value;
+    var desc=document.getElementById('finDesc').value.trim();
+    if(!category){toast('请填写分类','error');return}
+    if(!amount||parseFloat(amount)<=0){toast('请填写有效金额','error');return}
+    if(!recordDate){toast('请选择日期','error');return}
+    fetch(api+'/api/finance-records',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clubName:currentClub,type:type,category:category,amount:parseFloat(amount),description:desc,recordDate:recordDate,recorder:currentUser.username})})
+    .then(function(r){return r.json()}).then(function(res){
+        if(res.error){toast(res.error,'error');return}
+        toast('记录添加成功','success');
+        document.getElementById('finCategory').value='';
+        document.getElementById('finAmount').value='';
+        document.getElementById('finDesc').value='';
+        loadFinanceRecords();
+    });
+}
+
+function loadFeedbacks(){
+    fetch(api+'/api/my-feedbacks').then(function(r){return r.json()}).then(function(res){
+        if(!res.success||!res.data||!res.data.length){document.getElementById('feedbackList').innerHTML='<div class="empty">暂无反馈记录</div>';return}
+        var h='';
+        res.data.forEach(function(fb){
+            var statusCls=fb.status==='resolved'?'resolved':'pending';
+            var statusText=fb.status==='resolved'?'✅ 已处理':'⏳ 待处理';
+            h+='<div class="feedback-item">';
+            h+='<span class="fb-status '+statusCls+'">'+statusText+'</span>';
+            h+='<div class="fb-content">'+escHtml(fb.content||'')+'</div>';
+            h+='<div class="fb-time">'+esc(fb.createdAt||'')+'</div>';
+            if(fb.reply)h+='<div class="fb-reply">💬 '+escHtml(fb.reply)+'</div>';
+            h+='</div>';
+        });
+        document.getElementById('feedbackList').innerHTML=h;
+    }).catch(function(){document.getElementById('feedbackList').innerHTML='<div class="empty">加载失败</div>'});
+}
+
+function submitFeedback(){
+    var content=document.getElementById('fbContent').value.trim();
+    if(!content){toast('请输入反馈内容','error');return}
+    fetch(api+'/api/submit-feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:content,clubName:currentClub})})
+    .then(function(r){return r.json()}).then(function(res){
+        if(res.error){toast(res.error,'error');return}
+        toast('反馈提交成功','success');
+        document.getElementById('fbContent').value='';
+        loadFeedbacks();
+    });
+}
+
+function loadClubHome(){
+    if(!currentClub)return;
+    fetch(api+'/api/club-detail/'+encodeURIComponent(currentClub)).then(function(r){return r.json()}).then(function(res){
+        if(!res.success)return;
+        var p=res.data.profile;
+        var teachers=res.data.teachers||[];
+        var infoBox=document.getElementById('clubHomeInfo');
+        var h='';
+        h+='<div class="club-info-section"><div class="ci-label">社团名称</div><div class="ci-value">'+esc(res.data.clubName)+'</div></div>';
+        if(p.president)h+='<div class="club-info-section"><div class="ci-label">社长</div><div class="ci-value">'+esc(p.president)+'</div></div>';
+        if(p.category)h+='<div class="club-info-section"><div class="ci-label">社团类型</div><div class="ci-value">'+esc(p.category)+'</div></div>';
+        if(p.guidingUnit)h+='<div class="club-info-section"><div class="ci-label">业务指导单位</div><div class="ci-value">'+esc(p.guidingUnit)+'</div></div>';
+        if(p.description)h+='<div class="club-info-section"><div class="ci-label">社团简介</div><div class="ci-value">'+safeHtml(p.description)+'</div></div>';
+        if(p.emblemUrl)h+='<div class="club-info-section"><div class="ci-label">社团Logo</div><div class="ci-value"><img src="'+api+p.emblemUrl+'" style="max-width:80px;max-height:80px;border-radius:50%;border:1px solid #eee" /></div></div>';
+        infoBox.innerHTML=h||'<div class="empty">暂无社团信息</div>';
+        var tBox=document.getElementById('clubHomeTeachers');
+        if(!teachers.length){tBox.innerHTML='<div class="empty">暂无指导老师信息</div>';return}
+        var th='';
+        teachers.forEach(function(t){
+            th+='<div class="teacher-guidance-card">';
+            th+='<div class="tg-avatar">'+(t.photo?'<img src="'+api+t.photo+'" />':'👤')+'</div>';
+            th+='<div class="tg-info"><div class="tg-name">'+esc(t.name)+'</div>';
+            if(t.introduction)th+='<div style="font-size:0.74em;color:#6b6d8a;margin-top:2px;line-height:1.6">'+escHtml(t.introduction)+'</div>';
+            th+='</div></div>';
+        });
+        tBox.innerHTML=th;
+        fetch(api+'/api/club-departments/'+encodeURIComponent(currentClub)).then(function(r){return r.json()}).then(function(dRes){
+            var dBox=document.getElementById('clubHomeDepts');
+            if(!dRes.success||!dRes.data||!dRes.data.length){dBox.innerHTML='<div class="empty">暂无部门信息</div>';return}
+            var dh='';
+            dRes.data.forEach(function(d){
+                dh+='<div class="dept-item"><div class="di-name">'+esc(d.name)+'</div>';
+                if(d.description)dh+='<div class="di-desc">'+escHtml(d.description)+'</div>';
+                dh+='</div>';
+            });
+            dBox.innerHTML=dh;
+        });
+    });
+}
+
+function loadTeacherProfile(){
+    fetch(api+'/api/teacher-profile').then(function(r){return r.json()}).then(function(res){
+        if(!res.success)return;
+        var d=res.data;
+        document.getElementById('profileWorkId').value=d.workId||'';
+        document.getElementById('profileRealName').value=d.realName||'';
+        document.getElementById('profilePhone').value=d.phone||'';
+        document.getElementById('profileEmail').value=d.email||'';
+        document.getElementById('profileIntro').value=d.introduction||'';
+        var avatarEl=document.getElementById('avatarPreview');
+        if(d.avatarPath){avatarEl.innerHTML='<img src="'+api+d.avatarPath+'" style="width:100%;height:100%;object-fit:cover" />'}
+        else{avatarEl.innerHTML='👨‍🏫'}
+        renderProfileClubList(d.clubs||[]);
+    });
+}
+
+function renderProfileClubList(selectedClubs){
+    var display=document.getElementById('profileClubDisplay');
+    var editor=document.getElementById('profileClubList');
+    if(display){
+        if(!selectedClubs.length){
+            display.innerHTML='<span style="font-size:0.82em;color:#a0a3bd">暂未选择指导社团</span>';
+        }else{
+            var dh='';
+            selectedClubs.forEach(function(cn){
+                dh+='<span style="display:inline-block;padding:4px 12px;background:rgba(102,126,234,0.08);color:#667eea;border-radius:6px;font-size:0.82em;font-weight:600">'+esc(cn)+'</span>';
+            });
+            display.innerHTML=dh;
+        }
+        display.style.display='flex';
+    }
+    if(editor){
+        if(!allClubs.length){editor.innerHTML='<span style="font-size:0.76em;color:#c8cade">暂无可选社团</span>';return}
+        var h='';
+        allClubs.forEach(function(cn){
+            var checked=selectedClubs.indexOf(cn)>=0?'checked':'';
+            h+='<label><input type="checkbox" value="'+cn+'" class="profileClubCb" '+checked+' /><span>'+cn+'</span></label>';
+        });
+        editor.innerHTML=h;
+    }
+    var editorWrap=document.getElementById('profileClubEditor');
+    if(editorWrap)editorWrap.style.display='none';
+    var editBtn=document.getElementById('editClubBtn');
+    if(editBtn)editBtn.style.display='';
+}
+
+function enableClubEdit(){
+    var display=document.getElementById('profileClubDisplay');
+    var editorWrap=document.getElementById('profileClubEditor');
+    var editBtn=document.getElementById('editClubBtn');
+    if(display)display.style.display='none';
+    if(editorWrap)editorWrap.style.display='block';
+    if(editBtn)editBtn.style.display='none';
+}
+
+function saveTeacherProfile(){
+    var workId=document.getElementById('profileWorkId').value.trim();
+    var realName=document.getElementById('profileRealName').value.trim();
+    var phone=document.getElementById('profilePhone').value.trim();
+    var email=document.getElementById('profileEmail').value.trim();
+    var introduction=document.getElementById('profileIntro').value.trim();
+    if(!workId){toast('请输入工号','error');return}
+    if(!realName){toast('请输入姓名','error');return}
+    if(phone&&!/^1\d{10}$/.test(phone)){toast('联系电话必须是11位手机号','error');return}
+    var selectedClubs=[];
+    document.querySelectorAll('.profileClubCb:checked').forEach(function(cb){selectedClubs.push(cb.value)});
+    fetch(api+'/api/teacher-profile',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({workId:workId,realName:realName,phone:phone,email:email,introduction:introduction,clubs:selectedClubs})})
+    .then(function(r){return r.json()}).then(function(res){
+        if(res.error){toast(res.error,'error');return}
+        toast('保存成功','success');
+        myClubs=selectedClubs;
+        if(!currentClub&&myClubs.length){currentClub=myClubs[0]}
+        renderClubSwitch();
+    });
+}
+
+function uploadAvatar(input){
+    if(!input.files.length)return;
+    var fd=new FormData();fd.append('avatar',input.files[0]);
+    fetch(api+'/api/teacher-avatar',{method:'POST',body:fd}).then(function(r){return r.json()}).then(function(res){
+        if(res.success){
+            toast('头像上传成功','success');
+            var avatarEl=document.getElementById('avatarPreview');
+            avatarEl.innerHTML='<img src="'+api+res.avatarUrl+'" style="width:100%;height:100%;object-fit:cover" />';
+            var sbAvatar=document.querySelector('.sb-avatar');
+            if(sbAvatar)sbAvatar.innerHTML='<img src="'+api+res.avatarUrl+'" />';
+        }else{toast(res.error||'上传失败','error')}
+    });
+}
+
+fetch(api+'/api/current-user').then(function(r){return r.json()}).then(function(res){
+    if(!res.loggedIn||res.user.role!=='teacher'){window.location.replace('/');return}
+    currentUser=res.user;
+    buildSidebar();
+    startLocationWatch();
+    pollTeacherAdminNotifyBadge();
+    setInterval(pollTeacherAdminNotifyBadge,15000);
+    loadClubInviteBadge();
+    setInterval(loadClubInviteBadge,15000);
+    fetch(api+'/api/teacher-profile').then(function(r2){return r2.json()}).then(function(res2){
+        if(res2.success){
+            myClubs=res2.data.clubs||[];
+            if(myClubs.length)currentClub=myClubs[0];
+        }
+        buildPages();
+        renderClubSwitch();
+        var sbUser=document.getElementById('sbUser');
+        var avatarHtml=res2.success&&res2.data.avatarPath?'<img src="'+api+res2.data.avatarPath+'" />':esc(currentUser.username[0]);
+        sbUser.innerHTML='<div class="sb-avatar">'+avatarHtml+'</div><div><div class="sb-uname">'+esc(res2.data.realName||currentUser.username)+'</div><div class="sb-uclub">'+esc(currentClub||'')+'</div></div>';
+        loadTeacherHomeData();
+    });
+    fetch(api+'/api/all-clubs').then(function(r3){return r3.json()}).then(function(res3){
+        if(res3.success)allClubs=res3.data||[];
+    });
+}).catch(function(){window.location.replace('/')});
+
+(function(){
+    var today=new Date();
+    var todayStr=today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-'+String(today.getDate()).padStart(2,'0');
+    var finDate=document.getElementById('finDate');
+    if(finDate)finDate.value=todayStr;
+})();
+
+function teacherAdminNotifyPage(){
+    return '<div class="pg-title">📨 管理员通知</div><div class="pg-desc">接收管理员发送的通知</div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:16px">'+
+    '<button class="btn btn-sm" style="background:rgba(231,76,60,0.08);color:#e74c3c" onclick="clearTeacherReadNotify()">清理已读通知</button>'+
+    '</div>'+
+    '<div class="card"><div class="card-title">📬 通知列表 <span class="badge" id="tanCount">0</span></div>'+
+    '<div id="tanList"><div class="empty">加载中...</div></div></div>';
+}
+
+function pollTeacherAdminNotifyBadge(){
+    fetch(api+'/api/nav-badges').then(function(r){return r.json()}).then(function(res){
+        if(!res.success)return;
+        var badges=res.badges||{};
+        var alwaysShowKeys=['scoringReview'];
+        Object.keys(badges).forEach(function(key){
+            var count=badges[key];
+            var b=document.getElementById('navBadge-'+key);
+            if(!b)return;
+            if(alwaysShowKeys.indexOf(key)>=0){
+                var prevCount=_dismissedCounts[key]||0;
+                if(count>0&&count>prevCount){b.textContent=count>99?'99+':count;b.classList.add('show');delete _dismissedCounts[key];_saveDismissed()}
+                else if(count>0&&count<=prevCount){b.classList.remove('show')}
+                else{b.classList.remove('show');if(_dismissedCounts[key]){delete _dismissedCounts[key];_saveDismissed()}}
+            }else{
+                var prevCount=_dismissedCounts[key]||0;
+                if(count>0&&!_dismissedBadges[key]&&count>prevCount){b.textContent=count>99?'99+':count;b.classList.add('show');delete _dismissedCounts[key];_saveDismissed()}
+                else if(count>0&&!_dismissedBadges[key]&&count<=prevCount){b.classList.remove('show')}
+                else if(count<=0){b.classList.remove('show');if(_dismissedCounts[key]){delete _dismissedCounts[key];_saveDismissed()}}
+                else{b.classList.remove('show')}
+            }
+        });
+    }).catch(function(){});
+}
+
+function loadTeacherAdminNotify(){
+    fetch(api+'/api/my-admin-notifications').then(function(r){return r.json()}).then(function(res){
+        var box=document.getElementById('tanList');if(!box)return;
+        if(!res.success||!res.data||!res.data.length){box.innerHTML='<div class="empty">暂无通知</div>';document.getElementById('tanCount').textContent='0';return}
+        _tanAllData=res.data;
+        var unread=res.data.filter(function(n){return!n.isRead}).length;
+        document.getElementById('tanCount').textContent=unread?''+unread+'条未读':''+res.data.length+'条';
+        var h='';
+        res.data.forEach(function(n){
+            var bg=n.isRead?'':'background:rgba(0,184,148,0.03);border-left:3px solid #00b894';
+            h+='<div class="session-row" style="'+bg+';cursor:pointer;display:flex;align-items:flex-start;gap:8px" onclick="expandTeacherNotify(this,'+n.id+')">';
+            h+='<div class="session-info" style="flex:1;min-width:0"><div><div class="session-name">';
+            if(!n.isRead)h+='<span style="background:#e74c3c;color:#fff;padding:1px 5px;border-radius:3px;font-size:0.58em;margin-right:4px">新</span>';
+            h+=esc(n.title)+'</div>';
+            if(n.content)h+='<div class="tan-content-preview" style="font-size:0.78em;color:#a0a3bd;margin-top:4px;line-height:1.5" data-tanid="'+n.id+'" data-expanded="0">'+escHtml(n.content.substring(0,80))+(n.content.length>80?'<span style="color:#667eea;font-size:0.72em;margin-left:4px">...</span>':'')+'</div>';
+            h+='<div style="font-size:0.72em;color:#c8cade;margin-top:4px">'+esc(n.time||'')+'</div>';
+            h+='</div></div>';
+            if(n.isRead)h+='<button style="border:none;background:rgba(231,76,60,0.06);color:#e74c3c;width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:0.8em;flex-shrink:0" onclick="event.stopPropagation();deleteTeacherNotify('+n.id+')">✕</button>';
+            h+='</div>';
+        });
+        box.innerHTML=h;
+    });
+}
+
+var _tanAllData=[];
+function expandTeacherNotify(el,id){
+    var n=_tanAllData.find(function(x){return x.id===id});
+    if(!n)return;
+    var preview=el.querySelector('.tan-content-preview[data-tanid="'+id+'"]');
+    if(preview&&preview.getAttribute('data-expanded')==='1'){
+        preview.innerHTML=escHtml((n.content||'').substring(0,80))+((n.content||'').length>80?'<span style="color:#667eea;font-size:0.72em;margin-left:4px">...</span>':'');
+        preview.setAttribute('data-expanded','0');
+    }else if(preview){
+        preview.innerHTML=escHtml(n.content||'');
+        preview.setAttribute('data-expanded','1');
+    }
+    if(!n.isRead){
+        n.isRead=true;
+        fetch(api+'/api/admin-notifications/'+id+'/read',{method:'POST'});
+        el.style.background='';el.style.borderLeft='';
+        var badge=el.querySelector('span[style*="background:#e74c3c"]');
+        if(badge)badge.remove();
+    }
+}
+
+function clearTeacherReadNotify(){
+    if(!confirm('确定清理所有已读管理员通知？'))return;
+    fetch(api+'/api/my-admin-notifications/clear',{method:'DELETE'}).then(function(r){return r.json()}).then(function(res){
+        if(res.error){toast(res.error,'error');return}
+        toast('已清理已读通知','success');loadTeacherAdminNotify();
+    });
+}
+
+function deleteTeacherNotify(id){
+    fetch(api+'/api/my-admin-notifications/'+id+'/read',{method:'DELETE'}).then(function(r){return r.json()}).then(function(res){
+        if(res.error){toast(res.error,'error');return}
+        loadTeacherAdminNotify();
+    });
+}
+
+function scoringReviewPage(){
+    return '<div class="pg-title">赋分审核</div><div class="pg-desc">审核社团提交的赋分结果</div><div id="scoringReviewList"><div class="empty">加载中...</div></div>';
+}
+
+function loadScoringReviewList(){
+    fetch(api+'/api/scoring/teacher-reviews').then(function(r){return r.json()}).then(function(res){
+        if(!res.success){document.getElementById('scoringReviewList').innerHTML='<div class="empty">加载失败</div>';return}
+        var data=res.data;
+        if(!data.length){document.getElementById('scoringReviewList').innerHTML='<div class="empty">暂无待审核的赋分</div>';return}
+        var h='';
+        data.forEach(function(d){
+            var statusText={draft:'草稿',pending_teacher:'待审核',teacher_approved:'已通过',submitted_tuanwei:'已提交团委'};
+            var statusColor={draft:'#a0a3bd',pending_teacher:'#f39c12',teacher_approved:'#00b894',submitted_tuanwei:'#667eea'};
+            h+='<div class="card" style="margin-bottom:16px">';
+            h+='<div class="card-title">'+esc(d.club_name)+' 赋分结果 <span class="badge" style="color:'+statusColor[d.submission_status]+';background:'+statusColor[d.submission_status]+'15">'+statusText[d.submission_status]+'</span></div>';
+            if(d.items&&d.items.length>0){
+                h+='<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="score-review-table" style="width:100%;border-collapse:collapse;font-size:0.84em"><thead><tr>';
+                h+='<th style="text-align:left;padding:8px 10px;border-bottom:2px solid #f0f0f8;color:#6b6d8a;font-size:0.76em;white-space:nowrap">学号</th>';
+                h+='<th style="text-align:left;padding:8px 10px;border-bottom:2px solid #f0f0f8;color:#6b6d8a;font-size:0.76em;white-space:nowrap">姓名</th>';
+                h+='<th style="text-align:left;padding:8px 10px;border-bottom:2px solid #f0f0f8;color:#6b6d8a;font-size:0.76em;white-space:nowrap">学院</th>';
+                h+='<th style="text-align:left;padding:8px 10px;border-bottom:2px solid #f0f0f8;color:#6b6d8a;font-size:0.76em;white-space:nowrap">班级</th>';
+                h+='<th style="text-align:left;padding:8px 10px;border-bottom:2px solid #f0f0f8;color:#6b6d8a;font-size:0.76em;white-space:nowrap">总工作量</th>';
+                h+='<th style="text-align:left;padding:8px 10px;border-bottom:2px solid #f0f0f8;color:#6b6d8a;font-size:0.76em;white-space:nowrap">个人赋分</th>';
+                h+='</tr></thead><tbody>';
+                d.items.forEach(function(m){
+                    h+='<tr style="border-bottom:1px solid #f5f5ff"><td style="padding:8px 10px;white-space:nowrap">'+esc(m.student_id_num||'-')+'</td><td style="padding:8px 10px;white-space:nowrap">'+esc(m.student_name||'-')+'</td><td style="padding:8px 10px;white-space:nowrap">'+esc(m.college||'-')+'</td><td style="padding:8px 10px;white-space:nowrap">'+esc(m.class_name||'-')+'</td><td style="padding:8px 10px;white-space:nowrap">'+m.total_workload+'</td><td style="padding:8px 10px;font-weight:700;color:#00b894;white-space:nowrap">'+m.final_score+'</td></tr>';
+                });
+                h+='</tbody></table></div>';
+            }
+            if(d.review){
+                var rv=d.review;
+                if(rv.status==='pending'){
+                    h+='<div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">';
+                    h+='<button class="btn btn-success" onclick="scoringReviewAction('+rv.id+',\'approve\')">✅ 通过</button>';
+                    h+='<button class="btn btn-danger" onclick="scoringReviewAction('+rv.id+',\'reject\')">❌ 驳回</button>';
+                    h+='</div>';
+                }else if(rv.status==='approved'){
+                    h+='<div style="margin-top:12px;font-size:0.82em;color:#00b894">✅ 您已通过审核'+(rv.review_note?' ('+esc(rv.review_note)+')':'')+'</div>';
+                }else if(rv.status==='rejected'){
+                    h+='<div style="margin-top:12px;font-size:0.82em;color:#e74c3c">❌ 您已驳回'+(rv.review_note?' ('+esc(rv.review_note)+')':'')+'</div>';
+                }
+            }
+            h+='</div>';
+        });
+        document.getElementById('scoringReviewList').innerHTML=h;
+    });
+}
+
+function scoringReviewAction(reviewId,action){
+    var oldModals=document.querySelectorAll('div[data-sr-modal]');
+    for(var i=0;i<oldModals.length;i++)oldModals[i].remove();
+    var overlay=document.createElement('div');
+    overlay.setAttribute('data-sr-modal','1');
+    overlay.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.45);z-index:9999;display:flex;justify-content:center;align-items:center';
+    var card=document.createElement('div');
+    card.style.cssText='background:#fff;border-radius:20px;padding:0;max-width:400px;width:90%;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.15)';
+    var header=document.createElement('div');
+    if(action==='approve'){
+        header.style.cssText='background:linear-gradient(135deg,#00b894,#55efc4);padding:20px 24px';
+        header.innerHTML='<div style="color:#fff;font-size:1em;font-weight:700">确认通过赋分</div><div style="color:rgba(255,255,255,0.8);font-size:0.78em;margin-top:4px">通过后赋分将进入下一环节</div>';
+    }else{
+        header.style.cssText='background:linear-gradient(135deg,#e74c3c,#c0392b);padding:20px 24px';
+        header.innerHTML='<div style="color:#fff;font-size:1em;font-weight:700">驳回赋分</div><div style="color:rgba(255,255,255,0.8);font-size:0.78em;margin-top:4px">驳回后社团负责人可重新修改赋分</div>';
+    }
+    card.appendChild(header);
+    var body=document.createElement('div');
+    body.style.cssText='padding:24px';
+    if(action==='reject'){
+        var warn=document.createElement('div');
+        warn.style.cssText='background:#fff8f0;border:1px solid #ffe0b2;border-radius:12px;padding:12px 16px;margin-bottom:16px;font-size:0.82em;color:#e67e22;line-height:1.6';
+        warn.textContent='驳回后赋分将退回草稿状态，社团负责人可重新修改并提交。';
+        body.appendChild(warn);
+    }
+    var label=document.createElement('label');
+    label.style.cssText='display:block;font-size:0.82em;font-weight:700;color:#1a1a2e;margin-bottom:8px';
+    if(action==='reject'){
+        label.innerHTML='驳回原因 <span style="color:#e74c3c">*</span>';
+    }else{
+        label.textContent='备注（可选）';
+    }
+    body.appendChild(label);
+    var ta=document.createElement('textarea');
+    ta.rows=action==='reject'?3:2;
+    ta.placeholder=action==='reject'?'请说明驳回原因...':'可填写审核备注...';
+    ta.style.cssText='width:100%;padding:12px 16px;border-radius:12px;border:1.5px solid #e8e8f0;background:#fafaff;font-size:0.88em;resize:vertical;line-height:1.6;font-family:inherit;outline:none;box-sizing:border-box';
+    if(action==='reject'){
+        ta.onfocus=function(){ta.style.borderColor='#e74c3c'};
+        ta.onblur=function(){ta.style.borderColor='#e8e8f0'};
+    }
+    body.appendChild(ta);
+    var btnRow=document.createElement('div');
+    btnRow.style.cssText='display:flex;gap:10px;justify-content:flex-end;margin-top:16px';
+    var cancelBtn=document.createElement('button');
+    cancelBtn.className='btn btn-ghost';
+    cancelBtn.textContent='取消';
+    cancelBtn.onclick=function(){overlay.remove()};
+    btnRow.appendChild(cancelBtn);
+    var confirmBtn=document.createElement('button');
+    if(action==='approve'){
+        confirmBtn.className='btn btn-success';
+        confirmBtn.textContent='确认通过';
+    }else{
+        confirmBtn.className='btn btn-danger';
+        confirmBtn.textContent='确认驳回';
+    }
+    confirmBtn.onclick=function(){
+        var note=ta.value.trim();
+        if(action==='reject'&&!note){toast('请填写驳回原因','error');ta.focus();return}
+        confirmBtn.disabled=true;
+        confirmBtn.textContent='提交中...';
+        fetch(api+'/api/scoring/teacher-review/'+reviewId,{
+            method:'POST',
+            headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({action:action,review_note:note})
+        }).then(function(r){return r.json()}).then(function(res){
+            if(res.success){toast(res.message||'审核完成','success');overlay.remove();loadScoringReviewList()}
+            else{toast(res.error||'操作失败','error');confirmBtn.disabled=false;confirmBtn.textContent=action==='approve'?'确认通过':'确认驳回'}
+        }).catch(function(){toast('操作失败','error');confirmBtn.disabled=false;confirmBtn.textContent=action==='approve'?'确认通过':'确认驳回'});
+    };
+    btnRow.appendChild(confirmBtn);
+    body.appendChild(btnRow);
+    card.appendChild(body);
+    overlay.appendChild(card);
+    overlay.onclick=function(e){if(e.target===overlay)overlay.remove()};
+    document.body.appendChild(overlay);
+    if(action==='reject'){setTimeout(function(){ta.focus()},100)}
+}
+</script>
+<script src="/ai-chat.js?v=4"></script>
+</body>
+</html>

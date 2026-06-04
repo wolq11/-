@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>社团详情 - 济幼社团</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Microsoft YaHei','PingFang SC',sans-serif;background:#f4f5fb;color:#1a1a2e;min-height:100vh}
+a{text-decoration:none;color:inherit}
+
+.header{background:#fff;border-bottom:1px solid #f0f0f8;padding:0 28px;display:flex;align-items:center;justify-content:space-between;height:56px;position:sticky;top:0;z-index:100;backdrop-filter:blur(12px)}
+.logo{display:flex;align-items:center;gap:10px;cursor:pointer}
+.logo-icon{width:34px;height:34px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:1em;color:#fff;flex-shrink:0;box-shadow:0 2px 8px rgba(102,126,234,0.2)}
+.logo-text{font-size:1.05em;font-weight:700;color:#1a1a2e;letter-spacing:1px}
+.back-btn{background:#f5f5ff;border:1px solid #eee;color:#6b6d8a;padding:6px 16px;border-radius:6px;font-size:0.8em;cursor:pointer;transition:all .2s}
+.back-btn:hover{color:#667eea;border-color:rgba(102,126,234,0.2)}
+
+.main{max-width:900px;margin:0 auto;padding:28px}
+
+.club-hero{background:linear-gradient(135deg,#0a1628 0%,#1a2a4a 40%,#0d1f3c 100%);border-radius:14px;padding:32px;position:relative;overflow:hidden;border:1px solid rgba(102,126,234,0.08);margin-bottom:24px}
+.club-hero::before{content:'';position:absolute;top:-40%;right:-10%;width:50%;height:160%;background:radial-gradient(ellipse,rgba(102,126,234,0.04) 0%,transparent 70%);pointer-events:none}
+.club-hero h1{font-size:1.8em;color:#fff;font-weight:700;margin-bottom:6px;position:relative;z-index:1}
+.club-stars{color:#f0c040;font-size:1.1em;letter-spacing:2px;margin-bottom:8px}
+.club-desc{font-size:0.86em;color:#c0c3d8;line-height:1.7;max-width:600px;position:relative;z-index:1}
+.club-meta{display:flex;gap:24px;margin-top:16px;position:relative;z-index:1}
+.club-meta-item{text-align:center}
+.club-meta-item .val{font-size:1.4em;font-weight:800;background:linear-gradient(90deg,#667eea,#764ba2);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.club-meta-item .lbl{font-size:0.68em;color:#c0c3d8;margin-top:1px}
+
+.section{margin-bottom:24px}
+.section-title{font-size:1em;font-weight:600;color:#1a1a2e;margin-bottom:14px;display:flex;align-items:center;gap:8px;padding-bottom:8px;border-bottom:1px solid #f5f5ff}
+.section-title .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.section-title .dot.blue{background:#667eea;box-shadow:0 0 6px rgba(102,126,234,0.4)}
+.section-title .dot.green{background:#00b894;box-shadow:0 0 6px rgba(74,222,128,0.4)}
+
+.teacher-grid{display:flex;flex-direction:column;gap:12px}
+.teacher-card{background:#fafaff;border:1px solid #f0f0f8;border-radius:10px;padding:16px;display:flex;align-items:flex-start;gap:14px;transition:all .25s}
+.teacher-card:hover{border-color:rgba(102,126,234,0.15);box-shadow:0 2px 8px rgba(102,126,234,0.06)}
+.teacher-avatar{width:56px;height:56px;border-radius:50%;overflow:hidden;background:linear-gradient(135deg,rgba(102,126,234,0.08),rgba(58,123,213,0.08));display:flex;align-items:center;justify-content:center;font-size:1.6em;color:#c8cade;border:2px solid #f0f0f8;flex-shrink:0}
+.teacher-avatar img{width:100%;height:100%;object-fit:cover}
+.teacher-info{flex:1;min-width:0}
+.teacher-name{font-size:0.92em;font-weight:600;color:#1a1a2e;margin-bottom:4px}
+.teacher-intro{font-size:0.82em;color:#6b6d8a;line-height:1.7;white-space:pre-wrap;word-break:break-word}
+
+.enroll-btn{display:inline-flex;align-items:center;gap:8px;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:12px 32px;border-radius:10px;font-size:0.92em;font-weight:600;cursor:pointer;border:none;transition:all .2s;box-shadow:0 4px 16px rgba(102,126,234,0.25)}
+.enroll-btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(102,126,234,0.35)}
+
+.form-card{background:#fafaff;border:1px solid #f0f0f8;border-radius:12px;padding:24px;margin-top:16px;display:none}
+.form-card.show{display:block}
+.form-card h3{font-size:1em;color:#1a1a2e;margin-bottom:14px}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;color:#6b6d8a;font-size:0.76em;margin-bottom:3px}
+.form-group input,.form-group textarea,.form-group select{width:100%;padding:9px 12px;border-radius:8px;border:1px solid #eee;background:#fafaff;color:#1a1a2e;font-size:0.84em;outline:none;transition:border-color .2s;font-family:inherit}
+.form-group input:focus,.form-group textarea:focus,.form-group select:focus{border-color:rgba(102,126,234,0.3)}
+.form-group input::placeholder,.form-group textarea::placeholder{color:#c8cade}
+.form-group textarea{min-height:60px;resize:vertical}
+.form-group select option{background:#fff;color:#1a1a2e}
+.btn-submit{background:linear-gradient(135deg,#00b894,#22c55e);color:#fff;padding:10px 28px;border-radius:8px;border:none;font-size:0.86em;font-weight:600;cursor:pointer;transition:all .2s}
+.btn-submit:hover{box-shadow:0 4px 12px rgba(74,222,128,0.3)}
+
+.empty{text-align:center;padding:24px;color:#c8cade;font-size:0.8em}
+
+.modal-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.3);backdrop-filter:blur(8px);z-index:1000;display:none;align-items:center;justify-content:center}
+.modal-overlay.show{display:flex}
+.login-modal{background:#fff;border:1px solid #eee;border-radius:14px;padding:28px 24px;width:340px;max-width:calc(100vw - 32px);max-height:90vh;overflow-y:auto;position:relative}
+.login-modal h3{font-size:1.05em;color:#1a1a2e;margin-bottom:3px;text-align:center}
+.login-modal .sub{text-align:center;color:#a0a3bd;font-size:0.76em;margin-bottom:16px}
+.tabs{display:flex;margin-bottom:14px;border-radius:8px;overflow:hidden;border:1px solid #f0f0f8}
+.tab{flex:1;padding:8px;text-align:center;cursor:pointer;font-size:0.8em;font-weight:600;transition:all .2s;background:#fafaff;color:#a0a3bd;border:none}
+.tab.active{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff}
+.error{background:rgba(248,113,113,0.06);border:1px solid #ffe0e0;border-radius:6px;padding:7px 10px;color:#e74c3c;font-size:0.76em;margin-bottom:10px;display:none}
+#registerForm{display:none}
+.club-field{display:none}
+.modal-close{position:absolute;top:10px;right:14px;font-size:1.1em;color:#c0c3d8;cursor:pointer;transition:color .2s;background:none;border:none}
+.modal-close:hover{color:#1a1a2e}
+.btn-login{width:100%;padding:10px;border-radius:8px;border:none;font-size:0.86em;cursor:pointer;font-weight:600;transition:all .2s;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff}
+.btn-login:hover{box-shadow:0 4px 12px rgba(102,126,234,0.3)}
+
+.toast{position:fixed;top:16px;right:16px;padding:10px 18px;border-radius:8px;font-size:0.82em;z-index:10000;animation:fadeIn .3s;box-shadow:0 4px 12px rgba(0,0,0,0.08)}
+.toast.success{background:rgba(0,184,148,0.1);border:1px solid rgba(0,184,148,0.15);color:#00b894}
+.toast.error{background:#fff0f0;border:1px solid #ffe8e8;color:#e74c3c}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:translateY(0)}}
+
+.ql-container{min-height:120px;font-size:0.88em;font-family:'Microsoft YaHei','PingFang SC',sans-serif}
+.ql-editor{min-height:120px}
+.ql-toolbar{border-radius:8px 8px 0 0 !important;border-color:#eee !important;background:#fafaff}
+.ql-container.ql-snow{border-radius:0 0 8px 8px !important;border-color:#eee !important}
+@media(max-width:768px){
+  .main{padding:16px 12px}
+  .club-hero{padding:20px 16px}
+  .club-hero h1{font-size:1.4em}
+  .club-meta{gap:16px}
+  .teacher-avatar{width:48px;height:48px}
+  .form-group input,.form-group textarea,.form-group select{font-size:16px}
+  .btn-submit{padding:12px 24px;min-height:40px}
+  .enroll-btn{min-height:44px}
+  .modal-close{min-width:36px;min-height:36px}
+  .tab{padding:10px;min-height:36px}
+  .btn-login{padding:12px;min-height:40px}
+  .login-modal{width:min(340px,92vw);padding:20px 16px}
+  .toast{left:16px;right:16px;text-align:center}
+  .club-desc,.teacher-intro,.detail-content{word-break:break-word;overflow-wrap:break-word}
+  .club-meta{flex-wrap:wrap}
+  [style*="display:flex"][style*="justify-content:space-between"]{flex-wrap:wrap!important}
+  .btn{white-space:normal;word-break:break-word}
+  .tabs{flex-wrap:wrap}
+}
+@media(max-width:480px){
+  .header{padding:0 12px;gap:6px}
+  .main{padding:14px}
+  .club-hero{padding:18px 14px}
+  .club-hero h1{font-size:1.3em;display:flex;flex-wrap:wrap;align-items:center;gap:6px}
+  .club-meta{gap:14px}
+  .teacher-card{padding:12px;gap:10px}
+  .teacher-avatar{width:44px;height:44px;font-size:1.2em}
+  .enroll-btn{width:100%;justify-content:center;padding:12px 16px}
+  .form-card{padding:14px}
+  .form-group input,.form-group textarea,.form-group select{font-size:16px}
+  .toast{left:16px;right:16px;text-align:center}
+}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+</head>
+<body>
+
+<div class="header">
+    <div class="logo" onclick="history.back()">
+        <div class="logo-icon">🎓</div>
+        <div class="logo-text">济幼社团</div>
+    </div>
+    <button class="back-btn" onclick="history.back()">← 返回</button>
+    <button class="back-btn" id="backManage" style="display:none;margin-left:6px" onclick="history.back()">⚙️ 管理页面</button>
+</div>
+
+<div class="main">
+    <div class="club-hero" id="clubHero">
+        <h1 id="clubName">加载中...</h1>
+        <div class="club-stars" id="clubStars" style="display:none"></div>
+        <div class="club-desc" id="clubDesc"></div>
+        <div class="club-meta">
+            <div class="club-meta-item"><div class="val" id="activityCount">0</div><div class="lbl">活动次数</div></div>
+            <div class="club-meta-item"><div class="val" id="teacherCount">0</div><div class="lbl">指导老师</div></div>
+        </div>
+    </div>
+
+    <div class="section">
+        <div class="section-title"><span class="dot blue"></span>指导老师</div>
+        <div class="teacher-grid" id="teacherGrid"><div class="empty">加载中...</div></div>
+    </div>
+
+    <div class="section">
+        <div class="section-title"><span class="dot green"></span>加入我们</div>
+        <div id="deptSection" style="display:none;margin-bottom:16px">
+            <div style="font-size:0.9em;font-weight:600;color:#1a1a2e;margin-bottom:10px">🏢 社团部门</div>
+            <div id="deptGrid"></div>
+        </div>
+        <button class="enroll-btn" onclick="showEnrollForm()">📝 我要报名该社团</button>
+        <div class="form-card" id="enrollForm">
+            <h3>📝 在线报名</h3>
+            <div class="form-group"><label>姓名 *</label><input type="text" id="enrollName" placeholder="请输入您的姓名" /></div>
+            <div class="form-group"><label>学院 *</label><select id="enrollCollege"></select></div>
+            <div class="form-group"><label>班级 *</label><input type="text" id="enrollClass" placeholder="24级大数据技术1班" /></div>
+            <div class="form-group"><label>学号 *</label><input type="text" id="enrollStuId" placeholder="请输入学号" /></div>
+            <div class="form-group"><label>联系电话</label><input type="text" id="enrollPhone" placeholder="请输入联系电话" /></div>
+            <div class="form-group"><label>职务及特长</label><div id="specialtyEditor"></div></div>
+            <div class="form-group"><label>辅助材料（证书、作品等）</label><input type="file" id="enrollAttachment" accept="image/*,.pdf,.doc,.docx" style="font-size:0.84em" /><div id="enrollAttachStatus" style="font-size:0.76em;margin-top:4px;color:#a0a3bd"></div></div>
+            <div class="form-group" id="deptSelectGroup" style="display:none"><label>意向部门（可多选）</label><div id="enrollDeptCheckboxes" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px"></div></div>
+            <div id="customFields"></div>
+            <button class="btn-submit" onclick="submitEnroll()">提交报名</button>
+        </div>
+    </div>
+</div>
+
+<div class="modal-overlay" id="loginModal">
+    <div class="login-modal">
+        <button class="modal-close" onclick="closeLoginModal()">✕</button>
+        <h3>用户登录</h3>
+        <div class="sub">登录账号以使用完整功能</div>
+        <div class="tabs">
+            <button class="tab active" id="tabLogin" onclick="switchTab('login')">登录</button>
+            <button class="tab" id="tabRegister" onclick="switchTab('register')">注册</button>
+        </div>
+        <div class="error" id="errorMsg"></div>
+        <form id="loginForm">
+            <div class="form-group"><label>用户名</label><input type="text" id="loginUser" placeholder="请输入用户名" autocomplete="username" /></div>
+            <div class="form-group"><label>密码</label><input type="password" id="loginPass" placeholder="请输入密码" autocomplete="current-password" /></div>
+            <button type="submit" class="btn-login">登 录</button>
+        </form>
+        <form id="registerForm">
+            <div class="form-group"><label>用户名</label><input type="text" id="regUser" placeholder="至少2个字符" autocomplete="username" /></div>
+            <div class="form-group"><label>密码</label><input type="password" id="regPass" placeholder="至少4个字符" autocomplete="new-password" /></div>
+            <div class="form-group"><label>确认密码</label><input type="password" id="regPass2" placeholder="再次输入密码" autocomplete="new-password" /></div>
+            <div class="form-group"><label>学号 *</label><input type="text" id="regStudentId" placeholder="请输入学号" /></div>
+            <div class="form-group club-field" id="clubField"><label>所属社团</label><select id="regClub"><option value="">— 选择社团 —</option></select></div>
+            <button type="submit" class="btn-login">注 册</button>
+        </form>
+    </div>
+</div>
+
+<script>
+var api=window.location.origin;
+var COLLEGES=['数智科技产业学院','信息商务学院','学前教育学院','育婴育幼学院','人文教育学院','艺术学院','体育学院'];
+function collegeOptions(selected){
+    var h='<option value="">请选择学院</option>';
+    COLLEGES.forEach(function(c){h+='<option value="'+esc(c)+'"'+(c===selected?' selected':'')+'>'+esc(c)+'</option>'});
+    return h;
+}
+var specialtyQuill=null;
+function initSpecialtyQuill(){
+    if(typeof Quill==='undefined'){setTimeout(initSpecialtyQuill,200);return}
+    if(document.getElementById('specialtyEditor')&&!specialtyQuill){
+        specialtyQuill=new Quill('#specialtyEditor',{theme:'snow',modules:{toolbar:[['bold','italic','underline'],['link'],['clean']]},placeholder:'如：班长 / 擅长舞蹈、朗诵'});
+    }
+}
+initSpecialtyQuill();
+var enrollCollegeEl=document.getElementById('enrollCollege');
+if(enrollCollegeEl)enrollCollegeEl.innerHTML=collegeOptions('');
+var clubName='';
+var clubData=null;
+var currentUser=null;
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function escHtml(s){if(!s)return '';return esc(s).replace(/\n/g,'<br>')}
+function safeHtml(h){if(!h)return '';var d=document.createElement('div');d.innerHTML=h;var scripts=d.querySelectorAll('script,iframe,object,embed,form');for(var i=0;i<scripts.length;i++){scripts[i].remove()}var attrs=d.querySelectorAll('[onclick],[onerror],[onload],[onmouseover]');for(var i=0;i<attrs.length;i++){attrs[i].removeAttribute('onclick');attrs[i].removeAttribute('onerror');attrs[i].removeAttribute('onload');attrs[i].removeAttribute('onmouseover')}return d.innerHTML}
+function toast(msg,type){var d=document.createElement('div');d.className='toast '+type;d.textContent=msg;document.body.appendChild(d);setTimeout(function(){d.remove()},3000)}
+
+var params=new URLSearchParams(window.location.search);
+clubName=params.get('club')||'';
+
+function switchTab(tab){
+    document.getElementById('loginForm').style.display=tab==='login'?'block':'none';
+    document.getElementById('registerForm').style.display=tab==='register'?'block':'none';
+    document.getElementById('tabLogin').className='tab'+(tab==='login'?' active':'');
+    document.getElementById('tabRegister').className='tab'+(tab==='register'?' active':'');
+    document.getElementById('errorMsg').style.display='none';
+}
+function showError(msg){var e=document.getElementById('errorMsg');e.textContent=msg;e.style.display='block'}
+function openLoginModal(){document.getElementById('loginModal').classList.add('show')}
+function closeLoginModal(){document.getElementById('loginModal').classList.remove('show')}
+document.getElementById('loginModal').addEventListener('click',function(e){if(e.target===this)closeLoginModal()});
+
+document.getElementById('loginForm').addEventListener('submit',function(e){
+    e.preventDefault();
+    var u=document.getElementById('loginUser').value.trim(),p=document.getElementById('loginPass').value.trim();
+    if(!u||!p){showError('请输入用户名和密码');return}
+    fetch(api+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p})})
+    .then(function(r){return r.json()}).then(function(res){if(res.error){showError(res.error);return}closeLoginModal();window.location.reload()}).catch(function(){showError('登录失败')});
+});
+
+document.getElementById('registerForm').addEventListener('submit',function(e){
+    e.preventDefault();
+    var u=document.getElementById('regUser').value.trim(),p=document.getElementById('regPass').value.trim(),p2=document.getElementById('regPass2').value.trim(),c=document.getElementById('regClub').value;
+    if(!u||!p){showError('请输入用户名和密码');return}
+    if(p!==p2){showError('两次密码不一致');return}
+    var sid=document.getElementById('regStudentId').value.trim();
+    if(!sid){showError('请输入学号');return}
+    fetch(api+'/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p,clubName:c,studentId:sid})})
+    .then(function(r){return r.json()}).then(function(res){if(res.error){showError(res.error);return}closeLoginModal();window.location.reload()}).catch(function(){showError('注册失败')});
+});
+
+fetch(api+'/api/all-clubs').then(function(r){return r.json()}).then(function(res){
+    if(!res.success)return;
+    var sel=document.getElementById('regClub');
+    res.data.forEach(function(cn){var opt=document.createElement('option');opt.value=cn;opt.textContent=cn;sel.appendChild(opt)});
+    document.getElementById('clubField').style.display='block';
+});
+
+fetch(api+'/api/current-user').then(function(r){return r.json()}).then(function(res){if(res.loggedIn){currentUser=res.user;if(currentUser.role==='admin'||currentUser.role==='user')document.getElementById('backManage').style.display='inline-block';if(currentUser.role==='student'){fetch(api+'/api/my-profile').then(function(r2){return r2.json()}).then(function(res2){if(res2.success&&res2.data){var d=res2.data;if(d.realName)document.getElementById('enrollName').value=d.realName;if(d.college){var ec=document.getElementById('enrollCollege');if(ec)ec.value=d.college}if(d.className)document.getElementById('enrollClass').value=d.className;if(d.studentId)document.getElementById('enrollStuId').value=d.studentId;if(d.phone)document.getElementById('enrollPhone').value=d.phone}});fetch(api+'/api/my-club-memberships').then(function(r3){return r3.json()}).then(function(res3){if(res3.success&&res3.data){var isMember=res3.data.some(function(m){return m.clubName===clubName});if(isMember){var btn=document.querySelector('.enroll-btn');if(btn){btn.textContent='✅ 你已是该社团成员';btn.style.background='#f0f0f8';btn.style.color='#6b6d8a';btn.style.boxShadow='none';btn.style.cursor='default';btn.onclick=null}}}})}}});
+
+if(clubName){
+    fetch(api+'/api/club-detail/'+encodeURIComponent(clubName)).then(function(r){return r.json()}).then(function(res){
+        if(!res.success){document.getElementById('clubName').textContent='未找到该社团';return}
+        clubData=res.data;
+        document.getElementById('clubName').textContent=clubData.clubName;
+        if(clubData.profile.category){var categoryColors={'志愿公益类':'#00b894','学术科技类':'#0984e3','思想政治类':'#e84393','文化体育类':'#f39c12','创新创业类':'#6c5ce7','自律互助类':'#00cec9','其他':'#636e72'};var cc=categoryColors[clubData.profile.category]||'#636e72';var catEl=document.createElement('span');catEl.style.cssText='display:inline-block;padding:3px 12px;border-radius:6px;font-size:0.72em;font-weight:600;color:'+cc+';background:'+cc+'20;vertical-align:middle;margin-left:8px';catEl.textContent=clubData.profile.category;document.getElementById('clubName').appendChild(catEl)}
+        document.getElementById('activityCount').textContent=clubData.activityCount;
+        document.getElementById('teacherCount').textContent=clubData.teachers.length;
+        if(clubData.profile.description)document.getElementById('clubDesc').innerHTML=safeHtml(clubData.profile.description);
+        if(clubData.profile.showStar&&clubData.profile.starRating>0){
+            var starsEl=document.getElementById('clubStars');
+            starsEl.textContent='★'.repeat(clubData.profile.starRating)+'☆'.repeat(5-clubData.profile.starRating);
+            starsEl.style.display='block';
+        }
+        var grid=document.getElementById('teacherGrid');
+        if(!clubData.teachers.length){grid.innerHTML='<div class="empty">暂无指导老师信息</div>'}
+        else{
+            var h='';
+            clubData.teachers.forEach(function(t){
+                h+='<div class="teacher-card">';
+                h+='<div class="teacher-avatar">';
+                if(t.photo)h+='<img src="'+api+t.photo+'" alt="'+esc(t.name)+'" style="cursor:pointer" onclick="showImageModal(this.src)" />';
+                else h+='👤';
+                h+='</div>';
+                h+='<div class="teacher-info">';
+                h+='<div class="teacher-name">'+esc(t.name)+'</div>';
+                if(t.introduction)h+='<div class="teacher-intro">'+escHtml(t.introduction)+'</div>';
+                h+='</div>';
+                h+='</div>';
+            });
+            grid.innerHTML=h;
+        }
+        loadClubDepartments(clubName);
+        if(clubData.profile.registrationForm){
+            try{
+                var formSchema=JSON.parse(clubData.profile.registrationForm);
+                if(formSchema.fields&&formSchema.fields.length){
+                    var cf=document.getElementById('customFields');
+                    var fh='';
+                    formSchema.fields.forEach(function(f){
+                        fh+='<div class="form-group"><label>'+esc(f.label)+'</label>';
+                        if(f.type==='textarea')fh+='<textarea placeholder="'+esc(f.placeholder||'')+'"></textarea>';
+                        else if(f.type==='select')fh+='<select><option value="">请选择</option>'+f.options.map(function(o){return '<option value="'+esc(o)+'">'+esc(o)+'</option>'}).join('')+'</select>';
+                        else fh+='<input type="text" placeholder="'+esc(f.placeholder||'')+'" />';
+                        fh+='</div>';
+                    });
+                    cf.innerHTML=fh;
+                }
+            }catch(e){}
+        }
+    });
+}
+
+function showEnrollForm(){document.getElementById('enrollForm').classList.toggle('show')}
+
+function submitEnroll(){
+    var name=document.getElementById('enrollName').value.trim();
+    var college=document.getElementById('enrollCollege').value.trim();
+    var stuClass=document.getElementById('enrollClass').value.trim();
+    var stuId=document.getElementById('enrollStuId').value.trim();
+    var phone=document.getElementById('enrollPhone').value.trim();
+    var specialty='';
+    if(specialtyQuill){var st=specialtyQuill.root.innerHTML;if(st&&st!=='<p><br></p>'&&st.replace(/<[^>]*>/g,'').trim())specialty=st}
+    var deptArr=[];document.querySelectorAll('.enrollDeptCb:checked').forEach(function(cb){deptArr.push(cb.value)});
+    var dept=deptArr.join(',');
+    if(!name){toast('请输入姓名','error');return}
+    if(!college){toast('请选择学院','error');return}
+    if(!stuClass){toast('请输入班级','error');return}
+    if(!stuId){toast('请输入学号','error');return}
+    var customFields=document.getElementById('customFields');
+    var formData={'学院':college,'班级':stuClass,'学号':stuId,'职务及特长':specialty};
+    customFields.querySelectorAll('.form-group').forEach(function(g){
+        var label=g.querySelector('label').textContent;
+        var input=g.querySelector('input,textarea,select');
+        if(input)formData[label]=input.value;
+    });
+    var attachInput=document.getElementById('enrollAttachment');
+    var attachFile=attachInput&&attachInput.files&&attachInput.files[0]?attachInput.files[0]:null;
+    function doSubmit(attachPath){
+        fetch(api+'/api/club-registration',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clubName:clubName,studentName:name,studentPhone:phone,studentClass:stuClass,studentCollege:college,studentIdNum:stuId,specialty:specialty,department:dept,formData:formData,attachment:attachPath||''})})
+        .then(function(r){return r.json()}).then(function(res){
+            if(res.error){toast(res.error,'error');return}
+            toast('报名成功！','success');
+            document.getElementById('enrollForm').classList.remove('show');
+            document.getElementById('enrollName').value='';
+            document.getElementById('enrollCollege').value='';
+            document.getElementById('enrollClass').value='';
+            document.getElementById('enrollStuId').value='';
+            document.getElementById('enrollPhone').value='';
+            if(specialtyQuill)specialtyQuill.setText('');
+            if(attachInput)attachInput.value='';
+        }).catch(function(){toast('提交失败','error')});
+    }
+    if(attachFile){
+        var statusEl=document.getElementById('enrollAttachStatus');
+        statusEl.textContent='上传中...';
+        var fd=new FormData();fd.append('file',attachFile);
+        fetch(api+'/api/upload-enroll-attachment',{method:'POST',body:fd}).then(function(r){return r.json()}).then(function(res){
+            if(res.error){statusEl.innerHTML='<span style="color:#e74c3c">'+esc(res.error)+'</span>';return}
+            statusEl.innerHTML='<span style="color:#00b894">✅ 已上传</span>';
+            doSubmit(res.filePath||'');
+        }).catch(function(){statusEl.innerHTML='<span style="color:#e74c3c">上传失败</span>';doSubmit('')});
+    }else{
+        doSubmit('');
+    }
+}
+
+function loadClubDepartments(club){
+    fetch(api+'/api/club-departments/'+encodeURIComponent(club)).then(function(r){return r.json()}).then(function(res){
+        if(!res.success||!res.data||!res.data.length)return;
+        var section=document.getElementById('deptSection');
+        var grid=document.getElementById('deptGrid');
+        var selectGroup=document.getElementById('deptSelectGroup');
+        section.style.display='block';
+        selectGroup.style.display='block';
+        var gh='<div style="display:flex;flex-direction:column;gap:10px">';var dh='';
+        res.data.forEach(function(d){
+            gh+='<div style="background:#fafaff;border:1px solid #f0f0f8;border-radius:10px;padding:16px;display:flex;align-items:flex-start;gap:12px">';
+            if(d.imagePath)gh+='<img src="'+api+d.imagePath+'" style="width:60px;height:60px;object-fit:cover;border-radius:8px;flex-shrink:0;cursor:pointer" onclick="showImageModal(this.src)" />';
+            else gh+='<div style="width:60px;height:60px;border-radius:8px;background:linear-gradient(135deg,rgba(102,126,234,0.06),rgba(118,75,162,0.06));display:flex;align-items:center;justify-content:center;font-size:1.4em;color:#c8cade;flex-shrink:0">🏢</div>';
+            gh+='<div style="flex:1;min-width:0">';
+            gh+='<div style="font-size:0.9em;font-weight:600;color:#1a1a2e">'+esc(d.name)+'</div>';
+            if(d.description)gh+='<div style="font-size:0.82em;color:#6b6d8a;margin-top:4px;line-height:1.7;word-break:break-all">'+escHtml(d.description)+'</div>';
+            gh+='</div></div>';
+            dh+='<label style="display:inline-flex;align-items:center;gap:4px;padding:4px 10px;background:#fafaff;border:1px solid #eee;border-radius:8px;font-size:0.82em;cursor:pointer;color:#1a1a2e;white-space:nowrap"><input type="checkbox" value="'+esc(d.name)+'" class="enrollDeptCb" /> '+esc(d.name)+'</label>';
+        });
+        gh+='</div>';
+        grid.innerHTML=gh;
+        document.getElementById('enrollDeptCheckboxes').innerHTML=dh;
+    });
+}
+
+function showImageModal(src){document.getElementById('imgModalSrc').src=src;document.getElementById('imgModal').classList.add('show')}
+</script>
+
+<div id="imgModal" onclick="this.classList.remove('show')" style="position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:99999;display:none;align-items:center;justify-content:center;cursor:pointer">
+    <img id="imgModalSrc" style="max-width:90%;max-height:90%;border-radius:8px;box-shadow:0 8px 40px rgba(0,0,0,0.4)" />
+    <div style="position:absolute;top:16px;right:20px;color:#fff;font-size:1.5em;cursor:pointer;opacity:0.8">✕</div>
+</div>
+<style>#imgModal.show{display:flex}</style>
+<script src="/ai-chat.js?v=4"></script>
+</body>
+</html>

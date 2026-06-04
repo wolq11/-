@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>济幼社团 - 登录</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Microsoft YaHei','PingFang SC',sans-serif;min-height:100vh;display:flex;background:#f8f9ff;overflow-x:hidden}
+.left-panel{flex:1;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);display:flex;flex-direction:column;justify-content:center;align-items:center;padding:60px;color:#fff;position:relative;overflow:hidden}
+.left-panel::before{content:'';position:absolute;top:-80px;right:-80px;width:300px;height:300px;border-radius:50%;background:rgba(255,255,255,0.08)}
+.left-panel::after{content:'';position:absolute;bottom:-60px;left:-60px;width:240px;height:240px;border-radius:50%;background:rgba(255,255,255,0.06)}
+.left-panel h1{font-size:2.4em;font-weight:900;margin-bottom:12px;position:relative;z-index:1;letter-spacing:2px}
+.left-panel p{font-size:1em;opacity:0.85;position:relative;z-index:1;max-width:320px;text-align:center;line-height:1.8}
+.left-panel .deco-icons{margin-top:40px;display:flex;gap:16px;position:relative;z-index:1}
+.left-panel .deco-icons span{width:48px;height:48px;border-radius:14px;background:rgba(255,255,255,0.15);display:flex;align-items:center;justify-content:center;font-size:1.4em;backdrop-filter:blur(4px)}
+.right-panel{flex:0 0 480px;max-width:480px;display:flex;flex-direction:column;justify-content:center;padding:40px 36px;background:#fff;overflow-y:auto;max-height:100vh}
+.brand{display:flex;align-items:center;gap:10px;margin-bottom:24px}
+.brand-dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,#667eea,#764ba2)}
+.brand-text{font-size:0.88em;color:#a0a3bd;font-weight:500}
+.section-title{font-size:1.6em;font-weight:800;color:#1a1a2e;margin-bottom:4px}
+.section-sub{font-size:0.84em;color:#a0a3bd;margin-bottom:20px}
+.identity-row{display:flex;gap:8px;margin-bottom:20px;flex-wrap:wrap}
+.id-card{flex:1;min-width:80px;padding:12px 8px;border-radius:14px;border:2px solid #f0f0f5;text-align:center;cursor:pointer;transition:all .25s;background:#fafaff;position:relative}
+.id-card:hover{border-color:#d5d8f0;background:#f5f5ff}
+.id-card.active{border-color:#667eea;background:linear-gradient(135deg,rgba(102,126,234,0.06),rgba(118,75,162,0.06));box-shadow:0 4px 16px rgba(102,126,234,0.12)}
+.id-card .id-emoji{font-size:1.4em;margin-bottom:4px}
+.id-card .id-label{font-size:0.78em;font-weight:700;color:#1a1a2e}
+.id-card.active .id-label{color:#667eea}
+.id-card .id-hint{font-size:0.6em;color:#c0c3d8;margin-top:2px}
+.id-card.active::after{content:'';position:absolute;bottom:-2px;left:50%;transform:translateX(-50%);width:24px;height:3px;border-radius:2px;background:linear-gradient(90deg,#667eea,#764ba2)}
+.tab-row{display:flex;gap:0;margin-bottom:16px;background:#f5f5ff;border-radius:10px;padding:3px}
+.tab-btn{flex:1;padding:12px;text-align:center;border-radius:8px;font-size:0.84em;font-weight:600;cursor:pointer;transition:all .2s;color:#a0a3bd;border:none;background:transparent}
+.tab-btn.active{background:#fff;color:#1a1a2e;box-shadow:0 2px 8px rgba(0,0,0,0.06)}
+.form-group{margin-bottom:12px}
+.form-group label{display:block;font-size:0.76em;font-weight:600;color:#6b6d8a;margin-bottom:5px}
+.form-group input,.form-group select{width:100%;padding:12px 14px;border-radius:10px;border:1.5px solid #eee;color:#1a1a2e;font-size:16px;outline:none;transition:all .2s;background:#fafaff}
+.form-group input:focus,.form-group select:focus{border-color:#667eea;background:#fff;box-shadow:0 0 0 3px rgba(102,126,234,0.1)}
+.form-group input::placeholder{color:#c8cade}
+.form-group select option{background:#fff;color:#1a1a2e}
+.club-check-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;max-height:160px;overflow-y:auto;padding:8px;background:#fafaff;border-radius:10px;border:1.5px solid #eee}
+.club-check-list label{display:inline-flex;align-items:center;gap:4px;padding:6px 12px;background:#fff;border:1px solid #eee;border-radius:8px;font-size:0.82em;cursor:pointer;color:#1a1a2e;transition:all .2s;white-space:nowrap}
+.club-check-list label:hover{border-color:#667eea;background:#f5f5ff}
+.club-check-list input:checked+span{color:#667eea;font-weight:600}
+.btn-submit{width:100%;padding:14px;border-radius:12px;border:none;font-size:0.94em;cursor:pointer;font-weight:700;transition:all .25s;background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;box-shadow:0 4px 20px rgba(102,126,234,0.3);margin-top:4px}
+.btn-submit:hover{box-shadow:0 6px 28px rgba(102,126,234,0.4);transform:translateY(-1px)}
+.btn-submit:active{transform:translateY(0)}
+.error-box{background:#fff5f5;border:1px solid #ffd6d6;border-radius:10px;padding:10px 14px;color:#e74c3c;font-size:0.8em;margin-bottom:14px;display:none;line-height:1.5}
+#registerForm{display:none}
+.club-field,.teacher-field{display:none}
+.footer-text{text-align:center;margin-top:20px;font-size:0.7em;color:#c8cade}
+.admin-link{font-size:0.68em;color:#c0c3d8;text-decoration:none;transition:color .2s;white-space:nowrap}
+.admin-link:hover{color:#667eea}
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);padding:12px 20px;border-radius:12px;font-size:0.84em;z-index:10000;animation:slideIn .3s;box-shadow:0 4px 16px rgba(0,0,0,0.1);max-width:calc(100vw - 32px);text-align:center;word-break:break-all}
+.toast.success{background:#e8f8f0;border:1px solid #b8e6cc;color:#00b894}
+.toast.error{background:#fff5f5;border:1px solid #ffd6d6;color:#e74c3c}
+@keyframes slideIn{from{opacity:0;transform:translateX(-50%) translateY(-12px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+@media(max-width:768px){
+  .club-check-list label{white-space:normal;word-break:break-all}
+}
+@media(max-width:900px){
+  .left-panel{display:none}
+  .right-panel{flex:1 1 100%;max-width:100%;width:100%;padding:32px 24px}
+}
+@media(max-width:480px){
+  .right-panel{padding:20px 16px}
+  .section-title{font-size:1.3em}
+  .identity-row{gap:6px}
+  .id-card{min-width:70px;padding:10px 6px}
+  .id-card .id-emoji{font-size:1.2em}
+  .id-card .id-label{font-size:0.72em}
+  .id-card .id-hint{font-size:0.58em}
+  .club-check-list{max-height:120px}
+  .footer-text{font-size:0.64em}
+  .admin-link{font-size:0.62em}
+}
+@media(max-width:360px){
+  .right-panel{padding:16px 12px}
+  .id-card{min-width:60px;padding:8px 4px}
+  .id-card .id-hint{display:none}
+  .tab-btn{padding:8px;font-size:0.78em}
+  .form-group input,.form-group select{padding:10px 12px;font-size:16px}
+  .btn-submit{padding:12px;font-size:0.88em}
+}
+</style>
+</head>
+<body>
+<div class="left-panel">
+    <h1>济幼社团</h1>
+    <p>青春不设限，社团更精彩<br/>一站式社团管理平台</p>
+    <div class="deco-icons">
+        <span>🎨</span><span>🎵</span><span>⚽</span><span>💡</span><span>🎭</span>
+    </div>
+</div>
+<div class="right-panel">
+    <div class="brand">
+        <div class="brand-dot"></div>
+        <div class="brand-text">济幼社团活动管理系统</div>
+    </div>
+    <div class="section-title">欢迎回来</div>
+    <div class="section-sub">选择身份并登录你的账号</div>
+    <div class="identity-row">
+        <div class="id-card active" data-role="user" onclick="selectRole('user')">
+            <div class="id-emoji">🏫</div>
+            <div class="id-label">社团负责人</div>
+            <div class="id-hint">社团管理</div>
+        </div>
+        <div class="id-card" data-role="teacher" onclick="selectRole('teacher')">
+            <div class="id-emoji">👨‍🏫</div>
+            <div class="id-label">指导老师</div>
+            <div class="id-hint">指导社团</div>
+        </div>
+        <div class="id-card" data-role="student" onclick="selectRole('student')">
+            <div class="id-emoji">🎓</div>
+            <div class="id-label">学生</div>
+            <div class="id-hint">参与活动</div>
+        </div>
+    </div>
+    <div class="tab-row">
+        <button class="tab-btn active" id="tabLogin" onclick="switchTab('login')">登录</button>
+        <button class="tab-btn" id="tabRegister" onclick="switchTab('register')">注册</button>
+    </div>
+    <div class="error-box" id="errorMsg"></div>
+    <form id="loginForm">
+        <div class="form-group"><label>用户名</label><input type="text" id="loginUser" placeholder="请输入用户名" autocomplete="username" /></div>
+        <div class="form-group"><label>密码</label><input type="password" id="loginPass" placeholder="请输入密码" autocomplete="current-password" /></div>
+        <button type="submit" class="btn-submit">登 录</button>
+    </form>
+    <form id="registerForm">
+        <div class="form-group"><label>用户名</label><input type="text" id="regUser" placeholder="至少2个字符" autocomplete="username" /></div>
+        <div class="form-group"><label>密码</label><input type="password" id="regPass" placeholder="至少4个字符" autocomplete="new-password" /></div>
+        <div class="form-group"><label>确认密码</label><input type="password" id="regPass2" placeholder="再次输入密码" autocomplete="new-password" /></div>
+        <div class="form-group student-user-field" id="studentIdField"><label>学号 *</label><input type="text" id="regStudentId" placeholder="请输入学号" /></div>
+        <div class="form-group teacher-field" id="workIdField"><label>工号 *</label><input type="text" id="regWorkId" placeholder="请输入工号" /></div>
+        <div class="form-group club-field" id="clubField"><label>所属社团</label><select id="regClub" onchange="onClubChange()"><option value="">— 选择社团 —</option></select></div>
+        <div class="form-group club-field" id="newClubField" style="display:none"><label>新社团名称</label><input type="text" id="regNewClub" placeholder="请输入新的社团名称" /></div>
+        <div class="form-group teacher-field" id="teacherClubField"><label>选择指导社团 *（可多选）</label><div class="club-check-list" id="teacherClubList"><span style="font-size:0.76em;color:#c8cade">加载中...</span></div></div>
+        <button type="submit" class="btn-submit">注 册</button>
+    </form>
+    <div style="display:flex;align-items:center;justify-content:center;gap:12px;margin-top:20px;flex-wrap:wrap">
+        <div class="footer-text" style="margin-top:0">济南幼儿师范高等专科学校 · 社团活动管理系统</div>
+        <a href="javascript:void(0)" class="admin-link" onclick="selectRole('admin')">管理员入口</a>
+    </div>
+</div>
+<script>
+var api=window.location.origin;
+var selectedRole='user';
+var allClubs=[];
+
+function selectRole(role){
+    selectedRole=role;
+    document.querySelectorAll('.id-card').forEach(function(c){c.classList.toggle('active',c.dataset.role===role)});
+    var cf=document.getElementById('clubField');
+    var nf=document.getElementById('newClubField');
+    var tf=document.querySelectorAll('.teacher-field');
+    var sf=document.getElementById('studentIdField');
+    cf.style.display=role==='user'?'block':'none';
+    if(role!=='user')nf.style.display='none';
+    tf.forEach(function(el){el.style.display=role==='teacher'?'block':'none'});
+    sf.style.display=(role==='user'||role==='student')?'block':'none';
+    var tabReg=document.getElementById('tabRegister');
+    var tabRow=document.querySelector('.tab-row');
+    if(role==='admin'){
+        tabReg.style.display='none';
+        tabRow.style.display='none';
+        switchTab('login');
+    }else{
+        tabReg.style.display='';
+        tabRow.style.display='';
+    }
+}
+
+function switchTab(tab){
+    document.getElementById('loginForm').style.display=tab==='login'?'block':'none';
+    document.getElementById('registerForm').style.display=tab==='register'?'block':'none';
+    document.getElementById('tabLogin').className='tab-btn'+(tab==='login'?' active':'');
+    document.getElementById('tabRegister').className='tab-btn'+(tab==='register'?' active':'');
+    document.getElementById('errorMsg').style.display='none';
+}
+
+function showError(msg){var e=document.getElementById('errorMsg');e.textContent=msg;e.style.display='block'}
+function toast(msg,type){var d=document.createElement('div');d.className='toast '+type;d.textContent=msg;document.body.appendChild(d);setTimeout(function(){d.remove()},3000)}
+
+function loadClubs(){
+    fetch(api+'/api/all-clubs').then(function(r){return r.json()}).then(function(res){
+        if(!res.success)return;
+        allClubs=res.data||[];
+        var sel=document.getElementById('regClub');
+        allClubs.forEach(function(cn){var opt=document.createElement('option');opt.value=cn;opt.textContent=cn;sel.appendChild(opt)});
+        var otherOpt=document.createElement('option');otherOpt.value='__other__';otherOpt.textContent='✏️ 其他社团（手动输入）';sel.appendChild(otherOpt);
+        renderTeacherClubList();
+    });
+}
+
+function renderTeacherClubList(){
+    var box=document.getElementById('teacherClubList');
+    if(!allClubs.length){box.innerHTML='<span style="font-size:0.76em;color:#c8cade">暂无可选社团</span>';return}
+    var h='';
+    allClubs.forEach(function(cn){
+        h+='<label><input type="checkbox" value="'+cn+'" class="teacherClubCb" /><span>'+cn+'</span></label>';
+    });
+    box.innerHTML=h;
+}
+
+function onClubChange(){
+    var sel=document.getElementById('regClub');
+    var nf=document.getElementById('newClubField');
+    nf.style.display=sel.value==='__other__'?'block':'none';
+}
+
+loadClubs();
+selectRole('user');
+
+document.getElementById('loginForm').addEventListener('submit',function(e){
+    e.preventDefault();
+    var u=document.getElementById('loginUser').value.trim(),p=document.getElementById('loginPass').value.trim();
+    if(!u||!p){showError('请输入用户名和密码');return}
+    fetch(api+'/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p,role:selectedRole})})
+    .then(function(r){return r.json()}).then(function(res){
+        if(res.error){showError(res.error);return}
+        if(res.user&&res.user.role!==selectedRole){
+            var names={admin:'管理员',user:'社团负责人',student:'学生',teacher:'指导老师'};
+            showError('该账号身份为「'+names[res.user.role]+'」，请选择正确的身份登录');
+            fetch(api+'/api/logout',{method:'POST'});
+            return;
+        }
+        var pages={admin:'/dashboard.html',user:'/dashboard.html',teacher:'/club-teacher.html',student:'/dashboard.html'};
+        window.location.replace(pages[res.user.role]||'/dashboard.html');
+    }).catch(function(){showError('登录失败，请检查网络')});
+});
+
+document.getElementById('registerForm').addEventListener('submit',function(e){
+    e.preventDefault();
+    var u=document.getElementById('regUser').value.trim(),p=document.getElementById('regPass').value.trim(),p2=document.getElementById('regPass2').value.trim();
+    if(!u||!p){showError('请输入用户名和密码');return}
+    if(p!==p2){showError('两次密码不一致');return}
+    if(selectedRole==='teacher'){
+        var wid=document.getElementById('regWorkId').value.trim();
+        if(!wid){showError('请输入工号');return}
+        var selectedClubs=[];
+        document.querySelectorAll('.teacherClubCb:checked').forEach(function(cb){selectedClubs.push(cb.value)});
+        if(!selectedClubs.length){showError('请选择至少一个指导社团');return}
+        fetch(api+'/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p,role:'teacher',workId:wid,clubNames:selectedClubs})})
+        .then(function(r){return r.json()}).then(function(res){
+            if(res.error){showError(res.error);return}
+            toast('注册成功，请登录','success');
+            switchTab('login');
+        }).catch(function(){showError('注册失败，请检查网络')});
+    }else{
+        var c=document.getElementById('regClub').value;
+        if(selectedRole==='user'){
+            if(c==='__other__'){c=document.getElementById('regNewClub').value.trim();if(!c){showError('请输入新社团名称');return}}
+        }else{c=''}
+        var sid=document.getElementById('regStudentId').value.trim();
+        if(!sid){showError('请输入学号');return}
+        fetch(api+'/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p,clubName:c,role:selectedRole,studentId:sid})})
+        .then(function(r){return r.json()}).then(function(res){
+            if(res.error){showError(res.error);return}
+            toast('注册成功，请登录','success');
+            switchTab('login');
+        }).catch(function(){showError('注册失败，请检查网络')});
+    }
+});
+</script>
+</body>
+</html>

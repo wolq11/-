@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>社团活动统计分析系统</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Microsoft YaHei','PingFang SC',sans-serif;background:#f4f5fb;min-height:100vh;padding:24px;color:#1a1a2e}
+        .container{max-width:1200px;margin:0 auto}
+        h1{text-align:center;font-size:2.4em;margin-bottom:8px;background:linear-gradient(90deg,#667eea,#e84393,#00b894);-webkit-background-clip:text;-webkit-text-fill-color:transparent;font-weight:800}
+        .subtitle{text-align:center;color:#a0a3bd;font-size:0.88em;margin-bottom:28px;letter-spacing:2px}
+        .toolbar{display:flex;justify-content:center;gap:12px;margin-bottom:28px;flex-wrap:wrap}
+        .toolbar-btn{padding:8px 20px;border-radius:10px;border:1px solid #e0e0e8;background:#fff;color:#6b6d8a;font-size:0.88em;cursor:pointer;transition:all .2s;font-weight:600}
+        .toolbar-btn:hover{background:#f5f5ff;border-color:#d5d8f0;color:#1a1a2e}
+        .toolbar-btn .badge{background:#00b894;color:#fff;padding:1px 7px;border-radius:8px;font-size:0.72em;margin-left:4px}
+        .toolbar-btn .badge.empty{background:#e0e0e8;color:#a0a3bd}
+        .upload-row{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:28px}
+        .upload-card{background:#fff;border:1px solid #e0e0e8;border-radius:20px;padding:36px 28px;text-align:center;transition:all .3s;position:relative;box-shadow:0 2px 12px rgba(0,0,0,0.04)}
+        .upload-card:hover{border-color:#c8cdf0;box-shadow:0 4px 20px rgba(102,126,234,0.1)}
+        .upload-card.done{border-color:#00b894;box-shadow:0 0 20px rgba(67,233,123,0.1)}
+        .upload-card .icon{font-size:2.8em;margin-bottom:12px}
+        .upload-card .title{font-size:1.1em;font-weight:700;color:#1a1a2e;margin-bottom:6px}
+        .upload-card .desc{color:#a0a3bd;font-size:0.82em;margin-bottom:18px}
+        .upload-card .info{color:#667eea;font-size:0.82em;margin-top:8px;font-weight:600}
+        .upload-card .meta{color:#a0a3bd;font-size:0.75em;margin-top:4px}
+        .file-wrap{display:inline-block;position:relative}
+        .file-wrap input[type="file"]{position:absolute;left:0;top:0;opacity:0;width:100%;height:100%;cursor:pointer}
+        .btn{display:inline-block;padding:10px 28px;border:none;border-radius:10px;font-size:0.92em;cursor:pointer;transition:all .2s;font-weight:600}
+        .btn-primary{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff}
+        .btn-primary:hover{opacity:.9;transform:translateY(-1px)}
+        .btn-ghost{background:#f5f5ff;color:#6b6d8a;border:1px solid #e0e0e8}
+        .btn-ghost:hover{background:#e8e8f0;color:#1a1a2e}
+        .btn-danger{background:rgba(245,87,108,0.15);color:#e74c3c;border:1px solid rgba(245,87,108,0.3)}
+        .btn-danger:hover{background:#e74c3c;color:#fff}
+        .btn-success{background:rgba(67,233,123,0.15);color:#00b894;border:1px solid rgba(67,233,123,0.3)}
+        .btn-success:hover{background:#00b894;color:#fff}
+        .results{display:none}
+        @keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+        .stats-bar{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;margin-bottom:28px}
+        .stat-box{background:#fff;border:1px solid #e0e0e8;border-radius:16px;padding:20px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,0.03)}
+        .stat-box .num{font-size:2em;font-weight:800;background:linear-gradient(135deg,#667eea,#e84393);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+        .stat-box .num.warn{background:linear-gradient(135deg,#e74c3c,#ff6b6b);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+        .stat-box .lbl{color:#a0a3bd;font-size:0.82em;margin-top:4px}
+        .alert{background:rgba(245,87,108,0.1);border:1px solid rgba(245,87,108,0.25);border-radius:14px;padding:18px 24px;margin-bottom:24px;display:none}
+        .alert h4{color:#e74c3c;margin-bottom:8px;font-size:0.95em}
+        .alert .chips{display:flex;flex-wrap:wrap;gap:8px}
+        .alert .chip{padding:5px 14px;background:rgba(245,87,108,0.1);border-radius:16px;color:#e74c3c;font-size:0.85em;font-weight:600}
+        .alert .chip b{background:#e74c3c;color:#fff;padding:1px 6px;border-radius:8px;font-size:0.78em;margin-left:4px}
+        .grid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:24px}
+        .card{background:#fff;border:1px solid #e0e0e8;border-radius:16px;padding:20px;margin-bottom:20px;box-shadow:0 2px 12px rgba(0,0,0,0.04);overflow-x:auto}
+        .card h3{font-size:0.95em;color:#1a1a2e;margin-bottom:14px;display:flex;align-items:center;gap:8px}
+        .card h3 .tag{font-size:0.68em;padding:2px 8px;border-radius:6px;background:rgba(102,126,234,0.1);color:#667eea}
+        .chart-wrap{position:relative;width:100%;max-height:360px}
+        .tbl{width:100%;border-collapse:collapse}
+        .tbl th{background:#f5f5ff;color:#1a1a2e;font-size:0.82em;padding:10px 12px;text-align:left;border-bottom:2px solid #e0e0e8;font-weight:600}
+        .tbl td{padding:10px 12px;border-bottom:1px solid #f0f0f8;color:#4a4d6a;font-size:0.85em}
+        .tbl tr:hover td{background:#fafaff}
+        .tbl tr.warn td{background:rgba(245,87,108,0.05)}
+        .tbl tr.warn:hover td{background:rgba(245,87,108,0.1)}
+        .rank{display:inline-flex;width:26px;height:26px;align-items:center;justify-content:center;border-radius:50%;font-size:0.78em;font-weight:700;color:#fff}
+        .r1{background:linear-gradient(135deg,#FFD700,#FFA500)}.r2{background:linear-gradient(135deg,#C0C0C0,#A0A0A0)}.r3{background:linear-gradient(135deg,#CD7F32,#A0522D)}.ro{background:rgba(102,126,234,0.4)}
+        .bar-c{position:relative}.bar-c .txt{position:relative;z-index:1}.bar-c .bg{position:absolute;left:0;top:0;height:100%;border-radius:4px;pointer-events:none;z-index:0}.bg-a{background:rgba(102,126,234,0.12)}
+        .actions{text-align:center;margin-top:20px;display:flex;justify-content:center;gap:12px;flex-wrap:wrap}
+        .modal-bg{display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.3);z-index:1000;justify-content:center;align-items:flex-start;padding:40px 16px;overflow-y:auto}
+        .modal-bg.show{display:flex}
+        .loading{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:none;justify-content:center;align-items:center;z-index:2000}
+        .loading.show{display:flex}
+        .loading-box{background:#1a1a2e;border:1px solid #eee;padding:28px 36px;border-radius:16px;text-align:center}
+        .loading-box .spin{font-size:36px;animation:spin 1s linear infinite}
+        @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+        .loading-box .txt{margin-top:10px;color:#4a4d6a;font-weight:600;font-size:0.92em}
+        .toast{position:fixed;top:20px;right:20px;padding:10px 22px;border-radius:10px;font-weight:600;font-size:0.88em;z-index:3000;transform:translateX(120%);transition:transform .3s ease;color:#fff}
+        .toast.show{transform:translateX(0)}.toast.success{background:#00b894;color:#1a1a2e}.toast.error{background:#e74c3c}.toast.info{background:#667eea}
+        .pipeline-bar{display:flex;gap:0;margin-bottom:20px;overflow-x:auto;border-radius:12px;overflow:hidden}
+        .pipe-step{flex:1;min-width:120px;padding:12px 14px;background:rgba(102,126,234,0.08);border-right:1px solid #f0f0f8;text-align:center}
+        .pipe-step:last-child{border-right:none}
+        .pipe-step .pipe-icon{font-size:18px;margin-bottom:4px}
+        .pipe-step .pipe-label{font-size:0.72em;color:#a0a3bd;margin-bottom:2px}
+        .pipe-step .pipe-val{font-size:1em;font-weight:700;color:#667eea}
+        .pipe-step .pipe-val.bad{color:#e74c3c}
+        .pipe-step .pipe-val.good{color:#00b894}
+        .desc-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+        .desc-col h4{font-size:0.85em;margin-bottom:8px}
+        .desc-col h4.c1{color:#667eea}.desc-col h4.c2{color:#e84393}
+        .desc-row{display:flex;gap:6px;flex-wrap:wrap}
+        .dm{padding:6px 10px;background:#f5f5ff;border-radius:6px;text-align:center;min-width:60px}
+        .dm .dl{font-size:0.65em;color:#a0a3bd}.dm .dv{font-size:0.92em;font-weight:700;color:#667eea}
+        @media(max-width:768px){.stats-bar{grid-template-columns:repeat(3,1fr)}.grid2{grid-template-columns:1fr}.upload-row{grid-template-columns:1fr}h1{font-size:1.7em}.desc-grid{grid-template-columns:1fr}.pipeline-bar{flex-direction:column}table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}[style*="min-width"]{min-width:0!important}[style*="display:flex"][style*="justify-content:space-between"]{flex-wrap:wrap!important}.btn{white-space:normal;word-break:break-word}.card{overflow-x:hidden}}
+@media(max-width:480px){.stats-bar{grid-template-columns:repeat(2,1fr)}h1{font-size:1.3em}body{padding:12px}.stat-box .num{font-size:1.5em}}
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>社团活动统计分析系统</h1>
+    <p class="subtitle">FLASK · SQLITE · MAPREDUCE · LRU CACHE</p>
+    <div class="toolbar">
+        <button class="toolbar-btn" id="btnDoStats" style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-color:transparent">📊 开始统计分析</button>
+        <button class="toolbar-btn" id="btnReset">🔄 重置数据</button>
+    </div>
+    <div class="upload-row">
+        <div class="upload-card" id="uc1">
+            <div class="icon">📋</div>
+            <div class="title">社团活动记录</div>
+            <div class="desc">包含社团活动信息的文件</div>
+            <div class="file-wrap"><button class="btn btn-primary">选择文件</button><input type="file" id="f1" accept=".xlsx,.xls,.csv"></div>
+            <div class="info" id="fn1"></div><div class="meta" id="fm1"></div>
+        </div>
+        <div class="upload-card" id="uc2">
+            <div class="icon">👩‍🏫</div>
+            <div class="title">指导老师指导记录</div>
+            <div class="desc">指导老师社团指导情况的文件</div>
+            <div class="file-wrap"><button class="btn btn-primary">选择文件</button><input type="file" id="f2" accept=".xlsx,.xls,.csv"></div>
+            <div class="info" id="fn2"></div><div class="meta" id="fm2"></div>
+        </div>
+    </div>
+    <div class="results" id="results">
+        <div class="pipeline-bar" id="pipeline"></div>
+        <div class="stats-bar" id="statsBar"></div>
+        <div class="alert" id="alertBox"><h4>⚠️ 活动次数低于2次的社团</h4><div class="chips" id="alertChips"></div></div>
+        <div class="grid2">
+            <div class="card"><h3>📊 活动与指导对比 <span class="tag">BAR</span></h3><div class="chart-wrap"><canvas id="barChart"></canvas></div></div>
+            <div class="card"><h3>🍩 活动占比分布 <span class="tag">PIE</span></h3><div class="chart-wrap"><canvas id="pieChart"></canvas></div></div>
+        </div>
+        <div class="card" style="margin-bottom:24px;overflow-x:auto">
+            <h3>🏆 社团综合排行 <span class="tag">TABLE</span></h3>
+            <table class="tbl" id="rankTable"><thead><tr><th>#</th><th>社团名称</th><th>活动次数</th><th>指导详情</th></tr></thead><tbody></tbody></table>
+            <div style="text-align:center;margin-top:12px"><button class="btn btn-ghost" id="btnToggleTable" style="display:none">展开全部</button></div>
+        </div>
+        <div class="grid2">
+            <div class="card"><h3>📈 描述性统计 <span class="tag">STATS</span></h3><div id="descStats"></div></div>
+            <div class="card"><h3>📊 数据分区 <span class="tag">PARTITION</span></h3><div id="partition"></div></div>
+        </div>
+        <div class="actions">
+            <div style="position:relative;display:inline-block">
+                <button class="btn btn-success" id="btnExport">📥 导出 Excel ▾</button>
+                <div id="exportMenu" style="display:none;position:absolute;bottom:110%;left:50%;transform:translateX(-50%);background:#fff;border:1px solid #e0e0e8;border-radius:12px;padding:12px 16px;min-width:280px;z-index:100;box-shadow:0 8px 32px rgba(0,0,0,0.12)">
+                    <div style="font-size:0.82em;color:#a0a3bd;margin-bottom:10px">选择要导出的表格</div>
+                    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;color:#1a1a2e;font-size:0.88em;cursor:pointer"><input type="checkbox" class="export-sheet" value="1" checked style="accent-color:#00b894"> 社团活动统计</label>
+                    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;color:#1a1a2e;font-size:0.88em;cursor:pointer"><input type="checkbox" class="export-sheet" value="2" checked style="accent-color:#00b894"> 指导老师未开展指导统计</label>
+                    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;color:#1a1a2e;font-size:0.88em;cursor:pointer"><input type="checkbox" class="export-sheet" value="3" checked style="accent-color:#00b894"> 活动不足2次社团统计</label>
+                    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;color:#1a1a2e;font-size:0.88em;cursor:pointer"><input type="checkbox" class="export-sheet" value="4" checked style="accent-color:#00b894"> 指导老师指导次数统计</label>
+                    <label style="display:flex;align-items:center;gap:8px;padding:6px 0;color:#1a1a2e;font-size:0.88em;cursor:pointer"><input type="checkbox" class="export-sheet" value="5" checked style="accent-color:#00b894"> 指导次数不足老师统计</label>
+                    <div style="border-top:1px solid #eee;margin-top:10px;padding-top:10px;text-align:center">
+                        <button class="btn btn-success" id="btnDoExport" style="padding:8px 24px;font-size:0.88em">📥 导出选中表格</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="loading" id="loading"><div class="loading-box"><div class="spin">⚙️</div><div class="txt" id="loadTxt">处理中...</div></div></div>
+<div class="toast" id="toast"></div>
+<script>
+var barCI=null,pieCI=null,api=location.origin,COLORS=['#667eea','#764ba2','#e84393','#e74c3c','#4facfe','#00f2fe','#00b894','#fa709a','#fee140','#30cfd0','#a18cd1','#fbc2eb','#ff9a9e','#fad0c4','#ffecd2','#fcb69f','#a1c4fd','#c2e9fb','#d4fc79','#667eea'];
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function toast(m,t){var e=document.getElementById('toast');e.textContent=m;e.className='toast '+(t||'info')+' show';setTimeout(function(){e.className='toast'},3000)}
+function showL(t){document.getElementById('loadTxt').textContent=t||'处理中...';document.getElementById('loading').classList.add('show')}
+function hideL(){document.getElementById('loading').classList.remove('show')}
+
+document.getElementById('f1').addEventListener('change',function(e){upload(e,'activity')});
+document.getElementById('f2').addEventListener('change',function(e){upload(e,'guidance')});
+
+function upload(e,type){
+    var file=e.target.files[0];if(!file)return;showL('上传并处理中...');
+    var fd=new FormData();fd.append('file',file);
+    var url=api+'/api/upload/'+type;
+    fetch(url,{method:'POST',body:fd}).then(function(r){
+        if(!r.ok){return r.json().then(function(j){throw new Error(j.error||'服务器错误')}).catch(function(){throw new Error('上传失败: HTTP '+r.status)})}
+        return r.json();
+    }).then(function(res){
+        hideL();
+        if(res.error){toast(res.error,'error');e.target.value='';return}
+        var s=type==='activity'?'1':'2';
+        document.getElementById('fn'+s).textContent=res.fileName;
+        document.getElementById('fm'+s).textContent=res.originalRows+'行 → 清洗后 '+res.cleanedRows+'行';
+        document.getElementById('uc'+s).classList.add('done');
+        toast(type==='activity'?'活动记录上传成功':'指导记录上传成功','success');
+        e.target.value='';
+        checkBoth();
+    }).catch(function(err){hideL();toast('上传失败: '+err.message,'error');e.target.value=''});
+}
+
+function checkBoth(){
+    var a1=document.getElementById('uc1').classList.contains('done');
+    var a2=document.getElementById('uc2').classList.contains('done');
+    if(a1||a2){
+        toast('数据上传成功，点击"📊 开始统计分析"查看结果','success');
+        document.getElementById('btnDoStats').style.animation='pulse 1s ease infinite';
+    }
+}
+
+function doStats(){
+    showL('统计分析中...');
+    Promise.all([
+        fetch(api+'/api/stats/club').then(function(r){return r.json()}),
+        fetch(api+'/api/stats/summary').then(function(r){return r.json()}),
+        fetch(api+'/api/descriptive').then(function(r){return r.json()}),
+        fetch(api+'/api/stats/partitions').then(function(r){return r.json()})
+    ]).then(function(r){
+        hideL();
+        var clubs=r[0].data||[],sum=r[1].data||{},desc=r[2].data||{},parts=r[3].data||{};
+        if(!clubs.length){toast('暂无数据','error');return}
+        renderAll(clubs,sum,desc,parts);
+        toast('统计完成','success');
+    }).catch(function(e){hideL();toast('统计失败','error')});
+}
+
+function renderAll(clubs,sum,desc,parts){
+    document.getElementById('results').style.display='block';
+    renderPipeline(clubs,sum);
+    renderStatsBar(sum);
+    renderAlert(clubs);
+    renderTable(clubs);
+    renderCharts(clubs,sum.totalActivities||0);
+    renderDesc(desc);
+    renderPartition(parts);
+}
+
+function renderPipeline(clubs,sum){
+    document.getElementById('pipeline').innerHTML=
+        '<div class="pipe-step"><div class="pipe-icon">📥</div><div class="pipe-label">INPUT</div><div class="pipe-val">'+(sum.totalActivities||0)+' + '+(sum.totalGuidances||0)+'</div></div>'+
+        '<div class="pipe-step"><div class="pipe-icon">🧹</div><div class="pipe-label">CLEAN</div><div class="pipe-val good">✓</div></div>'+
+        '<div class="pipe-step"><div class="pipe-icon">🗺️</div><div class="pipe-label">MAP</div><div class="pipe-val">'+clubs.length+'</div></div>'+
+        '<div class="pipe-step"><div class="pipe-icon">🔀</div><div class="pipe-label">SHUFFLE</div><div class="pipe-val">'+clubs.length+'</div></div>'+
+        '<div class="pipe-step"><div class="pipe-icon">📉</div><div class="pipe-label">REDUCE</div><div class="pipe-val good">✓</div></div>'+
+        '<div class="pipe-step"><div class="pipe-icon">💾</div><div class="pipe-label">CACHE</div><div class="pipe-val good">✓</div></div>';
+}
+
+function renderStatsBar(s){
+    document.getElementById('statsBar').innerHTML=
+        '<div class="stat-box"><div class="num">'+(s.totalActivities||0)+'</div><div class="lbl">活动总次数</div></div>'+
+        '<div class="stat-box"><div class="num">'+(s.totalGuidances||0)+'</div><div class="lbl">指导总次数</div></div>'+
+        '<div class="stat-box"><div class="num">'+(s.clubCount||0)+'</div><div class="lbl">社团数量</div></div>'+
+        '<div class="stat-box"><div class="num">'+(s.mostActive||0)+'</div><div class="lbl">最活跃次数</div></div>'+
+        '<div class="stat-box"><div class="num warn">'+(s.lowCount||0)+'</div><div class="lbl">不足2次</div></div>';
+}
+
+function renderAlert(clubs){
+    var low=clubs.filter(function(c){return c.activityCount<2}),box=document.getElementById('alertBox'),ch=document.getElementById('alertChips');
+    if(!low.length){box.style.display='none';return}
+    var h='';low.forEach(function(c){h+='<div class="chip">'+esc(c.club)+' <b>'+c.activityCount+'次</b></div>'});
+    ch.innerHTML=h;box.style.display='block';
+}
+
+var tableExpanded=false;
+var allClubsData=[];
+
+function renderTable(clubs){
+    allClubsData=clubs;
+    tableExpanded=false;
+    renderTableRows(clubs,10);
+    var btn=document.getElementById('btnToggleTable');
+    if(clubs.length>10){btn.style.display='inline-block';btn.textContent='展开全部 ('+clubs.length+'个)'}
+    else{btn.style.display='none'}
+}
+
+function renderTableRows(clubs,limit){
+    var maxA=clubs[0]?clubs[0].activityCount:1;
+    var show=limit>0?clubs.slice(0,limit):clubs;
+    var h='';
+    show.forEach(function(c,i){
+        var r=i+1,low=c.activityCount<2;
+        var aw=maxA>0?(c.activityCount/maxA*100).toFixed(1):'0';
+        var rc=r===1?'r1':r===2?'r2':r===3?'r3':'ro';
+        var tn=Object.keys(c.teachers||{});
+        var teacherInfo='';
+        if(tn.length){
+            teacherInfo=tn.map(function(t){return t+'('+c.teachers[t]+'次)'}).join('、');
+        }else{
+            teacherInfo='<span style="color:#a0a3bd">无指导记录</span>';
+        }
+        h+='<tr class="'+(low?'warn':'')+'"><td><span class="rank '+rc+'">'+r+'</span></td><td>'+esc(c.club)+'</td>';
+        h+='<td class="bar-c"><div class="bg bg-a" style="width:'+aw+'%"></div><span class="txt">'+c.activityCount+'</span></td>';
+        h+='<td style="font-size:0.85em;line-height:1.5">'+teacherInfo+'</td></tr>';
+    });
+    document.querySelector('#rankTable tbody').innerHTML=h;
+}
+
+document.getElementById('btnToggleTable').addEventListener('click',function(){
+    tableExpanded=!tableExpanded;
+    if(tableExpanded){renderTableRows(allClubsData,0);this.textContent='收起'}
+    else{renderTableRows(allClubsData,10);this.textContent='展开全部 ('+allClubsData.length+'个)'}
+});
+
+function renderCharts(clubs,total){
+    if(barCI)barCI.destroy();if(pieCI)pieCI.destroy();
+    var labels=clubs.map(function(c){return c.club}),ad=clubs.map(function(c){return c.activityCount}),gd=clubs.map(function(c){return c.guidanceCount});
+    barCI=new Chart(document.getElementById('barChart'),{type:'bar',data:{labels:labels,datasets:[{label:'活动次数',data:ad,backgroundColor:'rgba(102,126,234,0.6)',borderColor:'#667eea',borderWidth:1,borderRadius:4},{label:'指导次数',data:gd,backgroundColor:'rgba(240,147,251,0.5)',borderColor:'#e84393',borderWidth:1,borderRadius:4}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:'#4a4d6a',font:{size:11}}}},scales:{y:{beginAtZero:true,ticks:{stepSize:1,color:'#a0a3bd'},grid:{color:'#f0f0f8'}},x:{ticks:{maxRotation:45,minRotation:0,color:'#a0a3bd'},grid:{color:'#fafaff'}}}}});
+    var pl=labels.length>12?labels.slice(0,11).concat(['其他']):labels,pd=labels.length>12?ad.slice(0,11).concat([ad.slice(11).reduce(function(a,b){return a+b},0)]):ad;
+    pieCI=new Chart(document.getElementById('pieChart'),{type:'doughnut',data:{labels:pl,datasets:[{data:pd,backgroundColor:pl.map(function(_,i){return COLORS[i%COLORS.length]+'CC'}),borderColor:'rgba(0,0,0,0.08)',borderWidth:1}]},options:{responsive:true,maintainAspectRatio:true,plugins:{legend:{position:'right',labels:{color:'#4a4d6a',boxWidth:12,padding:8,font:{size:11}}},tooltip:{callbacks:{label:function(ctx){var v=ctx.parsed;var p=total>0?((v/total)*100).toFixed(1):'0.0';return ctx.label+'：'+v+'次（'+p+'%）'}}}}}});
+}
+
+function renderDesc(d){
+    var a=d.activities||{},g=d.guidances||{};
+    function mk(vals,cls){
+        var h='<div class="desc-row">';
+        [['均值','mean'],['中位数','median'],['标准差','stdDev'],['众数','mode'],['最大','max'],['最小','min']].forEach(function(p){
+            h+='<div class="dm"><div class="dl">'+p[0]+'</div><div class="dv">'+(vals[p[1]]||0)+'</div></div>';
+        });
+        return h+'</div>';
+    }
+    document.getElementById('descStats').innerHTML='<div class="desc-grid"><div class="desc-col"><h4 class="c1">📊 活动次数</h4>'+mk(a,'c1')+'</div><div class="desc-col"><h4 class="c2">📊 指导次数</h4>'+mk(g,'c2')+'</div></div>';
+}
+
+function renderPartition(parts){
+    var all=parts.all||[],normal=parts.normal||[],low=parts.low||[],high=parts.high||[];
+    var h='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">';
+    function mk(title,arr,cls){
+        var t=arr.reduce(function(s,c){return s+c.activityCount},0);
+        var h2='<div style="background:#fafaff;border-radius:10px;padding:12px"><div style="font-size:0.85em;font-weight:700;color:'+cls+';margin-bottom:6px">'+title+' <span style="font-weight:400;color:#a0a3bd">'+arr.length+'个</span></div>';
+        if(!arr.length)h2+='<div style="color:#a0a3bd;font-size:0.82em">无数据</div>';
+        else arr.slice(0,5).forEach(function(c){h2+='<div style="font-size:0.82em;padding:3px 0;color:#4a4d6a">'+esc(c.club)+' <span style="color:'+cls+';font-weight:600">'+c.activityCount+'</span></div>'});
+        if(arr.length>5)h2+='<div style="font-size:0.75em;color:#a0a3bd">...还有'+(arr.length-5)+'个</div>';
+        return h2+'</div>';
+    }
+    h+=mk('✅ 正常 (≥2次)',normal,'#00b894');
+    h+=mk('🔥 活跃 (≥5次)',high,'#667eea');
+    h+=mk('⚠️ 不足2次',low,'#e74c3c');
+    h+=mk('📊 全部社团',all,'#e84393');
+    h+='</div>';
+    document.getElementById('partition').innerHTML=h;
+}
+
+document.getElementById('btnExport').addEventListener('click',function(e){
+    e.stopPropagation();
+    var m=document.getElementById('exportMenu');
+    m.style.display=m.style.display==='none'?'block':'none';
+});
+document.addEventListener('click',function(e){
+    var m=document.getElementById('exportMenu');
+    if(!m.contains(e.target)&&e.target!==document.getElementById('btnExport')){m.style.display='none'}
+});
+document.getElementById('btnDoExport').addEventListener('click',function(){
+    var sheets=[];
+    document.querySelectorAll('.export-sheet:checked').forEach(function(cb){sheets.push(cb.value)});
+    if(!sheets.length){toast('请至少选择一个表格','error');return}
+    var url=api+'/api/export?online=0&sheets='+sheets.join(',');
+    window.open(url,'_blank');
+    toast('正在导出 '+sheets.length+' 个表格...','info');
+    document.getElementById('exportMenu').style.display='none';
+});
+
+document.getElementById('btnReset').addEventListener('click',function(){
+    fetch(api+'/api/reset',{method:'POST'}).then(function(r){return r.json()}).then(function(){toast('数据已重置','success');document.getElementById('results').style.display='none';document.getElementById('uc1').classList.remove('done');document.getElementById('uc2').classList.remove('done');document.getElementById('fn1').textContent='';document.getElementById('fn2').textContent='';document.getElementById('fm1').textContent='';document.getElementById('fm2').textContent='';document.getElementById('btnDoStats').style.animation=''}).catch(function(e){toast('重置失败','error')});
+});
+
+document.getElementById('btnDoStats').addEventListener('click',function(){
+    this.style.animation='';
+    doStats();
+});
+
+</script>
+<script src="/ai-chat.js?v=4"></script>
+</body>
+</html>
+

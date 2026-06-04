@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>活动开展材料统计</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Microsoft YaHei','PingFang SC',sans-serif;background:#f4f5fb;min-height:100vh;color:#1a1a2e;padding:0}
+.topbar{background:#fff;padding:14px 24px;display:flex;align-items:center;gap:16px;border-bottom:1px solid #f0f0f8}
+.topbar a{color:#a0a3bd;text-decoration:none;font-size:0.85em;transition:color .2s}
+.topbar a:hover{color:#1a1a2e}
+.topbar .sep{color:#e0e0e8}
+.topbar .current{color:#00b894;font-weight:600;font-size:0.9em}
+.topbar .right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.topbar .notif-btn{position:relative;background:#f0f0f8;border:1px solid #eee;color:#6b6d8a;padding:4px 10px;border-radius:8px;cursor:pointer;font-size:0.82em}
+.topbar .notif-badge{position:absolute;top:-4px;right:-4px;background:#e74c3c;color:#fff;font-size:0.6em;padding:1px 4px;border-radius:6px;min-width:14px;text-align:center;display:none}
+.container{max-width:800px;margin:0 auto;padding:32px 20px}
+.header{text-align:center;margin-bottom:32px}
+.header h1{font-size:1.5em;background:linear-gradient(135deg,#00b894,#55efc4);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px}
+.header p{color:#a0a3bd;font-size:0.88em}
+.form-section{background:#fff;border:1px solid #e0e0e8;border-radius:16px;padding:24px;margin-bottom:20px;box-shadow:0 2px 12px rgba(0,0,0,0.04)}
+.form-section h3{font-size:0.95em;color:#1a1a2e;margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid #f0f0f8}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;color:#4a4d6a;font-size:0.82em;margin-bottom:6px}
+.form-group label .req{color:#e74c3c}
+.form-group input[type="text"],.form-group textarea{width:100%;padding:10px 14px;border-radius:10px;border:1px solid #e0e0e8;background:#fafaff;color:#1a1a2e;font-size:0.88em;outline:none;font-family:inherit}
+.form-group input:focus,.form-group textarea:focus{border-color:#00b894}
+.form-group textarea{min-height:120px;resize:vertical;line-height:1.6}
+.upload-area{border:2px dashed #e0e0e8;border-radius:12px;padding:28px 16px;text-align:center;cursor:pointer;transition:all .3s}
+.upload-area:hover,.upload-area.dragover{border-color:#00b894;background:rgba(67,233,123,0.05)}
+.upload-area .icon{font-size:2em;margin-bottom:8px}
+.upload-area .text{color:#6b6d8a;font-size:0.85em}
+.upload-area .text b{color:#00b894}
+.upload-area .hint{color:#a0a3bd;font-size:0.75em;margin-top:6px}
+.upload-area .preview{margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.upload-area .preview img{width:80px;height:80px;object-fit:cover;border-radius:8px;border:1px solid #eee}
+.btn{padding:12px 32px;border-radius:10px;border:none;font-size:0.9em;cursor:pointer;font-weight:600;transition:all .2s}
+.btn-primary{background:linear-gradient(135deg,#00b894,#55efc4);color:#0f0c29}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 4px 16px rgba(67,233,123,0.3)}
+.btn-primary:disabled{opacity:0.4;cursor:not-allowed;transform:none;box-shadow:none}
+.btn-approve{background:rgba(67,233,123,0.15);color:#00b894;border:1px solid rgba(67,233,123,0.3);padding:8px 18px;border-radius:8px;font-size:0.82em;cursor:pointer;font-weight:600}
+.btn-approve:hover{background:rgba(67,233,123,0.25)}
+.btn-reject{background:rgba(245,87,108,0.15);color:#e74c3c;border:1px solid rgba(245,87,108,0.3);padding:8px 18px;border-radius:8px;font-size:0.82em;cursor:pointer;font-weight:600}
+.btn-reject:hover{background:rgba(245,87,108,0.25)}
+.btn-delete-material{background:rgba(245,87,108,0.1);color:#e74c3c;border:1px solid rgba(245,87,108,0.3);padding:6px 16px;border-radius:8px;font-size:0.82em;cursor:pointer;font-weight:600;transition:all .2s}
+.btn-delete-material:hover{background:rgba(245,87,108,0.2)}
+.admin-batch-bar{display:none;background:#fff;border:1px solid #e0e0e8;border-radius:12px;padding:12px 16px;margin-bottom:16px;align-items:center;gap:12px;box-shadow:0 2px 8px rgba(0,0,0,0.03)}
+.admin-batch-bar.show{display:flex}
+.admin-batch-bar .batch-info{font-size:0.85em;color:#4a4d6a}
+.admin-batch-bar .batch-btn{padding:6px 16px;border-radius:8px;border:1px solid rgba(245,87,108,0.3);background:rgba(245,87,108,0.1);color:#e74c3c;font-size:0.82em;cursor:pointer;font-weight:600;transition:all .2s}
+.admin-batch-bar .batch-btn:hover{background:rgba(245,87,108,0.2)}
+.admin-batch-bar .batch-btn:disabled{opacity:0.4;cursor:not-allowed}
+.mat-checkbox{width:16px;height:16px;accent-color:#00b894;cursor:pointer}
+.materials{margin-top:32px}
+.materials h3{font-size:1em;color:#1a1a2e;margin-bottom:16px}
+.material-card{background:#fff;border:1px solid #e0e0e8;border-radius:14px;padding:16px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,0.03)}
+.material-card .mc-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
+.material-card .mc-title{font-size:0.95em;font-weight:600;color:#1a1a2e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60vw}
+.material-card .mc-time{font-size:0.75em;color:#a0a3bd}
+.material-card .mc-body{font-size:0.85em;color:#4a4d6a;line-height:1.6;margin-bottom:10px}
+.material-card .mc-images{display:flex;flex-wrap:wrap;gap:8px}
+.material-card .mc-images img{width:100px;height:100px;object-fit:cover;border-radius:8px;border:1px solid #eee;cursor:pointer;transition:transform .2s}
+.material-card .mc-images img:hover{transform:scale(1.05)}
+.status-tag{display:inline-block;padding:3px 10px;border-radius:10px;font-size:0.72em;font-weight:600}
+.status-tag.pending{background:rgba(255,193,7,0.15);color:#ffc107}
+.status-tag.approved{background:rgba(67,233,123,0.15);color:#00b894}
+.status-tag.rejected{background:rgba(245,87,108,0.15);color:#e74c3c}
+.reject-reason{background:rgba(245,87,108,0.08);border:1px solid rgba(245,87,108,0.15);border-radius:8px;padding:10px;margin-top:8px;font-size:0.82em;color:#e74c3c}
+.toolbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap;align-items:center}
+.toolbar .filter-btn{padding:6px 14px;border-radius:8px;border:1px solid #e8e8f0;background:#fff;color:#6b6d8a;font-size:0.8em;cursor:pointer;transition:all .2s}
+.toolbar .filter-btn:hover{background:#f5f5ff;color:#1a1a2e}
+.toolbar .filter-btn.active{background:rgba(67,233,123,0.15);color:#00b894;border-color:rgba(67,233,123,0.3)}
+.toolbar .export-btn{padding:6px 14px;border-radius:8px;border:1px solid rgba(67,233,123,0.3);background:rgba(67,233,123,0.1);color:#00b894;font-size:0.8em;cursor:pointer;font-weight:600;transition:all .2s;margin-left:auto}
+.toolbar .export-btn:hover{background:rgba(67,233,123,0.2)}
+.empty{text-align:center;padding:32px;color:#a0a3bd;font-size:0.88em}
+.toast{position:fixed;top:20px;right:20px;padding:14px 24px;border-radius:12px;font-size:0.88em;z-index:9999;animation:slideIn .3s;max-width:360px}
+.toast.success{background:rgba(67,233,123,0.15);border:1px solid rgba(67,233,123,0.3);color:#00b894}
+.toast.error{background:rgba(245,87,108,0.15);border:1px solid rgba(245,87,108,0.3);color:#e74c3c}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+.img-modal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.85);z-index:10000;justify-content:center;align-items:center;cursor:pointer}
+.img-modal.show{display:flex}
+.img-modal img{max-width:90%;max-height:90%;border-radius:8px}
+.modal-bg{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.3);z-index:10001;justify-content:center;align-items:center}
+.modal-bg.show{display:flex}
+.modal-box{background:#fff;border:1px solid #e0e0e8;border-radius:16px;padding:24px;width:90%;max-width:500px;max-height:80vh;overflow-y:auto}
+.modal-box h3{font-size:1em;margin-bottom:16px;color:#1a1a2e}
+.modal-box textarea{width:100%;padding:10px 14px;border-radius:10px;border:1px solid #e0e0e8;background:#fafaff;color:#1a1a2e;font-size:0.88em;outline:none;font-family:inherit;min-height:80px;resize:vertical;margin-bottom:12px}
+.modal-box .detail-title{font-size:1.1em;font-weight:600;color:#00b894;margin-bottom:8px}
+.modal-box .detail-body{font-size:0.88em;color:#4a4d6a;line-height:1.6;margin-bottom:12px}
+.modal-box .detail-photos{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+.modal-box .detail-photos img{width:120px;height:120px;object-fit:cover;border-radius:8px;cursor:pointer}
+.modal-box .btns{display:flex;gap:10px;justify-content:flex-end}
+.club-group{margin-bottom:24px}
+.club-group h3{font-size:0.95em;color:#1a1a2e;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.club-group h3 .badge{background:rgba(67,233,123,0.15);color:#00b894;padding:2px 10px;border-radius:12px;font-size:0.72em}
+.ql-container{min-height:200px;font-size:0.9em;font-family:'Microsoft YaHei','PingFang SC',sans-serif}
+.ql-editor{min-height:200px}
+.agent-panel{background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:16px;padding:20px;margin-bottom:20px;color:#fff;box-shadow:0 4px 20px rgba(102,126,234,0.25)}
+.agent-panel h3{font-size:1em;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.agent-panel .agent-summary{font-size:0.85em;opacity:0.95;margin-bottom:14px;line-height:1.6}
+.agent-panel .agent-actions{display:flex;gap:10px;flex-wrap:wrap}
+.agent-btn{padding:8px 18px;border-radius:10px;border:none;font-size:0.82em;cursor:pointer;font-weight:600;transition:all .2s}
+.agent-btn-primary{background:rgba(255,255,255,0.25);color:#fff;backdrop-filter:blur(4px)}
+.agent-btn-primary:hover{background:rgba(255,255,255,0.4)}
+.agent-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:10px;font-size:0.72em;font-weight:600}
+.agent-badge.approve{background:rgba(67,233,123,0.2);color:#43e97b}
+.agent-badge.manual_review{background:rgba(255,193,7,0.2);color:#ffc107}
+.agent-badge.reject{background:rgba(245,87,108,0.2);color:#f5576c}
+.agent-score-bar{height:4px;border-radius:2px;background:rgba(255,255,255,0.15);margin-top:6px;overflow:hidden}
+.agent-score-fill{height:100%;border-radius:2px;transition:width .5s}
+.agent-item{background:rgba(255,255,255,0.1);border-radius:12px;padding:14px;margin-bottom:10px;backdrop-filter:blur(4px)}
+.agent-item .ai-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.agent-item .ai-title{font-size:0.88em;font-weight:600}
+.agent-item .ai-reasons{font-size:0.78em;opacity:0.85;line-height:1.6}
+.agent-item .ai-risks{font-size:0.78em;color:#f5576c;line-height:1.6;margin-top:4px}
+.agent-detail-btn{padding:4px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.1);color:#fff;font-size:0.75em;cursor:pointer;transition:all .2s}
+.agent-detail-btn:hover{background:rgba(255,255,255,0.25)}
+.agent-loading{text-align:center;padding:24px;font-size:0.88em;opacity:0.8}
+.agent-modal-body{max-height:60vh;overflow-y:auto}
+.agent-ai-box{background:rgba(102,126,234,0.08);border:1px solid rgba(102,126,234,0.2);border-radius:10px;padding:14px;margin-top:12px;font-size:0.85em;color:#4a4d6a;line-height:1.7}
+.agent-ai-box h4{color:#667eea;font-size:0.9em;margin-bottom:8px}
+.agent-score-detail{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.agent-score-item{background:rgba(255,255,255,0.08);border-radius:8px;padding:8px 10px}
+.agent-score-item .score-label{font-size:0.72em;opacity:0.75;margin-bottom:4px}
+.agent-score-item .score-value{font-size:1.1em;font-weight:700}
+.agent-score-item .score-weight{font-size:0.65em;opacity:0.6;margin-left:2px}
+.agent-combined-score{background:rgba(255,255,255,0.15);border-radius:10px;padding:10px 14px;text-align:center;margin-bottom:10px}
+.agent-combined-score .combined-label{font-size:0.78em;opacity:0.8}
+.agent-combined-score .combined-value{font-size:1.4em;font-weight:700}
+.agent-approval-reason{background:rgba(255,255,255,0.08);border-radius:8px;padding:10px 12px;font-size:0.8em;line-height:1.6;margin-top:8px}
+.agent-filter-bar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+.agent-filter-bar .af-btn{padding:4px 12px;border-radius:8px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;font-size:0.75em;cursor:pointer;transition:all .2s}
+.agent-filter-bar .af-btn:hover{background:rgba(255,255,255,0.2)}
+.agent-filter-bar .af-btn.active{background:#667eea;border-color:#667eea;color:#fff}
+.af-dropdown{position:relative;display:inline-block}
+.af-dropdown-btn{padding:4px 10px;border-radius:8px;border:1px solid rgba(255,255,255,0.25);background:rgba(255,255,255,0.08);color:#fff;font-size:0.75em;cursor:pointer;display:flex;align-items:center;gap:4px}
+.af-dropdown-btn:hover{background:rgba(255,255,255,0.2)}
+.af-dropdown-menu{display:none;position:absolute;top:100%;left:0;margin-top:4px;background:#fff;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.15);z-index:100;min-width:140px;overflow:hidden;padding:4px 0}
+.af-dropdown-menu.show{display:block}
+.af-dropdown-menu .af-option{padding:8px 14px;font-size:0.78em;color:#333;cursor:pointer;transition:background .15s;white-space:nowrap}
+.af-dropdown-menu .af-option:hover{background:#f0f0f8}
+.af-dropdown-menu .af-option.selected{background:#667eea;color:#fff;border-radius:6px;margin:2px 4px;padding:6px 10px}
+.agent-batch-bar{display:flex;gap:8px;align-items:center;margin-bottom:12px;padding:8px 12px;background:rgba(255,255,255,0.1);border-radius:10px}
+.agent-batch-bar .ab-check{accent-color:#43e97b;cursor:pointer}
+.agent-batch-bar .ab-info{font-size:0.78em;opacity:0.9}
+.agent-batch-bar .ab-btn{padding:5px 14px;border-radius:8px;border:none;font-size:0.78em;cursor:pointer;font-weight:600;transition:all .2s}
+.agent-batch-bar .ab-approve{background:rgba(67,233,123,0.3);color:#43e97b}
+.agent-batch-bar .ab-approve:hover{background:rgba(67,233,123,0.5)}
+.agent-batch-bar .ab-reject{background:rgba(245,87,108,0.3);color:#f5576c}
+.agent-batch-bar .ab-reject:hover{background:rgba(245,87,108,0.5)}
+.agent-item .ai-cb{accent-color:#43e97b;cursor:pointer;margin-right:4px}
+@media(max-width:768px){
+  .topbar{flex-wrap:wrap;gap:8px;padding:10px 14px}
+  .topbar .right{margin-left:0;width:100%;justify-content:flex-end}
+  .material-card .mc-images img{width:70px;height:70px}
+  .modal-box .detail-photos img{width:80px;height:80px}
+  .card{padding:14px}
+  .form-row .field input,.form-row .field textarea,.form-row .field select{font-size:16px}
+  .agent-score-detail{grid-template-columns:1fr}
+  .agent-batch-bar{flex-wrap:wrap}
+  [style*="display:flex"][style*="justify-content:space-between"]{flex-wrap:wrap!important}
+  .material-card .mc-header{flex-wrap:nowrap!important}
+  .btn{white-space:normal;word-break:break-word}
+  .toolbar input[type="date"]{width:100%;min-width:0}
+}
+@media(max-width:480px){
+  .container{padding:16px 12px}
+  .material-card .mc-images img{width:60px;height:60px}
+  .toast{max-width:90vw;right:10px;left:10px}
+  h1{font-size:1.3em}
+  .form-group input[type="text"],.form-group textarea,.form-group select{font-size:16px}
+}
+</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css">
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+</head>
+<body>
+<div class="topbar">
+    <span class="current">活动开展材料统计</span>
+    <div class="right"></div>
+</div>
+<div class="container">
+    <div class="header">
+        <h1>活动开展材料统计</h1>
+        <p id="headerDesc">上传社团活动开展材料，包含活动照片和活动总结</p>
+    </div>
+    <div id="uploadForm" style="display:none">
+        <div class="form-section">
+            <h3>📂 材料分类</h3>
+            <div class="form-group">
+                <label>选择上传类别 <span class="req">*</span></label>
+                <select id="categorySelect" onchange="onCategoryChange()" style="width:100%;padding:10px 14px;border-radius:10px;border:1px solid #e0e0e8;background:#fafaff;color:#1a1a2e;font-size:0.88em;outline:none;font-family:inherit">
+                    <option value="">请选择材料类别</option>
+                    <option value="honor">🏆 一类：社团校内外荣誉奖项</option>
+                    <option value="activity">🎯 二类：校社联活动参与情况</option>
+                    <option value="innovation">💡 三类：创新亮点</option>
+                </select>
+            </div>
+            <div id="categoryHint" style="display:none;background:rgba(0,184,148,0.08);border:1px solid rgba(0,184,148,0.2);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:0.82em;color:#4a4d6a;line-height:1.7"></div>
+        </div>
+        <div class="form-section">
+            <h3>📝 活动总结</h3>
+            <div class="form-group">
+                <label>主标题 <span class="req">*</span></label>
+                <input type="text" id="titleInput" placeholder="请输入活动主标题" />
+            </div>
+            <div class="form-group">
+                <label>正文内容 <span class="req">*</span></label>
+                <div id="bodyEditor"></div>
+            </div>
+        </div>
+        <div class="form-section">
+            <h3>🖼️ 活动材料</h3>
+            <div class="upload-area" id="photoArea">
+                <div class="icon">📁</div>
+                <div class="text">拖拽文件到此处，或 <b>点击选择文件</b></div>
+                <div class="hint">支持照片（JPG、PNG）、PDF、Word（DOC、DOCX）格式</div>
+                <div class="preview" id="photoPreview"></div>
+                <input type="file" id="photoInput" accept="image/jpeg,image/png,image/gif,image/webp,.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple style="display:none" />
+            </div>
+        </div>
+        <div style="text-align:center">
+            <button class="btn btn-primary" id="btnSubmit" disabled>提交材料</button>
+            <div style="margin-top:12px;font-size:0.78em;color:#e17055;line-height:1.6">⚠️ 上传材料要求格式规范真实，此上传材料将作为社团星级评定和优秀社团参考材料</div>
+        </div>
+    </div>
+    <div class="materials" id="materialsSection">
+        <h3 id="materialsTitle">📋 已提交材料</h3>
+        <div id="adminToolbar" class="toolbar" style="display:none">
+            <button class="filter-btn active" data-filter="all" onclick="filterMaterials('all',this)">全部</button>
+            <button class="filter-btn" data-filter="pending" onclick="filterMaterials('pending',this)">待审批</button>
+            <button class="filter-btn" data-filter="approved" onclick="filterMaterials('approved',this)">已通过</button>
+            <button class="filter-btn" data-filter="rejected" onclick="filterMaterials('rejected',this)">已打回</button>
+            <input type="date" id="matStartDate" style="padding:6px 10px;border-radius:8px;border:1px solid #e8e8f0;background:#fff;color:#1a1a2e;font-size:0.8em" />
+            <span style="color:#a0a3bd;font-size:0.8em">至</span>
+            <input type="date" id="matEndDate" style="padding:6px 10px;border-radius:8px;border:1px solid #e8e8f0;background:#fff;color:#1a1a2e;font-size:0.8em" />
+            <button class="filter-btn" onclick="loadAllMaterials()">筛选日期</button>
+            <button class="export-btn" onclick="exportMaterials('approved')">📥 导出已通过</button>
+            <button class="export-btn" onclick="exportMaterials('all')" style="margin-left:6px;background:#f5f5ff;color:#6b6d8a;border-color:#e8e8f0">📥 导出全部</button>
+            <button class="filter-btn" onclick="toggleAgentPanel()" style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-color:transparent;font-weight:600">智能审批</button>
+        </div>
+        <div id="adminBatchBar" class="admin-batch-bar">
+            <input type="checkbox" id="selectAllMats" class="mat-checkbox" onchange="toggleSelectAll(this)" />
+            <label for="selectAllMats" style="font-size:0.85em;color:#4a4d6a;cursor:pointer">全选</label>
+            <span class="batch-info" id="batchInfo">已选择 0 项</span>
+            <button class="batch-btn" id="batchDeleteBtn" onclick="batchDeleteMaterials()" disabled>批量删除</button>
+        </div>
+        <div id="agentPanel" class="agent-panel" style="display:none">
+            <h3>🤖 智能审批助手</h3>
+            <div id="agentWeightInfo" style="font-size:0.78em;opacity:0.85;margin-bottom:10px;line-height:1.6">评选标准：正文与材料相关度（权重70%）+ 社团星级（权重30%）</div>
+            <div id="agentFilterBar" class="agent-filter-bar" style="display:none">
+                <button class="af-btn active" data-af="all" onclick="agentFilterItems('all',this)">全部</button>
+                <button class="af-btn" data-af="approve" onclick="agentFilterItems('approve',this)">建议通过</button>
+                <button class="af-btn" data-af="reject" onclick="agentFilterItems('reject',this)">建议驳回</button>
+                <div class="af-dropdown">
+                    <button class="af-dropdown-btn" onclick="toggleSortDropdown(event)">排序 <span style="font-size:0.8em">▼</span></button>
+                    <div class="af-dropdown-menu" id="sortDropdown">
+                        <div class="af-option selected" data-sort="combined_desc" onclick="selectSort('combined_desc',this)">综合得分 ↓</div>
+                        <div class="af-option" data-sort="combined_asc" onclick="selectSort('combined_asc',this)">综合得分 ↑</div>
+                        <div class="af-option" data-sort="relevance_desc" onclick="selectSort('relevance_desc',this)">相关度 ↓</div>
+                        <div class="af-option" data-sort="relevance_asc" onclick="selectSort('relevance_asc',this)">相关度 ↑</div>
+                        <div class="af-option" data-sort="star_desc" onclick="selectSort('star_desc',this)">星级 ↓</div>
+                    </div>
+                </div>
+            </div>
+            <div id="agentBatchBar" class="agent-batch-bar" style="display:none">
+                <input type="checkbox" class="ab-check" id="agentSelectAll" onchange="agentToggleSelectAll(this)" />
+                <label for="agentSelectAll" style="font-size:0.78em;cursor:pointer">全选</label>
+                <span class="ab-info" id="agentBatchInfo">已选0项</span>
+                <button class="ab-btn ab-approve" id="agentBatchApprove" onclick="agentBatchAction('approve')" disabled>批量通过</button>
+                <button class="ab-btn ab-reject" id="agentBatchReject" onclick="agentBatchAction('reject')" disabled>批量驳回</button>
+            </div>
+            <div id="agentContent">
+                <div class="agent-loading">正在分析待审批材料...</div>
+            </div>
+        </div>
+        <div id="materialsList"></div>
+    </div>
+</div>
+<div class="img-modal" id="imgModal"><img id="imgModalSrc" /></div>
+<div class="modal-bg" id="detailModal">
+    <div class="modal-box">
+        <h3>📋 材料详情</h3>
+        <div class="detail-title" id="detailTitle"></div>
+        <div class="detail-body" id="detailBody"></div>
+        <div class="detail-photos" id="detailPhotos"></div>
+        <div id="detailRejectArea" style="display:none">
+            <textarea id="detailRejectReason" placeholder="请输入驳回原因"></textarea>
+        </div>
+        <div class="btns" id="detailBtns"></div>
+    </div>
+</div>
+<div class="modal-bg" id="agentDetailModal">
+    <div class="modal-box" style="max-width:600px">
+        <h3>🤖 AI 审批分析详情</h3>
+        <div class="agent-modal-body" id="agentDetailBody"></div>
+        <div class="btns" style="margin-top:16px"><button class="btn" style="background:#f0f0f8;color:#6b6d8a" onclick="closeAgentDetail()">关闭</button></div>
+    </div>
+</div>
+<script>
+var api=window.location.origin;
+var bodyQuill=null;
+setTimeout(function(){
+    if(document.getElementById('bodyEditor')&&!bodyQuill){
+        bodyQuill=new Quill('#bodyEditor',{theme:'snow',modules:{toolbar:[['bold','italic','underline','strike'],['blockquote','code-block'],[{'list':'ordered'},{'list':'bullet'}],[{'header':[1,2,3,false]}],['link','image'],['clean']]},placeholder:'请输入活动总结正文内容'});
+        bodyQuill.on('text-change',checkForm);
+    }
+},300);
+var selectedPhotos=[];
+var currentToken='';
+var currentUser=null;
+var allMaterialsData=[];
+var currentFilter='all';
+var currentCategory='';
+
+var categoryHints={
+    'honor':'<b>🏆 一类：社团校内外荣誉奖项</b><br>📌 格式要求：<b>颁发单位+荣誉全称+年/月/日</b><br>📎 图片要求：电子版荣誉证书/软件扫描图',
+    'activity':'<b>🎯 二类：校社联活动参与情况</b><br>📌 例如：百团大战、社团展演、"一站式"学生社区开展活动情况等',
+    'innovation':'<b>💡 三类：创新亮点</b><br>📌 突出本学期核心创新点，如"引入\'活动众筹\'模式筹集物资，提升成员参与感；开发社团专属小程序，反馈一体化"，结合数据说明效果'
+};
+
+function onCategoryChange(){
+    var sel=document.getElementById('categorySelect');
+    var hint=document.getElementById('categoryHint');
+    currentCategory=sel.value;
+    if(currentCategory){
+        hint.innerHTML=categoryHints[currentCategory]||'';
+        hint.style.display='block';
+    }else{
+        hint.style.display='none';
+    }
+    checkForm();
+}
+
+function toast(msg,type){var d=document.createElement('div');d.className='toast '+type;d.textContent=msg;document.body.appendChild(d);setTimeout(function(){d.remove()},3000)}
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function escHtml(s){if(!s)return '';return esc(s).replace(/\n/g,'<br>')}
+function safeHtml(h){if(!h)return '';var d=document.createElement('div');d.innerHTML=h;var scripts=d.querySelectorAll('script,iframe,object,embed,form');for(var i=0;i<scripts.length;i++){scripts[i].remove()}var attrs=d.querySelectorAll('[onclick],[onerror],[onload],[onmouseover]');for(var i=0;i<attrs.length;i++){attrs[i].removeAttribute('onclick');attrs[i].removeAttribute('onerror');attrs[i].removeAttribute('onload');attrs[i].removeAttribute('onmouseover')}return d.innerHTML}
+
+document.getElementById('imgModal').addEventListener('click',function(){this.classList.remove('show')});
+function showImg(src){document.getElementById('imgModalSrc').src=src;document.getElementById('imgModal').classList.add('show')}
+
+document.getElementById('detailModal').addEventListener('click',function(e){if(e.target===this)this.classList.remove('show')});
+
+fetch(api+'/api/current-user').then(function(r){return r.json()}).then(function(res){
+    if(!res.loggedIn){history.back();return}
+    currentUser=res.user;
+    if(currentUser.role==='admin'){
+        document.getElementById('uploadForm').style.display='none';
+        document.getElementById('headerDesc').textContent='查看所有社团提交的活动材料，审批待审核材料';
+        document.getElementById('materialsTitle').textContent='📋 所有社团材料';
+        document.getElementById('adminToolbar').style.display='flex';
+        document.getElementById('adminBatchBar').classList.add('show');
+        loadAllMaterials();
+    }else{
+        document.getElementById('uploadForm').style.display='block';
+        document.getElementById('materialsTitle').textContent='📋 我的提交材料';
+        fetch(api+'/api/club-tokens').then(function(r2){return r2.json()}).then(function(res2){
+            if(!res2.success)return;
+            var found=res2.data.find(function(item){return item.club===currentUser.clubName});
+            if(found){currentToken=found.token;loadMyMaterials()}
+            else{toast('未找到您所属社团的上传通道，请联系管理员','error')}
+        });
+    }
+}).catch(function(){history.back()});
+
+document.getElementById('photoArea').addEventListener('click',function(){document.getElementById('photoInput').click()});
+document.getElementById('photoInput').addEventListener('change',function(e){addPhotos(Array.from(e.target.files))});
+document.getElementById('photoArea').addEventListener('dragover',function(e){e.preventDefault();this.classList.add('dragover')});
+document.getElementById('photoArea').addEventListener('dragleave',function(){this.classList.remove('dragover')});
+document.getElementById('photoArea').addEventListener('drop',function(e){e.preventDefault();this.classList.remove('dragover');addPhotos(Array.from(e.dataTransfer.files))});
+
+function addPhotos(files){
+    var validExts=['.jpg','.jpeg','.png','.gif','.webp','.pdf','.doc','.docx'];
+    var validTypes=['image/'];
+    var accepted=files.filter(function(f){
+        var ext='.'+f.name.split('.').pop().toLowerCase();
+        if(validExts.indexOf(ext)>=0)return true;
+        for(var i=0;i<validTypes.length;i++){if(f.type.startsWith(validTypes[i]))return true}
+        return false;
+    });
+    if(!accepted.length){toast('请选择照片、PDF或Word文件','error');return}
+    selectedPhotos=selectedPhotos.concat(accepted);renderPhotoPreview();checkForm();
+}
+function renderPhotoPreview(){
+    var c=document.getElementById('photoPreview');c.innerHTML='';
+    selectedPhotos.forEach(function(f,i){
+        if(f.type.startsWith('image/')){
+            var url=URL.createObjectURL(f);
+            var wrap=document.createElement('div');
+            wrap.style.cssText='position:relative;display:inline-block';
+            var img=document.createElement('img');img.src=url;img.title=f.name;
+            img.onclick=function(e){e.stopPropagation();showImg(url)};
+            var rm=document.createElement('div');
+            rm.style.cssText='position:absolute;top:-6px;right:-6px;background:#e74c3c;color:#fff;border-radius:50%;width:20px;height:20px;font-size:0.65em;display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 2px 6px rgba(231,76,60,0.3);z-index:1';
+            rm.textContent='✕';
+            rm.onclick=function(e){e.stopPropagation();selectedPhotos.splice(i,1);renderPhotoPreview();checkForm()};
+            wrap.appendChild(img);wrap.appendChild(rm);
+            c.appendChild(wrap);
+        }else{
+            var ext=f.name.split('.').pop().toLowerCase();
+            var icon=ext==='pdf'?'📕':(ext==='doc'||ext==='docx'?'📘':'📄');
+            var div=document.createElement('div');
+            div.style.cssText='width:80px;height:80px;border-radius:8px;border:1px solid #eee;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;background:#fafaff';
+            div.innerHTML='<div style="font-size:1.8em">'+icon+'</div><div style="font-size:0.6em;color:#6b6d8a;margin-top:4px;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(f.name)+'</div>';
+            div.title=f.name;
+            var rm=document.createElement('div');
+            rm.style.cssText='position:absolute;top:-4px;right:-4px;background:#e74c3c;color:#fff;border-radius:50%;width:18px;height:18px;font-size:0.6em;display:flex;align-items:center;justify-content:center;cursor:pointer';
+            rm.textContent='✕';
+            rm.onclick=function(e){e.stopPropagation();selectedPhotos.splice(i,1);renderPhotoPreview();checkForm()};
+            div.style.position='relative';
+            div.appendChild(rm);
+            c.appendChild(div);
+        }
+    });
+}
+function checkForm(){
+    var title=document.getElementById('titleInput').value.trim();
+    var body=bodyQuill?bodyQuill.getText().trim():'';
+    document.getElementById('btnSubmit').disabled=!(title&&body&&selectedPhotos.length&&currentToken&&currentCategory);
+}
+document.getElementById('titleInput').addEventListener('input',checkForm);
+
+document.getElementById('btnSubmit').addEventListener('click',function(){
+    var self=this;self.disabled=true;
+    var title=document.getElementById('titleInput').value.trim();
+    var body=bodyQuill?bodyQuill.root.innerHTML:'';
+    var groupId='g_'+Date.now()+'_'+Math.random().toString(36).substr(2,6);
+    var completed=0,total=selectedPhotos.length;
+    selectedPhotos.forEach(function(file){
+        var descPrefix='[照片]';
+        if(!file.type.startsWith('image/')){
+            var ext=file.name.split('.').pop().toLowerCase();
+            if(ext==='pdf')descPrefix='[PDF]';
+            else if(ext==='doc'||ext==='docx')descPrefix='[Word]';
+            else descPrefix='[文件]';
+        }
+        var fd=new FormData();fd.append('file',file);fd.append('description',descPrefix+title);fd.append('groupId',groupId);fd.append('category',currentCategory);
+        fetch(api+'/api/club-upload/'+currentToken,{method:'POST',body:fd}).then(function(r){return r.json()}).then(function(res){
+            completed++;
+            if(completed===total){
+                var summary=title+'\n\n'+body;
+                var sfd=new FormData();var blob=new Blob([summary],{type:'text/plain'});
+                sfd.append('file',blob,'活动总结_'+title+'.txt');sfd.append('description','[总结]'+title.replace(/\|\|\|/g,'｜')+'|||'+body);sfd.append('groupId',groupId);sfd.append('category',currentCategory);
+                fetch(api+'/api/club-upload/'+currentToken,{method:'POST',body:sfd}).then(function(r){return r.json()}).then(function(){
+                    toast('材料提交成功，等待管理员审批','success');
+                    document.getElementById('titleInput').value='';if(bodyQuill)bodyQuill.setText('');
+                    selectedPhotos=[];renderPhotoPreview();document.getElementById('photoInput').value='';
+                    document.getElementById('categorySelect').value='';currentCategory='';document.getElementById('categoryHint').style.display='none';
+                    self.disabled=true;loadMyMaterials();
+                });
+            }
+        }).catch(function(){completed++;if(completed===total){self.disabled=false;toast('提交失败','error')}});
+    });
+});
+
+function loadMyMaterials(){
+    if(!currentToken)return;
+    fetch(api+'/api/club-upload-info/'+currentToken).then(function(r){return r.json()}).then(function(res){
+        if(!res.success)return;
+        var materials={};
+        res.uploads.forEach(function(u){
+            var desc=u.description||'';
+            var cat=u.category||'';
+            var gid=u.groupId||'';
+            if(desc.startsWith('[总结]')){
+                var parts=desc.replace('[总结]','').split('|||');
+                var t=parts[0]||'无标题';
+                if(!materials[t])materials[t]={'title':t,'body':parts[1]||'','time':u.uploadTime,'photos':[],'status':u.status||'pending','rejectReason':u.rejectReason||'','category':cat,'groupId':gid};
+                else{materials[t].body=parts[1]||'';materials[t].status=u.status||materials[t].status;materials[t].rejectReason=u.rejectReason||materials[t].rejectReason;if(cat)materials[t].category=cat;if(gid)materials[t].groupId=gid}
+            }else if(desc.startsWith('[照片]')||desc.startsWith('[PDF]')||desc.startsWith('[Word]')||desc.startsWith('[文件]')){
+                var t2=desc.replace(/^\[(照片|PDF|Word|文件)\]/,'').split('|||')[0];
+                if(!materials[t2])materials[t2]={'title':t2,'body':'','time':u.uploadTime,'photos':[],'status':u.status||'pending','rejectReason':'','category':cat,'groupId':gid};
+                else{if(cat)materials[t2].category=cat;if(gid)materials[t2].groupId=gid}
+                materials[t2].photos.push({'id':u.id,'name':u.fileName,'fileType':u.fileType});
+            }
+        });
+        renderMyMaterials(materials);
+    });
+}
+
+function renderMyMaterials(materials){
+    var c=document.getElementById('materialsList');
+    var keys=Object.keys(materials);
+    if(!keys.length){c.innerHTML='<div class="empty">暂无提交材料</div>';return}
+    var statusNames={'pending':'待审批','approved':'已通过','rejected':'已打回'};
+    var categoryNames={'honor':'荣誉奖项','activity':'活动参与','innovation':'创新亮点'};
+    var now=new Date();
+    var h='';
+    keys.forEach(function(key,idx){
+        var m=materials[key];
+        var catTag='';
+        if(m.category&&categoryNames[m.category])catTag='<span class="status-tag" style="background:rgba(108,92,231,0.12);color:#6c5ce7;margin-right:6px">'+categoryNames[m.category]+'</span>';
+        h+='<div class="material-card">';
+        h+='<div class="mc-header" style="cursor:pointer" onclick="toggleMatDetail(\'mat-'+idx+'\',\''+esc(m.groupId||'')+'\',\''+m.status+'\')"><div style="display:flex;align-items:center;gap:8px"><div class="mc-title">'+catTag+esc(m.title)+'</div></div><div style="display:flex;align-items:center;gap:6px"><span class="status-tag '+m.status+'">'+statusNames[m.status]+'</span><span id="mat-arrow-mat-'+idx+'" style="font-size:0.7em;color:#a0a3bd;transition:transform 0.2s">▼</span></div></div>';
+        h+='<div id="mat-mat-'+idx+'" style="display:none">';
+        if(m.body)h+='<div class="mc-body">'+safeHtml(m.body)+'</div>';
+        if(m.photos.length){
+            h+='<div class="mc-images">';
+            m.photos.forEach(function(p){
+                var ft=p.fileType||'';
+                if(ft==='pdf'||ft==='doc'||ft==='docx'){
+                    var icon=ft==='pdf'?'📕':(ft==='doc'||ft==='docx'?'📘':'📄');
+                    h+='<a href="'+api+'/api/club-download/'+currentToken+'/'+p.id+'" target="_blank" style="display:inline-flex;flex-direction:column;align-items:center;justify-content:center;width:80px;height:80px;border-radius:8px;border:1px solid #eee;background:#fafaff;text-decoration:none;cursor:pointer" title="'+esc(p.name)+'"><span style="font-size:1.8em">'+icon+'</span><span style="font-size:0.6em;color:#6b6d8a;margin-top:4px;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(p.name)+'</span></a>';
+                }else{
+                    h+='<img src="'+api+'/api/club-download/'+currentToken+'/'+p.id+'" onclick="showImg(this.src)" title="'+esc(p.name)+'" />';
+                }
+            });
+            h+='</div>';
+        }
+        if(m.status==='rejected'&&m.rejectReason)h+='<div class="reject-reason">驳回原因：'+escHtml(m.rejectReason)+'</div>';
+        if(m.status==='rejected'&&m.groupId){
+            var canDelete=false;
+            try{
+                var ut=new Date(m.time.replace(/-/g,'/'));
+                var diff=now.getTime()-ut.getTime();
+                if(diff>=24*60*60*1000)canDelete=true;
+            }catch(e){}
+            if(canDelete){
+                h+='<div style="margin-top:10px"><button class="btn-delete-material" onclick="deleteRejectedGroup(\''+esc(m.groupId)+'\')">删除此材料</button></div>';
+            }else{
+                h+='<div style="margin-top:10px;font-size:0.78em;color:#a0a3bd">被打回的材料需满24小时后才可删除</div>';
+            }
+        }
+        h+='</div></div>';
+    });
+    c.innerHTML=h;
+}
+
+function toggleMatDetail(id,groupId,status){
+    var el=document.getElementById('mat-'+id);
+    var arrow=document.getElementById('mat-arrow-'+id);
+    if(!el)return;
+    if(el.style.display==='none'){
+        el.style.display='block';
+        if(arrow)arrow.style.transform='rotate(0deg)';
+        if(groupId&&(status==='approved'||status==='rejected')){
+            fetch(api+'/api/material-view-group/'+encodeURIComponent(groupId),{method:'POST'}).then(function(){
+                if(window.parent&&window.parent!==window){window.parent.postMessage({type:'badgeUpdate',source:'materials'},'*')}
+            }).catch(function(){});
+        }
+    }else{
+        el.style.display='none';
+        if(arrow)arrow.style.transform='rotate(-90deg)';
+    }
+}
+
+function loadAllMaterials(){
+    var matStart=(document.getElementById('matStartDate')||{}).value||'';
+    var matEnd=(document.getElementById('matEndDate')||{}).value||'';
+    var dateParams='';
+    if(matStart)dateParams+='&start_date='+encodeURIComponent(matStart);
+    if(matEnd)dateParams+='&end_date='+encodeURIComponent(matEnd);
+    fetch(api+'/api/all-materials?'+dateParams).then(function(r){
+        if(!r.ok){return r.text().then(function(t){throw new Error('API '+r.status+': '+t.substring(0,200))})}
+        return r.json();
+    }).then(function(res){
+        if(!res.success){toast('加载失败: '+(res.error||'未知错误'),'error');return}
+        allMaterialsData=res.data||[];
+        renderAllMaterials(allMaterialsData);
+    }).catch(function(e){toast('加载材料失败: '+e.message,'error')});
+}
+
+function filterMaterials(filter,btn){
+    currentFilter=filter;
+    var btns=document.querySelectorAll('#adminToolbar .filter-btn');
+    btns.forEach(function(b){b.classList.remove('active')});
+    if(btn)btn.classList.add('active');
+    renderAllMaterials(allMaterialsData);
+}
+
+function exportMaterials(status){
+    var params='status='+status;
+    var startDate=(document.getElementById('matStartDate')||{}).value||'';
+    var endDate=(document.getElementById('matEndDate')||{}).value||'';
+    if(startDate)params+='&start_date='+encodeURIComponent(startDate);
+    if(endDate)params+='&end_date='+encodeURIComponent(endDate);
+    window.open(api+'/api/export-materials?'+params,'_blank');
+}
+
+function renderAllMaterials(data){
+    var c=document.getElementById('materialsList');
+    var filtered=data;
+    if(currentFilter!=='all'){
+        filtered=data.filter(function(m){return m.status===currentFilter});
+    }
+    if(!filtered.length){c.innerHTML='<div class="empty">暂无'+(currentFilter==='all'?'':'该状态')+'材料</div>';updateBatchInfo();return}
+    var statusNames={'pending':'待审批','approved':'已通过','rejected':'已打回'};
+    var categoryNames={'honor':'荣誉奖项','activity':'活动参与','innovation':'创新亮点'};
+    var byClub={};
+    filtered.forEach(function(m){
+        if(!byClub[m.clubName])byClub[m.clubName]=[];
+        byClub[m.clubName].push(m);
+    });
+    var h='';
+    var gIdx=0;
+    Object.keys(byClub).forEach(function(club){
+        var items=byClub[club];
+        var pendingCnt=items.filter(function(m){return m.status==='pending'}).length;
+        var approvedCnt=items.filter(function(m){return m.status==='approved'}).length;
+        var rejectedCnt=items.filter(function(m){return m.status==='rejected'}).length;
+        h+='<div class="club-group"><h3 style="cursor:pointer" onclick="toggleMatDetail(\'cg-'+gIdx+'\')">'+esc(club)+' <span class="badge">'+items.length+'条';
+        if(pendingCnt)h+=' · '+pendingCnt+'条待审批';
+        if(approvedCnt)h+=' · '+approvedCnt+'条已通过';
+        if(rejectedCnt)h+=' · '+rejectedCnt+'条已打回';
+        h+='</span> <span id="mat-arrow-cg-'+gIdx+'" style="font-size:0.7em;color:#a0a3bd;transition:transform 0.2s;margin-left:4px">▼</span></h3>';
+        h+='<div id="mat-cg-'+gIdx+'" style="display:none">';
+        items.forEach(function(m,idx){
+            var catTag='';
+            if(m.category&&categoryNames[m.category])catTag='<span class="status-tag" style="background:rgba(108,92,231,0.12);color:#6c5ce7;margin-right:6px">'+categoryNames[m.category]+'</span>';
+            h+='<div class="material-card">';
+            h+='<div class="mc-header" style="cursor:pointer" onclick="toggleMatDetail(\'am-'+gIdx+'-'+idx+'\')"><div style="display:flex;align-items:center;gap:8px"><input type="checkbox" class="mat-checkbox mat-group-cb" data-group-id="'+esc(m.groupId)+'" onclick="event.stopPropagation();updateBatchInfo()" /><div class="mc-title">'+catTag+esc(m.title||'无标题')+'</div></div><div style="display:flex;align-items:center;gap:6px"><span class="status-tag '+m.status+'">'+(statusNames[m.status]||m.status)+'</span><span id="mat-arrow-am-'+gIdx+'-'+idx+'" style="font-size:0.7em;color:#a0a3bd;transition:transform 0.2s">▼</span></div></div>';
+            h+='<div id="mat-am-'+gIdx+'-'+idx+'" style="display:none">';
+            if(m.body)h+='<div class="mc-body">'+safeHtml(m.body)+'</div>';
+            if(m.photos&&m.photos.length){
+                h+='<div class="mc-images">';
+                m.photos.forEach(function(p){
+                    var ft=p.fileType||'';
+                    if(ft==='pdf'||ft==='doc'||ft==='docx'){
+                        var icon=ft==='pdf'?'📕':(ft==='doc'||ft==='docx'?'📘':'📄');
+                        h+='<a href="'+api+'/api/club-download/'+m.token+'/'+p.id+'" target="_blank" style="display:inline-flex;flex-direction:column;align-items:center;justify-content:center;width:80px;height:80px;border-radius:8px;border:1px solid #eee;background:#fafaff;text-decoration:none;cursor:pointer" title="'+esc(p.fileName)+'"><span style="font-size:1.8em">'+icon+'</span><span style="font-size:0.6em;color:#6b6d8a;margin-top:4px;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(p.fileName)+'</span></a>';
+                    }else{
+                        h+='<img src="'+api+'/api/club-download/'+m.token+'/'+p.id+'" onclick="showImg(this.src)" title="'+esc(p.fileName)+'" />';
+                    }
+                });
+                h+='</div>';
+            }
+            if(m.status==='rejected'&&m.rejectReason)h+='<div class="reject-reason">驳回原因：'+escHtml(m.rejectReason)+'</div>';
+            if(m.status==='pending'){
+                h+='<div style="margin-top:12px;display:flex;gap:10px"><button class="btn-approve" onclick="openDetail(\''+esc(m.groupId)+'\',\'approve\')">✓ 通过</button><button class="btn-reject" onclick="openDetail(\''+esc(m.groupId)+'\',\'reject\')">✗ 打回</button></div>';
+            }
+            if(m.status==='approved'){
+                h+='<div style="margin-top:12px"><button style="padding:6px 14px;border-radius:8px;border:1px solid rgba(102,126,234,0.3);background:rgba(102,126,234,0.08);color:#667eea;font-size:0.82em;cursor:pointer;font-weight:600" onclick="publishToShowcase(\''+esc(m.groupId)+'\')">🖼️ 发布为轮播图</button></div>';
+            }
+            h+='</div></div>';
+        });
+        h+='</div></div>';
+        gIdx++;
+    });
+    c.innerHTML=h;
+    updateBatchInfo();
+}
+
+function openDetail(groupId,action){
+    var m=allMaterialsData.find(function(item){return item.groupId===groupId});
+    if(!m){toast('未找到材料信息','error');return}
+    document.getElementById('detailTitle').textContent=m.title||'无标题';
+    document.getElementById('detailBody').innerHTML=safeHtml(m.body||'无正文内容');
+    var photosDiv=document.getElementById('detailPhotos');
+    photosDiv.innerHTML='';
+    if(m.photos&&m.photos.length){
+        m.photos.forEach(function(p){
+            var img=document.createElement('img');img.src=api+'/api/club-download/'+m.token+'/'+p.id;
+            img.onclick=function(){showImg(this.src)};photosDiv.appendChild(img);
+        });
+    }else{
+        photosDiv.innerHTML='<div style="color:#a0a3bd;font-size:0.85em">无照片</div>';
+    }
+    var rejectArea=document.getElementById('detailRejectArea');
+    var btns=document.getElementById('detailBtns');
+    if(action==='reject'){
+        rejectArea.style.display='block';
+        document.getElementById('detailRejectReason').value='';
+        btns.innerHTML='<button class="btn-reject" onclick="submitAction(\''+esc(groupId)+'\',\'reject\')">确认打回</button> <button class="btn" style="background:#f0f0f8;color:#6b6d8a" onclick="closeDetail()">取消</button>';
+    }else{
+        rejectArea.style.display='none';
+        btns.innerHTML='<button class="btn-approve" onclick="submitAction(\''+esc(groupId)+'\',\'approve\')">确认通过</button> <button class="btn" style="background:#f0f0f8;color:#6b6d8a" onclick="closeDetail()">取消</button>';
+    }
+    document.getElementById('detailModal').classList.add('show');
+}
+
+function closeDetail(){document.getElementById('detailModal').classList.remove('show')}
+
+function submitAction(groupId,action){
+    var data={action:action};
+    if(action==='reject'){
+        data.rejectReason=document.getElementById('detailRejectReason').value.trim();
+        if(!data.rejectReason){toast('请输入驳回原因','error');return}
+    }
+    fetch(api+'/api/approve-group/'+encodeURIComponent(groupId),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
+    .then(function(r){return r.json()}).then(function(res){
+        if(res.error){toast(res.error,'error');return}
+        toast(action==='approve'?'已通过审批':'已打回材料','success');
+        closeDetail();delete agentCache['material'];if(agentPanelVisible)loadAgentPreview('material');loadAllMaterials();
+        if(window.parent&&window.parent!==window){window.parent.postMessage({type:'badgeUpdate',source:'materials'},'*')}
+    }).catch(function(){toast('操作失败','error')});
+}
+
+function publishToShowcase(groupId){
+    if(!confirm('确认将此材料发布为首页轮播图？'))return;
+    fetch(api+'/api/showcase-from-material/'+encodeURIComponent(groupId),{method:'POST'})
+    .then(function(r){return r.json()}).then(function(res){
+        if(res.success){toast('已发布为轮播图','success')}
+        else{toast(res.error||'发布失败','error')}
+    }).catch(function(){toast('发布失败','error')});
+}
+
+function deleteRejectedGroup(groupId){
+    if(!confirm('确定要删除此被打回的材料吗？删除后不可恢复。'))return;
+    fetch(api+'/api/delete-rejected-group/'+encodeURIComponent(groupId),{method:'DELETE'})
+    .then(function(r){return r.json()}).then(function(res){
+        if(res.error){toast(res.error,'error');return}
+        toast('材料已删除','success');
+        loadMyMaterials();
+    }).catch(function(){toast('删除失败','error')});
+}
+
+function updateBatchInfo(){
+    var cbs=document.querySelectorAll('.mat-group-cb');
+    var checked=document.querySelectorAll('.mat-group-cb:checked');
+    var info=document.getElementById('batchInfo');
+    var btn=document.getElementById('batchDeleteBtn');
+    if(info)info.textContent='已选择 '+checked.length+' 项';
+    if(btn)btn.disabled=checked.length===0;
+    var selectAll=document.getElementById('selectAllMats');
+    if(selectAll)selectAll.checked=cbs.length>0&&checked.length===cbs.length;
+}
+
+function toggleSelectAll(el){
+    var cbs=document.querySelectorAll('.mat-group-cb');
+    cbs.forEach(function(cb){cb.checked=el.checked});
+    updateBatchInfo();
+}
+
+function batchDeleteMaterials(){
+    var checked=document.querySelectorAll('.mat-group-cb:checked');
+    if(!checked.length){toast('请先选择要删除的材料','error');return}
+    var groupIds=[];
+    checked.forEach(function(cb){groupIds.push(cb.getAttribute('data-group-id'))});
+    if(!confirm('确定要删除选中的 '+groupIds.length+' 项材料吗？删除后不可恢复。'))return;
+    fetch(api+'/api/batch-delete-materials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({groupIds:groupIds})})
+    .then(function(r){return r.json()}).then(function(res){
+        if(res.error){toast(res.error,'error');return}
+        toast('已删除 '+res.deleted+' 项材料','success');
+        loadAllMaterials();
+    }).catch(function(){toast('批量删除失败','error')});
+}
+
+var agentPanelVisible=false;
+var agentCache={};
+var agentFilterType='all';
+var agentSortKey='combined_desc';
+var agentSelectedItems=[];
+
+function toggleAgentPanel(){
+    agentPanelVisible=!agentPanelVisible;
+    document.getElementById('agentPanel').style.display=agentPanelVisible?'block':'none';
+    if(agentPanelVisible&&!agentCache['material']){
+        loadAgentPreview('material');
+    }
+}
+
+function loadAgentPreview(type){
+    var c=document.getElementById('agentContent');
+    c.innerHTML='<div class="agent-loading">正在分析待审批材料...</div>';
+    fetch(api+'/api/agent/approval-preview/'+type)
+    .then(function(r){return r.json()})
+    .then(function(res){
+        if(!res.success){c.innerHTML='<div style="opacity:0.8">分析失败：'+esc(res.error||'未知错误')+'</div>';return}
+        agentCache[type]=res.data;
+        agentFilterType='all';
+        agentSortKey='combined_desc';
+        agentSelectedItems=[];
+        renderAgentPreview(type,res.data);
+    })
+    .catch(function(e){c.innerHTML='<div style="opacity:0.8">请求失败：'+esc(e.message)+'</div>'});
+}
+
+function getFilteredSortedItems(items){
+    var filtered=items;
+    if(agentFilterType!=='all'){
+        filtered=items.filter(function(it){return it.recommendation===agentFilterType});
+    }
+    var sorted=filtered.slice();
+    if(agentSortKey==='combined_desc')sorted.sort(function(a,b){return (b.combined_score||0)-(a.combined_score||0)});
+    else if(agentSortKey==='combined_asc')sorted.sort(function(a,b){return (a.combined_score||0)-(b.combined_score||0)});
+    else if(agentSortKey==='relevance_desc')sorted.sort(function(a,b){return (b.relevance_score||0)-(a.relevance_score||0)});
+    else if(agentSortKey==='relevance_asc')sorted.sort(function(a,b){return (a.relevance_score||0)-(b.relevance_score||0)});
+    else if(agentSortKey==='star_desc')sorted.sort(function(a,b){return (b.star_rating||0)-(a.star_rating||0)});
+    return sorted;
+}
+
+function agentFilterItems(filter,btn){
+    agentFilterType=filter;
+    var btns=document.querySelectorAll('#agentFilterBar .af-btn');
+    btns.forEach(function(b){b.classList.remove('active')});
+    if(btn)btn.classList.add('active');
+    agentSelectedItems=[];
+    renderAgentPreview('material',agentCache['material']);
+}
+
+function toggleSortDropdown(e){
+    e.stopPropagation();
+    var menu=document.getElementById('sortDropdown');
+    menu.classList.toggle('show');
+}
+function selectSort(sortKey,el){
+    agentSortKey=sortKey;
+    agentSelectedItems=[];
+    var options=document.querySelectorAll('#sortDropdown .af-option');
+    options.forEach(function(o){o.classList.remove('selected')});
+    el.classList.add('selected');
+    document.getElementById('sortDropdown').classList.remove('show');
+    renderAgentPreview('material',agentCache['material']);
+}
+document.addEventListener('click',function(){
+    var menu=document.getElementById('sortDropdown');
+    if(menu)menu.classList.remove('show');
+});
+
+function agentToggleSelectAll(el){
+    var items=getFilteredSortedItems(agentCache['material']?agentCache['material'].items||[]:[]);
+    if(el.checked){
+        agentSelectedItems=items.map(function(it){return it.group_id});
+    }else{
+        agentSelectedItems=[];
+    }
+    renderAgentPreview('material',agentCache['material']);
+}
+
+function agentToggleItem(gid){
+    var idx=agentSelectedItems.indexOf(gid);
+    if(idx>=0)agentSelectedItems.splice(idx,1);
+    else agentSelectedItems.push(gid);
+    updateAgentBatchInfo();
+}
+
+function updateAgentBatchInfo(){
+    var info=document.getElementById('agentBatchInfo');
+    var approveBtn=document.getElementById('agentBatchApprove');
+    var rejectBtn=document.getElementById('agentBatchReject');
+    if(info)info.textContent='已选'+agentSelectedItems.length+'项';
+    if(approveBtn)approveBtn.disabled=agentSelectedItems.length===0;
+    if(rejectBtn)rejectBtn.disabled=agentSelectedItems.length===0;
+    var items=agentCache['material']?agentCache['material'].items||[]:[];
+    var filtered=getFilteredSortedItems(items);
+    var selectAll=document.getElementById('agentSelectAll');
+    if(selectAll){
+        var allIds=filtered.map(function(it){return it.group_id});
+        selectAll.checked=allIds.length>0&&agentSelectedItems.length===allIds.length&&allIds.every(function(id){return agentSelectedItems.indexOf(id)>=0});
+    }
+}
+
+function agentBatchAction(action){
+    if(!agentSelectedItems.length){toast('请先选择材料','error');return}
+    var actionName=action==='approve'?'通过':'驳回';
+    if(!confirm('确认批量'+actionName+'选中的'+agentSelectedItems.length+'项材料？'))return;
+    var completed=0;
+    var total=agentSelectedItems.length;
+    var failed=0;
+    agentSelectedItems.forEach(function(gid){
+        var data={action:action};
+        if(action==='reject'){
+            data.rejectReason='AI智能审批：综合质量得分不达标，建议驳回并要求重新上传';
+        }
+        fetch(api+'/api/approve-group/'+encodeURIComponent(gid),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
+        .then(function(r){return r.json()})
+        .then(function(res){
+            completed++;
+            if(res.error)failed++;
+            if(completed===total){
+                toast('批量'+actionName+'完成'+(failed?'，'+failed+'项失败':''),'success');
+                agentSelectedItems=[];
+                delete agentCache['material'];
+                loadAgentPreview('material');
+                loadAllMaterials();
+                if(window.parent&&window.parent!==window){window.parent.postMessage({type:'badgeUpdate',source:'materials'},'*')}
+            }
+        })
+        .catch(function(){completed++;failed++;if(completed===total){toast('批量操作部分失败','error');agentSelectedItems=[];delete agentCache['material'];loadAgentPreview('material');loadAllMaterials()}});
+    });
+}
+
+function renderAgentPreview(type,data){
+    var c=document.getElementById('agentContent');
+    var allItems=data.items||[];
+    if(!allItems.length){c.innerHTML='<div style="opacity:0.8;text-align:center;padding:20px">当前没有待审批项目</div>';document.getElementById('agentFilterBar').style.display='none';document.getElementById('agentBatchBar').style.display='none';return}
+    document.getElementById('agentFilterBar').style.display='flex';
+    document.getElementById('agentBatchBar').style.display='flex';
+    var items=getFilteredSortedItems(allItems);
+    var recMap={'approve':'✅ 建议通过','reject':'❌ 建议驳回'};
+    var h='<div class="agent-summary">'+esc(data.summary)+'</div>';
+    var autoCount=allItems.filter(function(it){return it.auto_approvable}).length;
+    h+='<div class="agent-actions">';
+    h+='<button class="agent-btn agent-btn-primary" onclick="loadAgentPreview(\''+type+'\')">🔄 重新分析</button>';
+    if(autoCount>0){
+        h+='<button class="agent-btn agent-btn-primary" onclick="agentAutoApprove(\''+type+'\')">⚡ 一键自动通过 ('+autoCount+'项)</button>';
+    }
+    h+='</div>';
+    items.forEach(function(item,idx){
+        var rec=item.recommendation||'reject';
+        var relevanceScore=item.relevance_score||0;
+        var starRating=item.star_rating||0;
+        var starScore=item.star_score||0;
+        var combinedScore=item.combined_score||0;
+        var relColor=relevanceScore>=70?'#43e97b':(relevanceScore>=50?'#ffc107':'#f5576c');
+        var starColor=starRating>=4?'#43e97b':(starRating>=3?'#ffc107':'#f5576c');
+        var combinedColor=combinedScore>=60?'#43e97b':'#f5576c';
+        var isSelected=agentSelectedItems.indexOf(item.group_id)>=0;
+        h+='<div class="agent-item">';
+        h+='<div class="ai-header"><div style="display:flex;align-items:center;gap:6px"><input type="checkbox" class="ai-cb" '+(isSelected?'checked':'')+' onchange="agentToggleItem(\''+esc(item.group_id)+'\')" /><div class="ai-title">';
+        h+=esc(item.club_name||'')+' - '+(item.description||'无描述').substring(0,30);
+        h+='</div></div>';
+        h+='<span class="agent-badge '+rec+'">'+recMap[rec]+'</span></div>';
+        h+='<div class="agent-score-detail">';
+        h+='<div class="agent-score-item"><div class="score-label">相关度 <span class="score-weight">(70%)</span></div><div class="score-value" style="color:'+relColor+'">'+relevanceScore+'<span style="font-size:0.6em;opacity:0.6">分</span></div><div class="agent-score-bar"><div class="agent-score-fill" style="width:'+relevanceScore+'%;background:'+relColor+'"></div></div></div>';
+        h+='<div class="agent-score-item"><div class="score-label">星级 <span class="score-weight">(30%)</span></div><div class="score-value" style="color:'+starColor+'">'+starRating+'星 <span style="font-size:0.6em;opacity:0.6">('+starScore+'分)</span></div><div class="agent-score-bar"><div class="agent-score-fill" style="width:'+starScore+'%;background:'+starColor+'"></div></div></div>';
+        h+='</div>';
+        h+='<div class="agent-combined-score"><div class="combined-label">综合质量得分</div><div class="combined-value" style="color:'+combinedColor+'">'+combinedScore+'<span style="font-size:0.5em">/100</span></div></div>';
+        if(item.approval_reason){
+            h+='<div class="agent-approval-reason">💡 '+esc(item.approval_reason)+'</div>';
+        }
+        if(item.reasons&&item.reasons.length){
+            h+='<div class="ai-reasons" style="margin-top:6px">📊 '+item.reasons.map(esc).join('；')+'</div>';
+        }
+        if(item.risk_flags&&item.risk_flags.length){
+            h+='<div class="ai-risks">⚠️ '+item.risk_flags.map(esc).join('；')+'</div>';
+        }
+        h+='<div style="margin-top:8px;display:flex;gap:8px;align-items:center">';
+        var itemId=item.group_id||item.id;
+        h+='<button class="agent-detail-btn" onclick="showAgentDetail(\''+type+'\',\''+itemId+'\')">🔍 深度分析</button>';
+        if(item.auto_approvable){
+            h+='<span style="font-size:0.72em;opacity:0.8">⚡ 可自动通过</span>';
+        }
+        h+='</div>';
+        h+='</div>';
+    });
+    c.innerHTML=h;
+    updateAgentBatchInfo();
+}
+
+function showAgentDetail(type,itemId){
+    var body=document.getElementById('agentDetailBody');
+    body.innerHTML='<div class="agent-loading">正在进行深度分析...</div>';
+    document.getElementById('agentDetailModal').classList.add('show');
+    fetch(api+'/api/agent/approval-analyze/'+type+'/'+encodeURIComponent(itemId))
+    .then(function(r){return r.json()})
+    .then(function(res){
+        if(!res.success){body.innerHTML='分析失败：'+esc(res.error||'未知错误');return}
+        var rule=res.data.rule_based;
+        var ai=res.data.ai_analysis;
+        var h='';
+        if(rule){
+            var recMap={'approve':'✅ 建议通过','reject':'❌ 建议驳回'};
+            var relevanceScore=rule.relevance_score||0;
+            var starRating=rule.star_rating||0;
+            var starScore=rule.star_score||0;
+            var combinedScore=rule.combined_score||0;
+            var relColor=relevanceScore>=70?'#00b894':(relevanceScore>=50?'#ffc107':'#e74c3c');
+            var starColor=starRating>=4?'#00b894':(starRating>=3?'#ffc107':'#e74c3c');
+            var combinedColor=combinedScore>=60?'#00b894':'#e74c3c';
+            h+='<div style="margin-bottom:12px"><h4 style="font-size:0.9em;color:#667eea;margin-bottom:12px">📊 评分详情</h4>';
+            h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">';
+            h+='<div style="background:#f8f9ff;border-radius:10px;padding:12px;text-align:center"><div style="font-size:0.78em;color:#6b6d8a;margin-bottom:4px">相关度得分 <span style="font-size:0.7em;color:#a0a3bd">(权重70%)</span></div><div style="font-size:1.5em;font-weight:700;color:'+relColor+'">'+relevanceScore+'</div><div style="margin-top:6px;height:6px;border-radius:3px;background:#f0f0f8"><div style="height:100%;border-radius:3px;width:'+relevanceScore+'%;background:'+relColor+'"></div></div></div>';
+            h+='<div style="background:#f8f9ff;border-radius:10px;padding:12px;text-align:center"><div style="font-size:0.78em;color:#6b6d8a;margin-bottom:4px">星级得分 <span style="font-size:0.7em;color:#a0a3bd">(权重30%)</span></div><div style="font-size:1.5em;font-weight:700;color:'+starColor+'">'+starRating+'星 ('+starScore+'分)</div><div style="margin-top:6px;height:6px;border-radius:3px;background:#f0f0f8"><div style="height:100%;border-radius:3px;width:'+starScore+'%;background:'+starColor+'"></div></div></div>';
+            h+='</div>';
+            h+='<div style="background:linear-gradient(135deg,#667eea,#764ba2);border-radius:12px;padding:14px;text-align:center;color:#fff;margin-bottom:12px"><div style="font-size:0.82em;opacity:0.85;margin-bottom:4px">综合质量得分</div><div style="font-size:2em;font-weight:700">'+combinedScore+'<span style="font-size:0.45em;opacity:0.7">/100</span></div><div style="font-size:0.78em;opacity:0.8;margin-top:4px">= '+relevanceScore+' × 70% + '+starScore+' × 30%</div></div>';
+            h+='<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px"><span class="agent-badge '+rule.recommendation+'" style="color:#fff;font-size:0.85em;padding:5px 14px">'+recMap[rule.recommendation||'reject']+'</span><span style="font-size:0.82em;color:#a0a3bd">置信度 '+(rule.confidence||0)+'%</span></div>';
+            if(rule.approval_reason){
+                h+='<div style="background:rgba(102,126,234,0.08);border:1px solid rgba(102,126,234,0.15);border-radius:10px;padding:12px;margin-bottom:10px;font-size:0.85em;color:#4a4d6a;line-height:1.7">💡 '+esc(rule.approval_reason)+'</div>';
+            }
+            if(rule.reasons&&rule.reasons.length){
+                h+='<div style="font-size:0.85em;color:#4a4d6a;line-height:1.7;margin-bottom:6px">📊 相关度分析：<br/>'+rule.reasons.map(function(r){return '- '+esc(r)}).join('<br/>')+'</div>';
+            }
+            if(rule.risk_flags&&rule.risk_flags.length){
+                h+='<div style="font-size:0.85em;color:#e74c3c;line-height:1.7;margin-bottom:6px">⚠️ 风险提示：<br/>'+rule.risk_flags.map(function(r){return '- '+esc(r)}).join('<br/>')+'</div>';
+            }
+            if(rule.suggested_reject_reason){
+                h+='<div style="font-size:0.82em;color:#e74c3c;background:rgba(245,87,108,0.08);padding:8px 12px;border-radius:8px;margin-top:6px">建议驳回原因：'+esc(rule.suggested_reject_reason)+'</div>';
+            }
+            h+='</div>';
+        }
+        if(ai){
+            h+='<div class="agent-ai-box"><h4>AI 深度分析</h4>';
+            if(ai.analysis){
+                h+='<div style="margin-bottom:8px">'+esc(ai.analysis)+'</div>';
+            }
+            if(ai.suggestions&&ai.suggestions.length){
+                h+='<div style="margin-bottom:6px;font-weight:600">建议：</div>';
+                h+='<ul style="padding-left:18px;margin:0">'+ai.suggestions.map(function(s){return '<li style="margin-bottom:4px">'+esc(s)+'</li>'}).join('')+'</ul>';
+            }
+            if(ai.recommendation){
+                var recMap2={'approve':'✅ 建议通过','reject':'❌ 建议驳回'};
+                h+='<div style="margin-top:8px"><span style="font-size:0.82em;color:#667eea;font-weight:600">'+recMap2[ai.recommendation]+'</span> <span style="font-size:0.8em;color:#a0a3bd">置信度 '+(ai.confidence||0)+'%</span></div>';
+            }
+            h+='</div>';
+        }else if(rule){
+            h+='<div style="font-size:0.82em;color:#a0a3bd;text-align:center;padding:12px">AI 深度分析暂不可用</div>';
+        }
+        body.innerHTML=h;
+    })
+    .catch(function(e){body.innerHTML='分析失败：'+esc(e.message)});
+}
+
+function closeAgentDetail(){
+    document.getElementById('agentDetailModal').classList.remove('show');
+}
+document.getElementById('agentDetailModal').addEventListener('click',function(e){if(e.target===this)closeAgentDetail()});
+
+function agentAutoApprove(type){
+    var typeNames={'material':'材料','workload':'工作量','registration':'报名','finance_permission':'财务权限','offcampus':'校外活动'};
+    if(!confirm('确认自动通过所有符合条件的'+typeNames[type]+'？此操作不可撤销。'))return;
+    fetch(api+'/api/agent/auto-approve/'+type,{method:'POST'})
+    .then(function(r){return r.json()})
+    .then(function(res){
+        if(!res.success){toast(res.error||'自动审批失败','error');return}
+        toast(res.message||'自动审批完成','success');
+        delete agentCache[type];
+        loadAgentPreview(type);
+        loadAllMaterials();
+    })
+    .catch(function(){toast('自动审批请求失败','error')});
+}
+</script>
+<script src="/ai-chat.js?v=4"></script>
+</body>
+</html>

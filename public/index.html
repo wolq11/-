@@ -1,0 +1,813 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>社团活动管理系统</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.snow.css">
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.2/dist/quill.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Microsoft YaHei','PingFang SC',sans-serif;background:#f4f5fb;min-height:100vh;color:#1a1a2e;display:flex;flex-direction:column;align-items:center;padding:40px 20px 60px}
+.topbar{position:fixed;top:0;left:0;right:0;background:#fff;backdrop-filter:blur(10px);padding:12px 24px;display:flex;justify-content:space-between;align-items:center;z-index:100;border-bottom:1px solid #f0f0f8}
+.topbar .left{display:flex;align-items:center;gap:10px}
+.topbar .logo{font-size:1.1em;font-weight:700;background:linear-gradient(135deg,#667eea,#764ba2);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.topbar .right{display:flex;align-items:center;gap:16px}
+.topbar .user-info{font-size:0.85em;color:#6b6d8a}
+.topbar .user-info b{color:#667eea}
+.topbar .notif-btn{position:relative;background:#f0f0f8;border:1px solid #eee;color:#fff;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:0.85em;transition:all .2s}
+.topbar .notif-btn:hover{background:#eee}
+.topbar .notif-badge{position:absolute;top:-4px;right:-4px;background:#e74c3c;color:#fff;font-size:0.65em;padding:1px 5px;border-radius:8px;min-width:16px;text-align:center;display:none}
+.topbar .logout-btn{background:#fff5f5;border:1px solid #ffe0e0;color:#e74c3c;padding:6px 14px;border-radius:8px;cursor:pointer;font-size:0.82em;transition:all .2s}
+.topbar .logout-btn:hover{background:#ffe0e0}
+.spacer{height:40px}
+.header{text-align:center;margin-bottom:40px}
+.header h1{font-size:2em;background:linear-gradient(135deg,#667eea,#764ba2,#f093fb);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:8px;font-weight:700}
+.header p{color:rgba(255,255,255,0.4);font-size:0.9em}
+.modules{display:grid;grid-template-columns:repeat(3,1fr);gap:28px;max-width:960px;width:100%}
+@media(max-width:768px){.modules{grid-template-columns:1fr;gap:20px}body{padding:56px 10px 40px}.topbar{padding:8px 10px;flex-wrap:wrap;gap:6px}.topbar .right{gap:6px;flex-wrap:wrap}.topbar .user-info{display:none}.header h1{font-size:1.4em}.header{margin-bottom:24px}.notif-panel{right:0;left:0;width:100%;max-width:100%;border-radius:0 0 14px 14px}.modal-box{padding:16px 12px;width:95%;border-radius:12px;max-height:90vh}.ql-toolbar{overflow-x:auto}.admin-item .item-actions{opacity:1}#adminPanel>div:first-child{grid-template-columns:1fr!important}.modal-bg{overscroll-behavior:contain}.btn-primary,.btn-success,.btn-ghost{padding:12px 24px;min-height:40px}.btn-danger-sm,.btn-edit-sm{padding:6px 12px;min-height:32px}.form-group input[type="text"]{font-size:16px}.material-item{overflow:hidden;min-width:0}[style*="display:flex"][style*="justify-content:space-between"]{flex-wrap:wrap!important}[style*="min-width"]{min-width:0!important}.btn{white-space:normal;word-break:break-word}}
+@media(max-width:480px){body{padding:48px 8px 32px}.header h1{font-size:1.2em}.module{padding:24px 18px}.modal-box{width:96%;padding:14px 10px}}
+.module{background:rgba(255,255,255,0.04);border:1px solid #eee;border-radius:20px;padding:36px 28px;cursor:pointer;transition:all .35s;text-align:center;text-decoration:none;color:#fff;display:flex;flex-direction:column;align-items:center;gap:16px;position:relative;overflow:hidden}
+.module::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;border-radius:20px;opacity:0;transition:opacity .35s}
+.module:hover{transform:translateY(-6px);border-color:rgba(255,255,255,0.2)}
+.module:hover::before{opacity:1}
+.module:nth-child(1)::before{background:linear-gradient(135deg,rgba(102,126,234,0.1),rgba(118,75,162,0.1))}
+.module:nth-child(2)::before{background:linear-gradient(135deg,rgba(67,233,123,0.1),rgba(56,217,169,0.1))}
+.module:nth-child(3)::before{background:linear-gradient(135deg,rgba(240,147,251,0.1),#fff5f5)}
+.module:nth-child(1):hover{border-color:rgba(102,126,234,0.4);box-shadow:0 8px 32px rgba(102,126,234,0.15)}
+.module:nth-child(2):hover{border-color:rgba(96,218,136,0.4);box-shadow:0 8px 32px rgba(67,233,123,0.15)}
+.module:nth-child(3):hover{border-color:rgba(240,147,251,0.4);box-shadow:0 8px 32px rgba(240,147,251,0.15)}
+.module .icon{font-size:3em;position:relative;z-index:1}
+.module .title{font-size:1.15em;font-weight:600;position:relative;z-index:1}
+.module .desc{font-size:0.82em;color:rgba(255,255,255,0.4);line-height:1.6;position:relative;z-index:1}
+.module .tag{display:inline-block;padding:4px 12px;border-radius:20px;font-size:0.72em;font-weight:600;position:relative;z-index:1;margin-top:4px}
+.module:nth-child(1) .tag{background:rgba(102,126,234,0.15);color:#667eea}
+.module:nth-child(2) .tag{background:rgba(67,233,123,0.15);color:#5fc448}
+.module:nth-child(3) .tag{background:rgba(240,147,251,0.15);color:#f093fb}
+.footer{margin-top:60px;color:rgba(255,255,255,0.2);font-size:0.78em;text-align:center}
+.notif-panel{position:fixed;top:52px;right:16px;width:380px;max-height:500px;overflow-y:auto;background:rgba(30,30,46,0.98);border:1px solid #eee;border-radius:14px;box-shadow:0 8px 32px rgba(0,0,0,0.5);z-index:200;display:none;padding:12px}
+.notif-panel h4{font-size:0.88em;color:#6b6d8a;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #eee}
+.notif-item{padding:10px;border-radius:8px;margin-bottom:6px;cursor:pointer;transition:background .2s}
+.notif-item:hover{background:rgba(255,255,255,0.04)}
+.notif-item.unread{border-left:3px solid #667eea}
+.notif-item .ni-title{font-size:0.85em;font-weight:600;margin-bottom:3px;color:#fff}
+.notif-item .ni-content{font-size:0.78em;color:rgba(255,255,255,0.5);line-height:1.4}
+.notif-item .ni-time{font-size:0.7em;color:rgba(255,255,255,0.25);margin-top:4px}
+.notif-empty{text-align:center;padding:20px;color:rgba(255,255,255,0.25);font-size:0.85em}
+.modal-bg{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:10001;display:none;justify-content:center;align-items:center}
+.modal-bg.show{display:flex}
+.modal-box{background:#fff;border-radius:16px;padding:24px;width:90%;max-width:600px;max-height:85vh;overflow-y:auto;color:#1a1a2e}
+.modal-box h3{font-size:1em;margin-bottom:16px;color:#1a1a2e}
+.form-group{margin-bottom:14px}
+.form-group label{display:block;color:#6b6d8a;font-size:0.82em;margin-bottom:6px}
+.form-group input[type="text"],.form-group input[type="file"]{width:100%;padding:10px 14px;border-radius:10px;border:1px solid #e0e0e8;background:#fafaff;color:#1a1a2e;font-size:0.88em;outline:none}
+.form-group input:focus{border-color:#667eea}
+.ql-container{min-height:120px;font-size:0.88em;font-family:'Microsoft YaHei','PingFang SC',sans-serif}
+.ql-toolbar{border-radius:10px 10px 0 0!important;border:1px solid #e0e0e8!important}
+.ql-container.ql-snow{border-radius:0 0 10px 10px!important;border:1px solid #e0e0e8!important}
+.ql-editor{min-height:120px}
+.btn-row{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
+.btn-primary{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;padding:8px 20px;border-radius:8px;border:none;font-size:0.85em;cursor:pointer;font-weight:600}
+.btn-ghost{background:#f0f0f8;color:#6b6d8a;padding:8px 20px;border-radius:8px;border:none;font-size:0.85em;cursor:pointer}
+.btn-success{background:linear-gradient(135deg,#43e97b,#38d9a9);color:#0f0c29;padding:8px 20px;border-radius:8px;border:none;font-size:0.85em;cursor:pointer;font-weight:600}
+.btn-danger-sm{background:#fff5f5;color:#e74c3c;border:1px solid #ffe0e0;padding:3px 8px;border-radius:6px;font-size:0.72em;cursor:pointer}
+.btn-edit-sm{background:rgba(102,126,234,0.1);color:#667eea;border:1px solid rgba(102,126,234,0.2);padding:3px 8px;border-radius:6px;font-size:0.72em;cursor:pointer}
+.admin-item{padding:10px;border-bottom:1px solid #f0f0f8;display:flex;justify-content:space-between;align-items:flex-start;gap:10px;cursor:pointer;transition:background .15s}
+.admin-item:hover{background:#f5f5ff;border-radius:8px}
+.admin-item .item-body{flex:1;min-width:0}
+.admin-item .item-title{font-size:0.88em;font-weight:600;color:#667eea}
+.admin-item .item-desc{font-size:0.78em;color:#6b6d8a;margin-top:3px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.admin-item .item-time{font-size:0.7em;color:#a0a3bd;margin-top:3px}
+.admin-item .item-actions{display:flex;gap:4px;flex-shrink:0;opacity:0;transition:opacity .15s}
+.admin-item:hover .item-actions{opacity:1}
+.top-tag{background:rgba(245,87,108,0.15);color:#e74c3c;padding:1px 6px;border-radius:4px;font-size:0.65em;margin-right:4px}
+.detail-modal .detail-title{font-size:1.1em;font-weight:700;color:#1a1a2e;margin-bottom:12px}
+.detail-modal .detail-content{font-size:0.88em;color:#4a4d6a;line-height:1.8;margin-bottom:16px}
+.detail-modal .detail-content img{max-width:100%;border-radius:8px;margin:8px 0}
+.detail-modal .detail-meta{font-size:0.78em;color:#a0a3bd;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.detail-modal .detail-attachment{margin-top:10px}
+.detail-modal .detail-attachment a{color:#667eea;text-decoration:none;font-size:0.82em}
+.material-item{padding:10px;border-bottom:1px solid #f0f0f8;display:flex;align-items:center;gap:10px;cursor:pointer;transition:background .15s}
+.material-item:hover{background:#f5f5ff;border-radius:8px}
+.material-item .mi-icon{font-size:1.2em;flex-shrink:0}
+.material-item .mi-info{flex:1;min-width:0}
+.material-item .mi-name{font-size:0.85em;font-weight:600;color:#1a1a2e}
+.material-item .mi-desc{font-size:0.75em;color:#6b6d8a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.material-item .mi-club{font-size:0.7em;color:#667eea;margin-top:2px}
+</style>
+</head>
+<body>
+<div class="topbar">
+    <div class="left"><span class="logo">🎓 社团活动管理系统</span></div>
+    <div class="right">
+        <button class="notif-btn" id="notifBtn">🔔 通知 <span class="notif-badge" id="notifBadge">0</span></button>
+        <span class="user-info" id="userInfo"></span>
+        <button class="logout-btn" onclick="window.location.href='/dashboard.html'" style="background:rgba(102,126,234,0.1);border-color:rgba(102,126,234,0.2);color:#667eea;margin-right:8px">🏠 主页</button>
+        <button class="logout-btn" id="logoutBtn">退出</button>
+    </div>
+</div>
+<div class="notif-panel" id="notifPanel">
+    <h4>通知消息</h4>
+    <div id="notifList"></div>
+</div>
+<div class="spacer"></div>
+<div class="header">
+    <h1>🎓 社团活动管理系统</h1>
+    <p id="welcomeText">Club Activity Management System</p>
+</div>
+<div class="modules" id="modules">
+    <a class="module" id="moduleStats" href="/stats.html">
+        <div class="icon">📊</div>
+        <div class="title" id="statsTitle">社团活动统计分析</div>
+        <div class="desc" id="statsDesc">上传社团活动记录和指导老师记录，自动统计分析生成报表，支持导出Excel</div>
+        <div class="tag" id="statsTag">数据统计</div>
+    </a>
+    <a class="module" href="/upload.html">
+        <div class="icon">📁</div>
+        <div class="title">活动开展材料统计</div>
+        <div class="desc">社团负责人上传活动开展材料，包含活动照片和活动总结（主标题+正文）</div>
+        <div class="tag">材料上传</div>
+    </a>
+    <a class="module" href="/feedback.html">
+        <div class="icon">💬</div>
+        <div class="title">问题反馈</div>
+        <div class="desc">线上系统问题反馈，每个社团独立板块，可提交社团活动相关问题</div>
+        <div class="tag">问题反馈</div>
+    </a>
+</div>
+<div id="adminPanel" style="display:none;max-width:960px;width:100%;margin-top:40px">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+        <div style="background:#fafaff;border:1px solid #eee;border-radius:16px;padding:20px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+                <h3 style="font-size:0.95em;color:#1a1a2e">📢 通告管理</h3>
+                <button onclick="showAddNotice()" style="background:rgba(102,126,234,0.15);color:#667eea;border:1px solid rgba(102,126,234,0.3);padding:5px 12px;border-radius:8px;font-size:0.78em;cursor:pointer;font-weight:600">+ 添加通告</button>
+            </div>
+            <div id="adminNotices" style="max-height:400px;overflow-y:auto"></div>
+        </div>
+        <div style="background:#fafaff;border:1px solid #eee;border-radius:16px;padding:20px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+                <h3 style="font-size:0.95em;color:#1a1a2e">🌟 社团风采管理</h3>
+                <div style="display:flex;gap:6px">
+                    <button onclick="showAddShowcase()" style="background:rgba(67,233,123,0.15);color:#43e97b;border:1px solid rgba(67,233,123,0.3);padding:5px 12px;border-radius:8px;font-size:0.78em;cursor:pointer;font-weight:600">+ 手动添加</button>
+                    <button onclick="showMaterialShowcase()" style="background:rgba(102,126,234,0.15);color:#667eea;border:1px solid rgba(102,126,234,0.3);padding:5px 12px;border-radius:8px;font-size:0.78em;cursor:pointer;font-weight:600">📁 从材料添加</button>
+                </div>
+            </div>
+            <div id="adminShowcase" style="max-height:400px;overflow-y:auto"></div>
+        </div>
+    </div>
+    <div style="background:#fafaff;border:1px solid #eee;border-radius:16px;padding:20px;margin-top:24px">
+        <h3 style="font-size:0.95em;color:#1a1a2e;margin-bottom:14px">🌳 树洞管理</h3>
+        <div id="adminTreeHole" style="max-height:400px;overflow-y:auto"></div>
+    </div>
+</div>
+
+<div class="modal-bg" id="noticeModal">
+    <div class="modal-box">
+        <h3 id="noticeModalTitle">📢 添加通告</h3>
+        <input type="hidden" id="noticeEditId" value="" />
+        <div class="form-group"><label>通告标题 *</label><input type="text" id="noticeTitle" placeholder="请输入通告标题" /></div>
+        <div class="form-group"><label>通告内容</label><div id="noticeEditor"></div></div>
+        <div class="form-group"><label>附件（表格等）</label><input type="file" id="noticeAttachment" /></div>
+        <div style="margin-bottom:14px"><label style="display:flex;align-items:center;gap:8px;color:#6b6d8a;font-size:0.82em;cursor:pointer"><input type="checkbox" id="noticeTop" /> 置顶</label></div>
+        <div class="btn-row"><button class="btn-primary" onclick="submitNotice()">发布</button><button class="btn-ghost" onclick="closeModal('noticeModal')">取消</button></div>
+    </div>
+</div>
+
+<div class="modal-bg" id="showcaseModal">
+    <div class="modal-box" style="max-width:680px">
+        <h3 id="showcaseModalTitle">🌟 添加社团风采</h3>
+        <input type="hidden" id="scEditId" value="" />
+        <div class="form-group"><label>社团名称 *</label><input type="text" id="scClubName" placeholder="请输入社团名称" /></div>
+        <div class="form-group"><label>风采描述</label><div id="scEditor"></div></div>
+        <div class="form-group"><label>风采图片</label><input type="file" id="scImage" accept="image/*" onchange="onShowcaseImageSelected(this)" /></div>
+        <div id="scCurrentImage" style="display:none;margin-bottom:10px"></div>
+        <div id="scCropArea" style="display:none;margin-bottom:14px">
+            <div style="font-size:0.82em;color:#6b6d8a;margin-bottom:8px">✂️ 调整图片裁剪区域（轮播图推荐比例 16:9）</div>
+            <div style="position:relative;display:inline-block;background:#f0f0f8;border-radius:8px;overflow:hidden;max-width:100%">
+                <canvas id="scCropCanvas" style="display:block;max-width:100%;cursor:move"></canvas>
+                <div id="scCropOverlay" style="position:absolute;border:2px dashed #667eea;box-shadow:0 0 0 9999px rgba(0,0,0,0.45);pointer-events:none"></div>
+            </div>
+            <div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
+                <button type="button" style="padding:4px 12px;border-radius:6px;border:1px solid #eee;background:#fafaff;font-size:0.78em;cursor:pointer;color:#6b6d8a" onclick="scCropReset()">重置</button>
+                <button type="button" style="padding:4px 12px;border-radius:6px;border:1px solid rgba(102,126,234,0.2);background:rgba(102,126,234,0.06);font-size:0.78em;cursor:pointer;color:#667eea;font-weight:600" onclick="scCropFit16x9()">适应 16:9</button>
+                <button type="button" style="padding:4px 12px;border-radius:6px;border:1px solid rgba(0,184,148,0.2);background:rgba(0,184,148,0.06);font-size:0.78em;cursor:pointer;color:#00b894;font-weight:600" onclick="scCropFit4x3()">适应 4:3</button>
+                <span style="font-size:0.72em;color:#a0a3bd;margin-left:auto" id="scCropSize"></span>
+            </div>
+        </div>
+        <div class="btn-row"><button class="btn-success" onclick="submitShowcase()">保存</button><button class="btn-ghost" onclick="closeModal('showcaseModal')">取消</button></div>
+    </div>
+</div>
+
+<div class="modal-bg" id="detailModal">
+    <div class="modal-box detail-modal" id="detailContent"></div>
+</div>
+
+<div class="modal-bg" id="materialModal">
+    <div class="modal-box">
+        <h3>📁 从已有材料添加风采</h3>
+        <p style="font-size:0.82em;color:#6b6d8a;margin-bottom:14px">选择已审核通过的活动材料，一键生成社团风采</p>
+        <div id="materialList" style="max-height:400px;overflow-y:auto"></div>
+        <div class="btn-row"><button class="btn-ghost" onclick="closeModal('materialModal')">关闭</button></div>
+    </div>
+</div>
+
+<div class="footer">社团活动管理系统 © 2026</div>
+<script>
+var api=window.location.origin;
+var currentUser=null;
+var noticeQuill=null;
+var scQuill=null;
+
+function initQuills(){
+    noticeQuill=new Quill('#noticeEditor',{theme:'snow',placeholder:'请输入通告内容...',modules:{toolbar:[['bold','italic','underline','strike'],['blockquote','code-block'],[{'list':'ordered'},{'list':'bullet'}],['link','image'],['clean']]}});
+    scQuill=new Quill('#scEditor',{theme:'snow',placeholder:'请输入风采描述...',modules:{toolbar:[['bold','italic','underline','strike'],['blockquote','code-block'],[{'list':'ordered'},{'list':'bullet'}],['link','image'],['clean']]}});
+}
+
+fetch(api+'/api/current-user').then(function(r){return r.json()}).then(function(res){
+    if(!res.loggedIn){window.location.replace('/login.html');return}
+    currentUser=res.user;
+    var pages={admin:'/dashboard.html',user:'/dashboard.html',teacher:'/club-teacher.html',student:'/dashboard.html'};
+    window.location.replace(pages[currentUser.role]||'/dashboard.html');
+}).catch(function(){window.location.replace('/login.html')});
+
+document.getElementById('logoutBtn').addEventListener('click',function(){
+    fetch(api+'/api/logout',{method:'POST'}).then(function(){window.location.replace('/login.html')});
+});
+
+var notifOpen=false;
+document.getElementById('notifBtn').addEventListener('click',function(){
+    notifOpen=!notifOpen;
+    document.getElementById('notifPanel').style.display=notifOpen?'block':'none';
+    if(notifOpen)loadNotifications();
+});
+document.addEventListener('click',function(e){
+    if(!document.getElementById('notifPanel').contains(e.target)&&e.target!==document.getElementById('notifBtn')){
+        notifOpen=false;document.getElementById('notifPanel').style.display='none';
+    }
+});
+
+function loadNotifications(){
+    fetch(api+'/api/notifications').then(function(r){return r.json()}).then(function(res){
+        if(!res.success)return;
+        var badge=document.getElementById('notifBadge');
+        if(res.unread>0){badge.textContent=res.unread;badge.style.display='inline'}
+        else{badge.style.display='none'}
+        var c=document.getElementById('notifList');
+        if(!res.notifications.length){c.innerHTML='<div class="notif-empty">暂无通知</div>';return}
+        var h='';
+        res.notifications.forEach(function(n){
+            h+='<div class="notif-item'+(n.isRead?'':' unread')+'" onclick="viewNoticeDetail('+n.id+')">';
+            h+='<div class="ni-title">'+esc(n.title)+'</div>';
+            if(n.content)h+='<div class="ni-content">'+escHtml(n.content.replace(/<[^>]*>/g,'').substring(0,60))+'</div>';
+            h+='<div class="ni-time">'+n.time+'</div></div>';
+        });
+        c.innerHTML=h;
+    });
+}
+
+function viewNoticeDetail(id){
+    fetch(api+'/api/notices').then(function(r){return r.json()}).then(function(res){
+        if(!res.success)return;
+        var n=res.data.find(function(x){return String(x.id)===String(id)});
+        if(!n)return;
+        fetch(api+'/api/notifications/'+id+'/read',{method:'POST'});
+        loadNotifications();
+        var h='<div class="detail-title">'+(n.isTop?'<span class="top-tag">置顶</span>':'')+esc(n.title)+'</div>';
+        h+='<div class="detail-content">'+safeHtml(n.content)+'</div>';
+        h+='<div class="detail-meta"><span>'+n.time+'</span>';
+        if(n.attachmentName)h+='<span class="detail-attachment"><a href="'+api+'/api/notice-file/'+n.id+'" target="_blank">📎 '+esc(n.attachmentName)+'</a></span>';
+        h+='</div>';
+        h+='<div class="btn-row"><button class="btn-ghost" onclick="closeModal(\'detailModal\')">关闭</button></div>';
+        document.getElementById('detailContent').innerHTML=h;
+        document.getElementById('detailModal').classList.add('show');
+    });
+}
+
+function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML}
+function escHtml(s){if(!s)return '';return esc(s).replace(/\n/g,'<br>')}
+function safeHtml(h){if(!h)return '';var d=document.createElement('div');d.innerHTML=h;var scripts=d.querySelectorAll('script,iframe,object,embed,form');for(var i=0;i<scripts.length;i++){scripts[i].remove()}var attrs=d.querySelectorAll('[onclick],[onerror],[onload],[onmouseover]');for(var i=0;i<attrs.length;i++){attrs[i].removeAttribute('onclick');attrs[i].removeAttribute('onerror');attrs[i].removeAttribute('onload');attrs[i].removeAttribute('onmouseover')}return d.innerHTML}
+
+function loadAdminNotices(){
+    fetch(api+'/api/notices').then(function(r){return r.json()}).then(function(res){
+        if(!res.success)return;
+        var c=document.getElementById('adminNotices');
+        if(!res.data.length){c.innerHTML='<div style="text-align:center;padding:16px;color:#a0a3bd;font-size:0.85em">暂无通告</div>';return}
+        var h='';
+        res.data.forEach(function(n){
+            h+='<div class="admin-item" onclick="viewNoticeDetail('+n.id+')">';
+            h+='<div class="item-body">';
+            h+='<div class="item-title">'+(n.isTop?'<span class="top-tag">置顶</span>':'')+esc(n.title)+'</div>';
+            if(n.content)h+='<div class="item-desc">'+esc(n.content.replace(/<[^>]*>/g,'').substring(0,80))+'</div>';
+            if(n.attachmentName)h+='<div style="margin-top:3px"><a href="'+api+'/api/notice-file/'+n.id+'" target="_blank" onclick="event.stopPropagation()" style="color:#667eea;font-size:0.75em;text-decoration:none">📎 '+esc(n.attachmentName)+'</a></div>';
+            h+='<div class="item-time">'+n.time+'</div>';
+            h+='</div>';
+            h+='<div class="item-actions">';
+            h+='<button class="btn-edit-sm" onclick="event.stopPropagation();editNotice('+n.id+')">编辑</button>';
+            h+='<button class="btn-danger-sm" onclick="event.stopPropagation();deleteNotice('+n.id+')">删除</button>';
+            h+='</div></div>';
+        });
+        c.innerHTML=h;
+    });
+}
+
+function loadAdminShowcase(){
+    fetch(api+'/api/showcase').then(function(r){return r.json()}).then(function(res){
+        if(!res.success)return;
+        var c=document.getElementById('adminShowcase');
+        if(!res.data.length){c.innerHTML='<div style="text-align:center;padding:16px;color:#a0a3bd;font-size:0.85em">暂无风采</div>';return}
+        var h='';
+        res.data.forEach(function(s){
+            h+='<div class="admin-item" onclick="viewShowcaseDetail('+s.id+')">';
+            if(s.imageUrl)h+='<img src="'+api+s.imageUrl+'" style="width:44px;height:44px;object-fit:cover;border-radius:8px;flex-shrink:0;cursor:pointer" />';
+            else h+='<div style="width:44px;height:44px;background:rgba(102,126,234,0.1);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:1.2em">🎓</div>';
+            h+='<div class="item-body">';
+            h+='<div class="item-title" style="color:#43e97b">'+esc(s.clubName)+'</div>';
+            if(s.description)h+='<div class="item-desc">'+escHtml(s.description.replace(/<[^>]*>/g,'').substring(0,80))+'</div>';
+            h+='<div class="item-time">'+s.time+'</div>';
+            h+='</div>';
+            h+='<div class="item-actions">';
+            h+='<button class="btn-edit-sm" onclick="event.stopPropagation();editShowcase('+s.id+')">编辑</button>';
+            h+='<button class="btn-danger-sm" onclick="event.stopPropagation();deleteShowcase('+s.id+')">删除</button>';
+            h+='</div></div>';
+        });
+        c.innerHTML=h;
+    });
+}
+
+function showAddNotice(){
+    document.getElementById('noticeEditId').value='';
+    document.getElementById('noticeTitle').value='';
+    document.getElementById('noticeTop').checked=false;
+    document.getElementById('noticeModalTitle').textContent='📢 添加通告';
+    if(noticeQuill)noticeQuill.setContents([]);
+    document.getElementById('noticeModal').classList.add('show');
+}
+
+function editNotice(id){
+    fetch(api+'/api/notices').then(function(r){return r.json()}).then(function(res){
+        if(!res.success)return;
+        var n=res.data.find(function(x){return String(x.id)===String(id)});
+        if(!n)return;
+        document.getElementById('noticeEditId').value=id;
+        document.getElementById('noticeTitle').value=n.title;
+        document.getElementById('noticeTop').checked=!!n.isTop;
+        document.getElementById('noticeModalTitle').textContent='✏️ 编辑通告';
+        if(noticeQuill){
+            noticeQuill.root.innerHTML=n.content||'';
+        }
+        document.getElementById('noticeModal').classList.add('show');
+    });
+}
+
+function submitNotice(){
+    var title=document.getElementById('noticeTitle').value.trim();
+    var content=noticeQuill?noticeQuill.root.innerHTML:'';
+    var isTop=document.getElementById('noticeTop').checked;
+    var editId=document.getElementById('noticeEditId').value;
+    if(!title){alert('请输入通告标题');return}
+    if(editId){
+        fetch(api+'/api/notices/'+editId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({title:title,content:content,isTop:isTop})})
+        .then(function(r){return r.json()}).then(function(res){
+            if(res.error){alert(res.error);return}
+            closeModal('noticeModal');loadAdminNotices();
+        });
+    }else{
+        var fd=new FormData();
+        fd.append('title',title);fd.append('content',content);
+        if(isTop)fd.append('isTop','1');
+        var attInput=document.getElementById('noticeAttachment');
+        if(attInput.files.length)fd.append('attachment',attInput.files[0]);
+        fetch(api+'/api/notices',{method:'POST',body:fd})
+        .then(function(r){return r.json()}).then(function(res){
+            if(res.error){alert(res.error);return}
+            closeModal('noticeModal');loadAdminNotices();
+        });
+    }
+}
+
+var scCropState={img:null,naturalW:0,naturalH:0,canvasW:0,canvasH:0,scale:1,cropX:0,cropY:0,cropW:0,cropH:0,dragging:false,dragType:'',dragStartX:0,dragStartY:0,startCropX:0,startCropY:0,startCropW:0,startCropH:0};
+var scCroppedBlob=null;
+
+function onShowcaseImageSelected(input){
+    scCroppedBlob=null;
+    if(!input.files||!input.files[0]){document.getElementById('scCropArea').style.display='none';return}
+    var file=input.files[0];
+    if(!file.type.startsWith('image/')){document.getElementById('scCropArea').style.display='none';return}
+    var reader=new FileReader();
+    reader.onload=function(e){
+        var img=new Image();
+        img.onload=function(){
+            scCropState.img=img;
+            scCropState.naturalW=img.naturalWidth;
+            scCropState.naturalH=img.naturalHeight;
+            var maxW=600;
+            var scale=Math.min(maxW/img.naturalWidth,1);
+            scCropState.scale=scale;
+            scCropState.canvasW=Math.round(img.naturalWidth*scale);
+            scCropState.canvasH=Math.round(img.naturalHeight*scale);
+            var canvas=document.getElementById('scCropCanvas');
+            canvas.width=scCropState.canvasW;
+            canvas.height=scCropState.canvasH;
+            var ctx=canvas.getContext('2d');
+            ctx.drawImage(img,0,0,scCropState.canvasW,scCropState.canvasH);
+            scCropState.cropX=0;scCropState.cropY=0;
+            scCropState.cropW=scCropState.canvasW;scCropState.cropH=scCropState.canvasH;
+            scCropUpdateOverlay();
+            document.getElementById('scCropArea').style.display='block';
+            document.getElementById('scCurrentImage').style.display='none';
+        };
+        img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
+function scCropUpdateOverlay(){
+    var overlay=document.getElementById('scCropOverlay');
+    overlay.style.left=scCropState.cropX+'px';
+    overlay.style.top=scCropState.cropY+'px';
+    overlay.style.width=scCropState.cropW+'px';
+    overlay.style.height=scCropState.cropH+'px';
+    var realW=Math.round(scCropState.cropW/scCropState.scale);
+    var realH=Math.round(scCropState.cropH/scCropState.scale);
+    document.getElementById('scCropSize').textContent=realW+' × '+realH+' px';
+}
+
+function scCropReset(){
+    if(!scCropState.img)return;
+    scCropState.cropX=0;scCropState.cropY=0;
+    scCropState.cropW=scCropState.canvasW;scCropState.cropH=scCropState.canvasH;
+    scCropUpdateOverlay();
+}
+
+function scCropFit16x9(){scCropFitRatio(16/9)}
+function scCropFit4x3(){scCropFitRatio(4/3)}
+
+function scCropFitRatio(ratio){
+    if(!scCropState.img)return;
+    var cw=scCropState.canvasW,ch=scCropState.canvasH;
+    var fitW,fitH;
+    if(cw/ch>ratio){fitH=ch;fitW=Math.round(ch*ratio)}
+    else{fitW=cw;fitH=Math.round(cw/ratio)}
+    scCropState.cropW=fitW;scCropState.cropH=fitH;
+    scCropState.cropX=Math.round((cw-fitW)/2);
+    scCropState.cropY=Math.round((ch-fitH)/2);
+    scCropUpdateOverlay();
+}
+
+function scCropGetCroppedBlob(callback){
+    if(!scCropState.img){callback(null);return}
+    var s=scCropState.scale;
+    var sx=Math.round(scCropState.cropX/s);
+    var sy=Math.round(scCropState.cropY/s);
+    var sw=Math.round(scCropState.cropW/s);
+    var sh=Math.round(scCropState.cropH/s);
+    sx=Math.max(0,sx);sy=Math.max(0,sy);
+    sw=Math.min(sw,scCropState.naturalW-sx);
+    sh=Math.min(sh,scCropState.naturalH-sy);
+    var tc=document.createElement('canvas');
+    tc.width=sw;tc.height=sh;
+    var tctx=tc.getContext('2d');
+    tctx.drawImage(scCropState.img,sx,sy,sw,sh,0,0,sw,sh);
+    tc.toBlob(function(blob){callback(blob)},'image/jpeg',0.92);
+}
+
+(function(){
+    var canvas=document.getElementById('scCropCanvas');
+    if(!canvas)return;
+    var overlay=document.getElementById('scCropOverlay');
+    var dragging=false;
+    var dragType='';
+    var startX=0,startY=0;
+    var startCX=0,startCY=0,startCW=0,startCH=0;
+    var HANDLE=10;
+
+    function getPos(e){
+        var rect=canvas.getBoundingClientRect();
+        var x=(e.clientX||e.touches[0].clientX)-rect.left;
+        var y=(e.clientY||e.touches[0].clientY)-rect.top;
+        return {x:x,y:y};
+    }
+
+    function getZone(x,y){
+        var s=scCropState;
+        var cx=s.cropX,cy=s.cropY,cw=s.cropW,ch=s.cropH;
+        if(x>=cx-cw*0.1&&x<=cx+cw*0.1&&y>=cy-HANDLE&&y<=cy+HANDLE)return 'tl';
+        if(x>=cx+cw*0.4&&x<=cx+cw*0.6&&y>=cy-HANDLE&&y<=cy+HANDLE)return 't';
+        if(x>=cx+cw*0.9-cw*0.1&&x<=cx+cw*0.9+cw*0.1&&y>=cy-HANDLE&&y<=cy+HANDLE)return 'tr';
+        if(x>=cx+cw-HANDLE&&x<=cx+cw+HANDLE&&y>=cy+ch*0.4&&y<=cy+ch*0.6)return 'r';
+        if(x>=cx+cw-HANDLE&&x<=cx+cw+HANDLE&&y>=cy+ch*0.9-HANDLE&&y<=cy+ch*0.9+HANDLE)return 'br';
+        if(x>=cx+cw*0.4&&x<=cx+cw*0.6&&y>=cy+ch-HANDLE&&y<=cy+ch+HANDLE)return 'b';
+        if(x>=cx-HANDLE&&x<=cx+HANDLE&&y>=cy+ch*0.9-HANDLE&&y<=cy+ch*0.9+HANDLE)return 'bl';
+        if(x>=cx-HANDLE&&x<=cx+HANDLE&&y>=cy+ch*0.4&&y<=cy+ch*0.6)return 'l';
+        if(x>=cx&&x<=cx+cw&&y>=cy&&y<=cy+ch)return 'move';
+        return '';
+    }
+
+    function onDown(e){
+        e.preventDefault();
+        var p=getPos(e);
+        var zone=getZone(p.x,p.y);
+        if(!zone)return;
+        dragging=true;dragType=zone;
+        startX=p.x;startY=p.y;
+        startCX=scCropState.cropX;startCY=scCropState.cropY;
+        startCW=scCropState.cropW;startCH=scCropState.cropH;
+    }
+
+    function onMove(e){
+        if(!dragging)return;
+        e.preventDefault();
+        var p=getPos(e);
+        var dx=p.x-startX,dy=p.y-startY;
+        var s=scCropState;
+        var minSize=30;
+        if(dragType==='move'){
+            s.cropX=Math.max(0,Math.min(s.canvasW-s.cropW,startCX+dx));
+            s.cropY=Math.max(0,Math.min(s.canvasH-s.cropH,startCY+dy));
+        }else{
+            var nx=startCX,ny=startCY,nw=startCW,nh=startCH;
+            if(dragType.indexOf('l')>=0){nx=startCX+dx;nw=startCW-dx;if(nw<minSize){nw=minSize;nx=startCX+startCW-minSize}}
+            if(dragType.indexOf('r')>=0){nw=startCW+dx;if(nw<minSize)nw=minSize}
+            if(dragType.indexOf('t')>=0){ny=startCY+dy;nh=startCH-dy;if(nh<minSize){nh=minSize;ny=startCY+startCH-minSize}}
+            if(dragType.indexOf('b')>=0){nh=startCH+dy;if(nh<minSize)nh=minSize}
+            nx=Math.max(0,nx);ny=Math.max(0,ny);
+            if(nx+nw>s.canvasW)nw=s.canvasW-nx;
+            if(ny+nh>s.canvasH)nh=s.canvasH-ny;
+            s.cropX=nx;s.cropY=ny;s.cropW=nw;s.cropH=nh;
+        }
+        scCropUpdateOverlay();
+    }
+
+    function onUp(){dragging=false;dragType=''}
+
+    canvas.addEventListener('mousedown',onDown);
+    document.addEventListener('mousemove',onMove);
+    document.addEventListener('mouseup',onUp);
+    canvas.addEventListener('touchstart',onDown,{passive:false});
+    document.addEventListener('touchmove',onMove,{passive:false});
+    document.addEventListener('touchend',onUp);
+})();
+
+function showAddShowcase(){
+    document.getElementById('scEditId').value='';
+    document.getElementById('scClubName').value='';
+    document.getElementById('scImage').value='';
+    document.getElementById('scCurrentImage').style.display='none';
+    document.getElementById('scCropArea').style.display='none';
+    scCropState.img=null;scCroppedBlob=null;scPendingMaterialGroupId='';
+    document.getElementById('showcaseModalTitle').textContent='🌟 添加社团风采';
+    if(scQuill)scQuill.setContents([]);
+    document.getElementById('showcaseModal').classList.add('show');
+}
+
+function editShowcase(id){
+    fetch(api+'/api/showcase').then(function(r){return r.json()}).then(function(res){
+        if(!res.success)return;
+        var s=res.data.find(function(x){return String(x.id)===String(id)});
+        if(!s)return;
+        document.getElementById('scEditId').value=id;
+        document.getElementById('scClubName').value=s.clubName;
+        document.getElementById('showcaseModalTitle').textContent='✏️ 编辑社团风采';
+        if(scQuill)scQuill.root.innerHTML=s.description||'';
+        document.getElementById('scImage').value='';
+        document.getElementById('scCropArea').style.display='none';
+        scCropState.img=null;scCroppedBlob=null;scPendingMaterialGroupId='';
+        var ci=document.getElementById('scCurrentImage');
+        if(s.imageUrl){
+            ci.innerHTML='<img src="'+api+s.imageUrl+'" style="max-width:200px;max-height:100px;border-radius:8px;object-fit:cover" /><div style="font-size:0.72em;color:#a0a3bd;margin-top:4px">当前图片（上传新图片将替换，可裁剪调整）</div>';
+            ci.style.display='block';
+        }else{ci.style.display='none'}
+        document.getElementById('showcaseModal').classList.add('show');
+    });
+}
+
+function submitShowcase(){
+    var clubName=document.getElementById('scClubName').value.trim();
+    var desc=scQuill?scQuill.root.innerHTML:'';
+    var editId=document.getElementById('scEditId').value;
+    if(!clubName){alert('请输入社团名称');return}
+    var imgInput=document.getElementById('scImage');
+    var hasNewImage=imgInput.files.length>0;
+    if(hasNewImage&&scCropState.img){
+        scCropGetCroppedBlob(function(blob){
+            if(blob){scCroppedBlob=blob}
+            doSubmitShowcase(clubName,desc,editId,hasNewImage);
+        });
+    }else{
+        doSubmitShowcase(clubName,desc,editId,hasNewImage);
+    }
+}
+
+function doSubmitShowcase(clubName,desc,editId,hasNewImage){
+    if(scPendingMaterialGroupId){
+        var fd=new FormData();
+        fd.append('clubName',clubName);fd.append('description',desc);
+        if(scCroppedBlob){fd.append('image',scCroppedBlob,'showcase_cropped.jpg')}
+        fetch(api+'/api/showcase',{method:'POST',body:fd})
+        .then(function(r){return r.json()}).then(function(res){
+            if(res.error){alert(res.error);return}
+            scPendingMaterialGroupId='';
+            closeModal('showcaseModal');loadAdminShowcase();
+        });
+        return;
+    }
+    if(editId){
+        fetch(api+'/api/showcase/'+editId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({clubName:clubName,description:desc})})
+        .then(function(r){return r.json()}).then(function(res){
+            if(res.error){alert(res.error);return}
+            if(hasNewImage){
+                var fd=new FormData();
+                if(scCroppedBlob){fd.append('image',scCroppedBlob,'showcase_cropped.jpg')}
+                else{fd.append('image',document.getElementById('scImage').files[0])}
+                fetch(api+'/api/showcase-image/'+editId,{method:'POST',body:fd}).then(function(){closeModal('showcaseModal');loadAdminShowcase()});
+            }else{closeModal('showcaseModal');loadAdminShowcase()}
+        });
+    }else{
+        var fd=new FormData();
+        fd.append('clubName',clubName);fd.append('description',desc);
+        if(hasNewImage){
+            if(scCroppedBlob){fd.append('image',scCroppedBlob,'showcase_cropped.jpg')}
+            else{fd.append('image',document.getElementById('scImage').files[0])}
+        }
+        fetch(api+'/api/showcase',{method:'POST',body:fd})
+        .then(function(r){return r.json()}).then(function(res){
+            if(res.error){alert(res.error);return}
+            closeModal('showcaseModal');loadAdminShowcase();
+        });
+    }
+}
+
+function viewShowcaseDetail(id){
+    fetch(api+'/api/showcase').then(function(r){return r.json()}).then(function(res){
+        if(!res.success)return;
+        var s=res.data.find(function(x){return String(x.id)===String(id)});
+        if(!s)return;
+        var h='<div class="detail-title" style="color:#43e97b">🌟 '+esc(s.clubName)+'</div>';
+        if(s.imageUrl)h+='<div style="margin-bottom:12px"><img src="'+api+s.imageUrl+'" style="width:100%;max-height:300px;object-fit:cover;border-radius:10px" /></div>';
+        h+='<div class="detail-content">'+safeHtml(s.description||'')+'</div>';
+        h+='<div class="detail-meta"><span>'+s.time+'</span></div>';
+        h+='<div class="btn-row"><button class="btn-edit-sm" style="padding:6px 14px;font-size:0.82em" onclick="closeModal(\'detailModal\');editShowcase('+s.id+')">✏️ 编辑</button><button class="btn-ghost" onclick="closeModal(\'detailModal\')">关闭</button></div>';
+        document.getElementById('detailContent').innerHTML=h;
+        document.getElementById('detailModal').classList.add('show');
+    });
+}
+
+function showMaterialShowcase(){
+    fetch(api+'/api/showcase-materials').then(function(r){return r.json()}).then(function(res){
+        if(!res.success){alert('加载材料失败');return}
+        var c=document.getElementById('materialList');
+        if(!res.data||!res.data.length){c.innerHTML='<div style="text-align:center;padding:20px;color:#a0a3bd;font-size:0.85em">暂无可用材料</div>';document.getElementById('materialModal').classList.add('show');return}
+        var h='';
+        res.data.forEach(function(m){
+            h+='<div class="material-item" onclick="viewMaterialDetail(\''+esc(m.groupId)+'\')">';
+            h+='<div class="mi-icon">'+(m.hasPhoto?'📷':'📄')+'</div>';
+            h+='<div class="mi-info">';
+            h+='<div class="mi-name">'+esc(m.title||m.clubName)+'</div>';
+            h+='<div class="mi-desc">'+escHtml((m.description||'').replace(/<[^>]*>/g,'').substring(0,60))+'</div>';
+            h+='<div class="mi-club">'+esc(m.clubName)+' · '+m.fileCount+'个文件</div>';
+            h+='</div>';
+            h+='<div style="display:flex;gap:4px;flex-shrink:0">';
+            h+='<button class="btn-edit-sm" onclick="event.stopPropagation();viewMaterialDetail(\''+esc(m.groupId)+'\')">详情</button>';
+            h+='<button class="btn-success" style="padding:3px 8px;border-radius:6px;font-size:0.72em;cursor:pointer" onclick="event.stopPropagation();addShowcaseFromMaterial(\''+esc(m.groupId)+'\')">添加</button>';
+            h+='</div></div>';
+        });
+        c.innerHTML=h;
+        document.getElementById('materialModal').classList.add('show');
+    });
+}
+
+function viewMaterialDetail(groupId){
+    fetch(api+'/api/showcase-material-detail/'+groupId).then(function(r){return r.json()}).then(function(res){
+        if(!res.success)return;
+        var m=res.data;
+        var h='<div class="detail-title">'+esc(m.title||m.clubName)+'</div>';
+        h+='<div style="font-size:0.82em;color:#667eea;margin-bottom:10px">'+esc(m.clubName)+'</div>';
+        if(m.photos&&m.photos.length){
+            h+='<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-bottom:12px">';
+            m.photos.forEach(function(p){h+='<img src="'+api+'/api/club-download/'+m.token+'/'+p.id+'" style="width:100%;height:100px;object-fit:cover;border-radius:8px;cursor:pointer" onclick="window.open(this.src)" />'});
+            h+='</div>';
+        }
+        if(m.body)h+='<div class="detail-content">'+m.body+'</div>';
+        h+='<div class="btn-row"><button class="btn-success" onclick="addShowcaseFromMaterial(\''+esc(groupId)+'\');closeModal(\'detailModal\')">添加为风采</button><button class="btn-ghost" onclick="closeModal(\'detailModal\')">关闭</button></div>';
+        document.getElementById('detailContent').innerHTML=h;
+        document.getElementById('detailModal').classList.add('show');
+    });
+}
+
+function addShowcaseFromMaterial(groupId){
+    fetch(api+'/api/showcase-material-detail/'+groupId).then(function(r){return r.json()}).then(function(res){
+        if(!res.success){alert('获取材料详情失败');return}
+        var m=res.data;
+        var clubName=m.clubName||'';
+        var title=m.title||clubName;
+        var body=m.body||title;
+        if(m.photos&&m.photos.length){
+            var photoUrl=api+'/api/club-download/'+m.token+'/'+m.photos[0].id;
+            var img=new Image();
+            img.onload=function(){
+                scCropState.img=img;
+                scCropState.naturalW=img.naturalWidth;
+                scCropState.naturalH=img.naturalHeight;
+                var maxW=600;
+                var scale=Math.min(maxW/img.naturalWidth,1);
+                scCropState.scale=scale;
+                scCropState.canvasW=Math.round(img.naturalWidth*scale);
+                scCropState.canvasH=Math.round(img.naturalHeight*scale);
+                var canvas=document.getElementById('scCropCanvas');
+                canvas.width=scCropState.canvasW;
+                canvas.height=scCropState.canvasH;
+                var ctx=canvas.getContext('2d');
+                ctx.drawImage(img,0,0,scCropState.canvasW,scCropState.canvasH);
+                scCropState.cropX=0;scCropState.cropY=0;
+                scCropState.cropW=scCropState.canvasW;scCropState.cropH=scCropState.canvasH;
+                scCropUpdateOverlay();
+                document.getElementById('scCropArea').style.display='block';
+                scCropFit16x9();
+            };
+            img.onerror=function(){
+                document.getElementById('scCropArea').style.display='none';
+                scCropState.img=null;
+            };
+            img.src=photoUrl;
+            document.getElementById('scEditId').value='';
+            document.getElementById('scClubName').value=clubName;
+            if(scQuill)scQuill.root.innerHTML=body;
+            document.getElementById('scImage').value='';
+            document.getElementById('scCurrentImage').style.display='none';
+            document.getElementById('showcaseModalTitle').textContent='🌟 从材料添加风采（可裁剪图片）';
+            scCroppedBlob=null;
+            scPendingMaterialGroupId=groupId;
+            document.getElementById('showcaseModal').classList.add('show');
+            closeModal('materialModal');
+            closeModal('detailModal');
+        }else{
+            doAddShowcaseFromMaterial(groupId);
+        }
+    });
+}
+
+var scPendingMaterialGroupId='';
+
+function doAddShowcaseFromMaterial(groupId){
+    fetch(api+'/api/showcase-from-material/'+groupId,{method:'POST'}).then(function(r){return r.json()}).then(function(res){
+        if(res.error){alert(res.error);return}
+        loadAdminShowcase();
+        alert('风采添加成功！');
+    });
+}
+
+function deleteNotice(id){
+    if(!confirm('确定删除该通告？'))return;
+    fetch(api+'/api/notices/'+id,{method:'DELETE'}).then(function(r){return r.json()}).then(function(){loadAdminNotices()});
+}
+
+function deleteShowcase(id){
+    if(!confirm('确定删除该风采？'))return;
+    fetch(api+'/api/showcase/'+id,{method:'DELETE'}).then(function(r){return r.json()}).then(function(){loadAdminShowcase()});
+}
+
+function closeModal(id){document.getElementById(id).classList.remove('show')}
+
+document.querySelectorAll('.modal-bg').forEach(function(m){
+    m.addEventListener('click',function(e){if(e.target===this)this.classList.remove('show')});
+});
+
+function loadAdminTreeHole(){
+    fetch(api+'/api/tree-hole/admin').then(function(r){return r.json()}).then(function(res){
+        if(!res.success)return;
+        var c=document.getElementById('adminTreeHole');
+        if(!res.data||!res.data.length){c.innerHTML='<div style="text-align:center;padding:16px;color:#a0a3bd;font-size:0.85em">暂无树洞内容</div>';return}
+        var h='';
+        res.data.forEach(function(t){
+            var scopeTag=t.scope==='public'?'<span style="background:rgba(102,126,234,0.1);color:#667eea;padding:1px 6px;border-radius:4px;font-size:0.7em">公共</span>':'<span style="background:rgba(67,233,123,0.1);color:#43e97b;padding:1px 6px;border-radius:4px;font-size:0.7em">'+esc(t.clubName)+'</span>';
+            var statusTag=t.status==='hidden'?'<span style="background:#f0f0f8;color:#a0a3bd;padding:1px 6px;border-radius:4px;font-size:0.7em">已隐藏</span>':t.status==='warned'?'<span style="background:#fff5f5;color:#e74c3c;padding:1px 6px;border-radius:4px;font-size:0.7em">已警告</span>':'';
+            h+='<div style="padding:10px;border-bottom:1px solid #f0f0f8;display:flex;justify-content:space-between;align-items:flex-start;gap:10px">';
+            h+='<div style="flex:1"><div style="font-size:0.86em;color:#4a4d6a;line-height:1.5">'+escHtml(t.content)+'</div>';
+            h+='<div style="margin-top:4px;display:flex;gap:6px;align-items:center">'+scopeTag+statusTag+'<span style="font-size:0.7em;color:#a0a3bd">'+t.time+'</span></div>';
+            if(t.status==='warned'&&t.adminNote)h+='<div style="font-size:0.78em;color:#e74c3c;margin-top:4px">⚠️ '+escHtml(t.adminNote)+'</div>';
+            h+='</div>';
+            h+='<div style="display:flex;gap:4px;flex-shrink:0">';
+            if(t.status!=='hidden')h+='<button onclick="manageTreeHole('+t.id+',\'hide\')" style="background:#f0f0f8;color:#6b6d8a;border:1px solid #eee;padding:3px 8px;border-radius:6px;font-size:0.72em;cursor:pointer">隐藏</button>';
+            if(t.status!=='warned')h+='<button onclick="warnTreeHole('+t.id+')" style="background:#fff5f5;color:#e74c3c;border:1px solid #ffe0e0;padding:3px 8px;border-radius:6px;font-size:0.72em;cursor:pointer">警告</button>';
+            if(t.status!=='active')h+='<button onclick="manageTreeHole('+t.id+',\'restore\')" style="background:rgba(67,233,123,0.1);color:#43e97b;border:1px solid rgba(67,233,123,0.2);padding:3px 8px;border-radius:6px;font-size:0.72em;cursor:pointer">恢复</button>';
+            h+='</div></div>';
+        });
+        c.innerHTML=h;
+    });
+}
+
+function manageTreeHole(id,action){
+    fetch(api+'/api/tree-hole/'+id+'/manage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:action})})
+    .then(function(r){return r.json()}).then(function(){loadAdminTreeHole()});
+}
+
+function warnTreeHole(id){
+    var note=prompt('请输入警告内容：');
+    if(!note)return;
+    fetch(api+'/api/tree-hole/'+id+'/manage',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'warn',note:note})})
+    .then(function(r){return r.json()}).then(function(){loadAdminTreeHole()});
+}
+</script>
+<script src="/ai-chat.js?v=4"></script>
+</body>
+</html>

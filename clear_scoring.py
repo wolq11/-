@@ -1,0 +1,10 @@
+import sqlite3
+conn = sqlite3.connect(r'd:\work2\club-stats\data\club_stats.db')
+c = conn.cursor()
+c.execute('DELETE FROM scoring_teacher_reviews')
+c.execute('DELETE FROM scoring_submission_items')
+c.execute('DELETE FROM scoring_submissions')
+c.execute('DELETE FROM feature_reads')
+conn.commit()
+print('Cleared all scoring data')
+conn.close()
