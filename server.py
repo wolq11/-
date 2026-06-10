@@ -2,7 +2,9 @@
 社团活动统计分析系统 - 后端服务
 技术栈: Flask + SQLite + Pandas + MapReduce
 """
-from flask import Flask, request, jsonify, send_file, send_from_directory, session
+from dotenv import load_dotenv
+load_dotenv()
+from flask import Flask, request, jsonify, send_file, send_from_directory, session, redirect
 import sqlite3
 import os
 import uuid
@@ -444,6 +446,17 @@ class Database:
                     UNIQUE(group_id, user_id)
                 );
             ''')
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS weekly_reports (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    role TEXT NOT NULL,
+                    club_name TEXT DEFAULT '',
+                    week_start TEXT NOT NULL,
+                    week_end TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                );
+            ''')
             conn.commit()
         finally:
             conn.close()
@@ -689,6 +702,14 @@ class Database:
             '''CREATE TABLE IF NOT EXISTS sms_codes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 phone TEXT NOT NULL,
+                code TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                expires_at DATETIME NOT NULL,
+                used INTEGER DEFAULT 0
+            )''',
+            '''CREATE TABLE IF NOT EXISTS email_codes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                email TEXT NOT NULL,
                 code TEXT NOT NULL,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 expires_at DATETIME NOT NULL,
@@ -1004,6 +1025,26 @@ class Database:
             pass
         try:
             conn = self.get_conn()
+            conn.execute('''CREATE TABLE IF NOT EXISTS location_checkins (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER DEFAULT 0,
+                username TEXT DEFAULT '',
+                role TEXT DEFAULT '',
+                club_name TEXT DEFAULT '',
+                session_id INTEGER DEFAULT 0,
+                lat REAL DEFAULT 0,
+                lng REAL DEFAULT 0,
+                address TEXT DEFAULT '',
+                checkin_time DATETIME DEFAULT CURRENT_TIMESTAMP
+            )''')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_loc_checkin_user ON location_checkins(user_id)')
+            conn.execute('CREATE INDEX IF NOT EXISTS idx_loc_checkin_session ON location_checkins(session_id)')
+            conn.commit()
+            conn.close()
+        except:
+            pass
+        try:
+            conn = self.get_conn()
             cursor = conn.execute('SELECT COUNT(*) as c FROM users WHERE username=?', ('0066',))
             if cursor.fetchone()['c'] == 0:
                 conn.execute('INSERT INTO users (username, password, role, club_name) VALUES (?, ?, ?, ?)',
@@ -1049,11 +1090,28 @@ def get_current_user():
     conn = db.get_conn()
     try:
         user = conn.execute('SELECT id, username, role, club_name FROM users WHERE id=?', (user_id,)).fetchone()
+        if not user:
+            return None
+        result = {'id': user['id'], 'username': user['username'], 'role': user['role'], 'club_name': user['club_name']}
+        # 获取真实姓名
+        if user['role'] == 'teacher':
+            tp = conn.execute('SELECT real_name FROM teacher_profiles WHERE user_id=?', (user_id,)).fetchone()
+            if tp and tp['real_name']:
+                result['real_name'] = tp['real_name']
+        else:
+            up = conn.execute('SELECT real_name FROM user_profiles WHERE user_id=?', (user_id,)).fetchone()
+            if up and up['real_name']:
+                result['real_name'] = up['real_name']
+        if 'real_name' not in result:
+            result['real_name'] = ''
+        # 社团负责人如果 club_name 为空，尝试从 club_cadres/club_members 查找
+        if user['role'] == 'user' and not result['club_name']:
+            cr = conn.execute('SELECT DISTINCT club_name FROM club_cadres WHERE user_id=? UNION SELECT DISTINCT club_name FROM club_members WHERE user_id=?', (user_id, user_id)).fetchall()
+            if cr:
+                result['club_name'] = cr[0]['club_name']
     finally:
         conn.close()
-    if user:
-        return {'id': user['id'], 'username': user['username'], 'role': user['role'], 'club_name': user['club_name']}
-    return None
+    return result
 
 
 def is_cadre_of_club(user_id, club_name):
@@ -1085,7 +1143,7 @@ def register():
     work_id = data.get('workId', '').strip()
     club_names = data.get('clubNames', [])
     if not username or not password:
-        return jsonify({'error': '请输入用户名和密码'}), 400
+        return jsonify({'error': '请输入姓名和密码'}), 400
     if len(username) < 2 or len(password) < 4:
         return jsonify({'error': '用户名至少2位，密码至少4位'}), 400
     if role not in ('user', 'student', 'teacher'):
@@ -1099,7 +1157,7 @@ def register():
     try:
         existing = conn.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
         if existing:
-            return jsonify({'error': '用户名已存在'}), 400
+            return jsonify({'error': '该姓名已注册'}), 400
         if role == 'user' and club_name:
             club_existing = conn.execute('SELECT id FROM users WHERE club_name=? AND role="user"', (club_name,)).fetchone()
             if club_existing:
@@ -1171,22 +1229,73 @@ def login():
     username = data.get('username', '').strip()
     password = data.get('password', '').strip()
     if not username or not password:
-        return jsonify({'error': '请输入用户名和密码'}), 400
+        return jsonify({'error': '请输入姓名和密码'}), 400
     conn = db.get_conn()
     try:
         user = conn.execute('SELECT id, username, password, role, club_name FROM users WHERE username=?', (username,)).fetchone()
     finally:
         conn.close()
     if not user or user['password'] != password:
-        return jsonify({'error': '用户名或密码错误'}), 400
+        return jsonify({'error': '姓名或密码错误'}), 400
     session['user_id'] = user['id']
-    return jsonify({'success': True, 'user': {'id': user['id'], 'username': user['username'], 'role': user['role'], 'clubName': user['club_name']}})
+    # 获取真实姓名
+    real_name = ''
+    conn2 = db.get_conn()
+    try:
+        if user['role'] == 'teacher':
+            tp = conn2.execute('SELECT real_name FROM teacher_profiles WHERE user_id=?', (user['id'],)).fetchone()
+            if tp and tp['real_name']:
+                real_name = tp['real_name']
+        else:
+            up = conn2.execute('SELECT real_name FROM user_profiles WHERE user_id=?', (user['id'],)).fetchone()
+            if up and up['real_name']:
+                real_name = up['real_name']
+    finally:
+        conn2.close()
+    return jsonify({'success': True, 'user': {'id': user['id'], 'username': user['username'], 'role': user['role'], 'clubName': user['club_name'], 'realName': real_name}})
 
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
     session.pop('user_id', None)
     return jsonify({'success': True})
+
+
+@app.route('/api/reset-password', methods=['POST'])
+def reset_password():
+    data = request.json or {}
+    email = data.get('email', '').strip()
+    code = data.get('code', '').strip()
+    new_password = data.get('newPassword', '').strip()
+    if not email or not code or not new_password:
+        return jsonify({'error': '请填写完整信息'}), 400
+    if len(new_password) < 4:
+        return jsonify({'error': '新密码至少4个字符'}), 400
+    conn = db.get_conn()
+    try:
+        # 验证码已在verify步骤标记为已使用，此处检查已使用则说明未走验证流程
+        row = conn.execute('SELECT id, expires_at, used FROM email_codes WHERE email=? AND code=? ORDER BY id DESC LIMIT 1', (email, code)).fetchone()
+        if not row:
+            return jsonify({'error': '验证码错误'}), 400
+        if row['used']:
+            return jsonify({'error': '请先验证验证码'}), 400
+        from datetime import datetime as dt
+        try:
+            expires = dt.strptime(row['expires_at'][:19], '%Y-%m-%d %H:%M:%S')
+            if dt.now() > expires:
+                return jsonify({'error': '验证码已过期'}), 400
+        except:
+            pass
+        conn.execute('UPDATE email_codes SET used=1 WHERE id=?', (row['id'],))
+        # 通过邮箱查找用户
+        user = conn.execute('SELECT u.id, u.username, u.role FROM users u LEFT JOIN user_profiles up ON u.id=up.user_id LEFT JOIN teacher_profiles tp ON u.id=tp.user_id WHERE up.email=? OR tp.email=?', (email, email)).fetchone()
+        if not user:
+            return jsonify({'error': '该邮箱未注册'}), 400
+        conn.execute('UPDATE users SET password=? WHERE id=?', (new_password, user['id']))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'success': True, 'message': '密码重置成功'})
 
 
 @app.route('/api/club-departments/<club_name>')
@@ -1413,7 +1522,7 @@ def current_user_api():
     user = get_current_user()
     if not user:
         return jsonify({'loggedIn': False})
-    result = {'id': user['id'], 'username': user['username'], 'role': user['role'], 'clubName': user['club_name']}
+    result = {'id': user['id'], 'username': user['username'], 'role': user['role'], 'clubName': user['club_name'], 'realName': user.get('real_name', '')}
     if user['role'] == 'student':
         conn = db.get_conn()
         try:
@@ -1424,6 +1533,18 @@ def current_user_api():
                 result['clubs'] = clubs
             elif user['club_name']:
                 result['clubs'] = [user['club_name']]
+            cadre_rows = conn.execute('SELECT club_name FROM club_cadres WHERE user_id=?', (user['id'],)).fetchall()
+            if cadre_rows:
+                result['cadreClubs'] = [cr['club_name'] for cr in cadre_rows]
+        finally:
+            conn.close()
+    elif user['role'] == 'user':
+        conn = db.get_conn()
+        try:
+            if not result['clubName']:
+                cr = conn.execute('SELECT DISTINCT club_name FROM club_cadres WHERE user_id=? UNION SELECT DISTINCT club_name FROM club_members WHERE user_id=?', (user['id'], user['id'])).fetchall()
+                if cr:
+                    result['clubName'] = cr[0]['club_name']
             cadre_rows = conn.execute('SELECT club_name FROM club_cadres WHERE user_id=?', (user['id'],)).fetchall()
             if cadre_rows:
                 result['cadreClubs'] = [cr['club_name'] for cr in cadre_rows]
@@ -1555,12 +1676,12 @@ def add_club_leader():
     class_name = data.get('className', '').strip()
     phone = data.get('phone', '').strip()
     if not username or not club_name:
-        return jsonify({'error': '请填写用户名和社团名称'}), 400
+        return jsonify({'error': '请填写姓名和社团名称'}), 400
     conn = db.get_conn()
     try:
         existing = conn.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
         if existing:
-            return jsonify({'error': '用户名已存在'}), 400
+            return jsonify({'error': '该姓名已注册'}), 400
         conn.execute('INSERT INTO users (username, password, role, club_name) VALUES (?, ?, "user", ?)', (username, password, club_name))
         new_user = conn.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
         if new_user:
@@ -1816,6 +1937,25 @@ def save_my_profile():
     phone = data.get('phone', '').strip()
     confirm_pass = data.get('confirmPassword', '').strip()
     email = data.get('email', '').strip()
+    # 必填校验
+    if not real_name:
+        return jsonify({'error': '姓名不能为空'}), 400
+    if not phone:
+        return jsonify({'error': '联系电话不能为空'}), 400
+    if not email:
+        return jsonify({'error': '邮箱不能为空'}), 400
+    if user['role'] == 'teacher':
+        if not student_id:
+            return jsonify({'error': '工号不能为空'}), 400
+    if user['role'] in ('user', 'student'):
+        if not student_id:
+            return jsonify({'error': '学号不能为空'}), 400
+        if not grade:
+            return jsonify({'error': '年级不能为空'}), 400
+        if not college:
+            return jsonify({'error': '学院不能为空'}), 400
+        if not class_name:
+            return jsonify({'error': '班级不能为空'}), 400
     current_phone = ''
     conn = db.get_conn()
     try:
@@ -1936,6 +2076,85 @@ def verify_sms_code():
     return jsonify({'success': True})
 
 
+@app.route('/api/send-email-code', methods=['POST'])
+def send_email_code():
+    data = request.json or {}
+    email = data.get('email', '').strip()
+    if not email or '@' not in email:
+        return jsonify({'error': '请输入正确的邮箱地址'}), 400
+    # 检查该邮箱是否已注册
+    conn = db.get_conn()
+    try:
+        user_row = conn.execute('SELECT id FROM user_profiles WHERE email=? UNION SELECT id FROM teacher_profiles WHERE email=?', (email, email)).fetchone()
+        if not user_row:
+            return jsonify({'error': '该邮箱未注册'}), 400
+        recent = conn.execute('SELECT id FROM email_codes WHERE email=? AND created_at > datetime("now","-1 minute")', (email,)).fetchone()
+        if recent:
+            return jsonify({'error': '发送太频繁，请1分钟后再试'}), 429
+        code = str(random.randint(100000, 999999))
+        now = time.time()
+        expires_at = datetime.fromtimestamp(now + 300).strftime('%Y-%m-%d %H:%M:%S')
+        conn.execute('INSERT INTO email_codes (email, code, expires_at) VALUES (?, ?, ?)', (email, code, expires_at))
+        conn.commit()
+    finally:
+        conn.close()
+    # 尝试发送邮件，如果未配置SMTP则打印到控制台
+    smtp_host = os.environ.get('SMTP_HOST', '')
+    smtp_port = int(os.environ.get('SMTP_PORT', '465'))
+    smtp_user = os.environ.get('SMTP_USER', '')
+    smtp_pass = os.environ.get('SMTP_PASS', '')
+    smtp_ssl = os.environ.get('SMTP_SSL', 'true').lower() == 'true'
+    if smtp_host and smtp_user and smtp_pass:
+        try:
+            import smtplib
+            from email.mime.text import MIMEText
+            msg = MIMEText(f'您的验证码为：{code}，5分钟内有效。如非本人操作请忽略。', 'plain', 'utf-8')
+            msg['Subject'] = '密码重置验证码'
+            msg['From'] = smtp_user
+            msg['To'] = email
+            if smtp_ssl:
+                server = smtplib.SMTP_SSL(smtp_host, smtp_port)
+            else:
+                server = smtplib.SMTP(smtp_host, smtp_port)
+                server.starttls()
+            server.login(smtp_user, smtp_pass)
+            server.sendmail(smtp_user, [email], msg.as_string())
+            server.quit()
+        except Exception as e:
+            print(f'[EMAIL] 发送失败: {e}, 验证码: {code} -> 邮箱: {email}')
+    else:
+        print(f'[EMAIL] 验证码: {code} -> 邮箱: {email}')
+    return jsonify({'success': True, 'message': '验证码已发送'})
+
+
+@app.route('/api/verify-email-code', methods=['POST'])
+def verify_email_code():
+    data = request.json or {}
+    email = data.get('email', '').strip()
+    code = data.get('code', '').strip()
+    if not email or not code:
+        return jsonify({'error': '请输入邮箱和验证码'}), 400
+    conn = db.get_conn()
+    try:
+        row = conn.execute('SELECT id, expires_at, used FROM email_codes WHERE email=? AND code=? ORDER BY id DESC LIMIT 1', (email, code)).fetchone()
+        if not row:
+            return jsonify({'error': '验证码错误'}), 400
+        if row['used']:
+            return jsonify({'error': '验证码已使用'}), 400
+        from datetime import datetime as dt
+        try:
+            expires = dt.strptime(row['expires_at'][:19], '%Y-%m-%d %H:%M:%S')
+            if dt.now() > expires:
+                return jsonify({'error': '验证码已过期'}), 400
+        except:
+            pass
+        conn.execute('UPDATE email_codes SET used=1 WHERE id=?', (row['id'],))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'success': True})
+
+
 @app.route('/api/change-password', methods=['POST'])
 def change_password():
     user = get_current_user()
@@ -1990,16 +2209,29 @@ def get_club_members(club_name):
 @app.route('/api/club-members/<int:mid>', methods=['DELETE'])
 def remove_club_member(mid):
     user = get_current_user()
-    if not user or user['role'] not in ('user', 'admin', 'student'):
+    print(f'[DEBUG] remove_club_member: mid={mid}, user={user}, session={dict(session)}')
+    if not user:
         return jsonify({'error': '请先登录'}), 401
+    conn_chk = db.get_conn()
+    try:
+        mem = conn_chk.execute('SELECT club_name FROM club_members WHERE id=?', (mid,)).fetchone()
+    finally:
+        conn_chk.close()
+    if not mem:
+        return jsonify({'error': '成员不存在'}), 404
     if user['role'] == 'student':
-        conn_chk = db.get_conn()
-        try:
-            mem = conn_chk.execute('SELECT club_name FROM club_members WHERE id=?', (mid,)).fetchone()
-        finally:
-            conn_chk.close()
-        if not mem or not is_cadre_of_club(user['id'], mem['club_name']):
+        if not is_cadre_of_club(user['id'], mem['club_name']):
             return jsonify({'error': '无权限操作'}), 403
+    elif user['role'] == 'teacher':
+        tc_conn = db.get_conn()
+        try:
+            tc_row = tc_conn.execute('SELECT id FROM teacher_clubs WHERE user_id=? AND club_name=?', (user['id'], mem['club_name'])).fetchone()
+        finally:
+            tc_conn.close()
+        if not tc_row:
+            return jsonify({'error': '无权限操作'}), 403
+    elif user['role'] not in ('user', 'admin'):
+        return jsonify({'error': '无权限操作'}), 403
     conn = db.get_conn()
     try:
         conn.execute('DELETE FROM club_members WHERE id=?', (mid,))
@@ -2012,16 +2244,36 @@ def remove_club_member(mid):
 @app.route('/api/club-members/batch-remove', methods=['POST'])
 def batch_remove_club_members():
     user = get_current_user()
-    if not user or user['role'] not in ('user', 'admin', 'student'):
+    if not user:
         return jsonify({'error': '请先登录'}), 401
     data = request.json or {}
     ids = data.get('ids', [])
     if not ids:
         return jsonify({'error': '未选择成员'}), 400
+    conn_chk = db.get_conn()
+    try:
+        placeholders = ','.join(['?'] * len(ids))
+        rows = conn_chk.execute(f'SELECT DISTINCT club_name FROM club_members WHERE id IN ({placeholders})', ids).fetchall()
+    finally:
+        conn_chk.close()
+    club_names = [r['club_name'] for r in rows if r['club_name']]
+    if len(club_names) > 1:
+        return jsonify({'error': '批量移除的成员必须属于同一社团'}), 400
+    target_club = club_names[0] if club_names else ''
     if user['role'] == 'student':
         cadre_clubs = get_cadre_clubs(user['id'])
-        if not cadre_clubs:
+        if not cadre_clubs or target_club not in cadre_clubs:
             return jsonify({'error': '无权限操作'}), 403
+    elif user['role'] == 'teacher':
+        tc_conn = db.get_conn()
+        try:
+            tc_row = tc_conn.execute('SELECT id FROM teacher_clubs WHERE user_id=? AND club_name=?', (user['id'], target_club)).fetchone()
+        finally:
+            tc_conn.close()
+        if not tc_row:
+            return jsonify({'error': '无权限操作'}), 403
+    elif user['role'] not in ('user', 'admin'):
+        return jsonify({'error': '无权限操作'}), 403
     conn = db.get_conn()
     try:
         placeholders = ','.join(['?'] * len(ids))
@@ -3759,6 +4011,31 @@ def submit_feedback():
     return jsonify({'success': True})
 
 
+@app.route('/api/feedback-file/<int:fbid>')
+def get_feedback_file(fbid):
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': '请先登录'}), 401
+    conn = db.get_conn()
+    try:
+        row = conn.execute('SELECT file_path, file_name FROM feedbacks WHERE id=?', (fbid,)).fetchone()
+    finally:
+        conn.close()
+    if not row or not row['file_path']:
+        return jsonify({'error': '文件不存在'}), 404
+    path = storage.get_path(row['file_path'])
+    if not path:
+        url = storage.get_url(row['file_path'])
+        if url:
+            return redirect(url)
+        return jsonify({'error': '文件不存在'}), 404
+    ext = os.path.splitext(row['file_name'] or '')[1].lower()
+    img_exts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg']
+    if ext in img_exts:
+        return send_file(path, as_attachment=False)
+    return send_file(path, as_attachment=True, download_name=row['file_name'])
+
+
 @app.route('/api/my-feedbacks')
 def my_feedbacks():
     user = get_current_user()
@@ -4667,7 +4944,7 @@ def get_notice_file(nid):
     if not path:
         url = storage.get_url(row['attachment_path'])
         if url:
-            return jsonify({'url': url})
+            return redirect(url)
         return jsonify({'error': '文件不存在'}), 404
     return send_file(path, as_attachment=True, download_name=row['attachment_name'])
 
@@ -5961,7 +6238,7 @@ def ai_generate_poster():
         'image_url': None,
         'prompt': prompt,
         'fallback': True,
-        'message': f'海报生成需要配置API Key。提示词已生成：{prompt}'
+        'message': f'海报生成服务暂时不可用（已尝试通义万相和智谱GLM）。提示词已生成：{prompt}'
     })
 
 
@@ -6207,31 +6484,89 @@ def call_vision_api(image_input, prompt="请描述这张图片的内容", max_to
 
 
 def generate_image(prompt, size='1024x1024'):
-    if not IMAGE_GEN_API_KEY:
-        return None
     import requests as req
-    headers = {'Authorization': f'Bearer {IMAGE_GEN_API_KEY}', 'Content-Type': 'application/json'}
-    payload = {
-        'model': 'wanx-v1',
-        'input': {'prompt': prompt},
-        'parameters': {
-            'size': size,
-            'n': 1
-        }
-    }
-    try:
-        resp = req.post('https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis',
-                       headers={'Authorization': f'Bearer {IMAGE_GEN_API_KEY}', 'Content-Type': 'application/json'},
-                       json=payload, timeout=60)
-        if resp.status_code == 200:
+    import time
+
+    # 策略1：优先尝试通义万相（异步任务+轮询）
+    if IMAGE_GEN_API_KEY:
+        try:
+            headers = {'Authorization': f'Bearer {IMAGE_GEN_API_KEY}', 'Content-Type': 'application/json'}
+            payload = {
+                'model': 'wanx-v1',
+                'input': {'prompt': prompt},
+                'parameters': {'size': size, 'n': 1}
+            }
+            resp = req.post('https://dashscope.aliyuncs.com/api/v1/services/aigc/text2image/image-synthesis',
+                           headers=headers, json=payload, timeout=30)
             data = resp.json()
-            output = data.get('output', {})
-            results = output.get('results', [])
-            if results:
-                return results[0].get('url', None)
-            return output.get('url', data.get('data', [{}])[0].get('url', None))
-    except Exception:
-        pass
+            if resp.status_code == 200:
+                output = data.get('output', {})
+                results = output.get('results', [])
+                if results:
+                    return results[0].get('url', None)
+                url = output.get('url')
+                if url:
+                    return url
+                task_id = output.get('task_id')
+                if task_id:
+                    # 轮询获取结果（最多等待90秒）
+                    task_url = f'https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}'
+                    for _ in range(30):
+                        time.sleep(3)
+                        task_resp = req.get(task_url, headers={'Authorization': f'Bearer {IMAGE_GEN_API_KEY}'}, timeout=15)
+                        if task_resp.status_code != 200:
+                            continue
+                        task_data = task_resp.json()
+                        task_status = task_data.get('output', {}).get('task_status', '')
+                        if task_status == 'SUCCEEDED':
+                            results = task_data.get('output', {}).get('results', [])
+                            if results:
+                                return results[0].get('url', None)
+                            url = task_data.get('output', {}).get('url')
+                            if url:
+                                return url
+                            return None
+                        elif task_status in ('FAILED', 'UNKNOWN'):
+                            break
+            elif resp.status_code == 400:
+                task_id = data.get('output', {}).get('task_id')
+                if task_id:
+                    task_url = f'https://dashscope.aliyuncs.com/api/v1/tasks/{task_id}'
+                    for _ in range(30):
+                        time.sleep(3)
+                        task_resp = req.get(task_url, headers={'Authorization': f'Bearer {IMAGE_GEN_API_KEY}'}, timeout=15)
+                        if task_resp.status_code != 200:
+                            continue
+                        task_data = task_resp.json()
+                        task_status = task_data.get('output', {}).get('task_status', '')
+                        if task_status == 'SUCCEEDED':
+                            results = task_data.get('output', {}).get('results', [])
+                            if results:
+                                return results[0].get('url', None)
+                            url = task_data.get('output', {}).get('url')
+                            if url:
+                                return url
+                            return None
+                        elif task_status in ('FAILED', 'UNKNOWN'):
+                            break
+        except Exception:
+            pass
+
+    # 策略2：Fallback 到智谱GLM cogview-3（同步返回，更稳定）
+    if ZHIPU_API_KEY:
+        try:
+            headers = {'Authorization': f'Bearer {ZHIPU_API_KEY}', 'Content-Type': 'application/json'}
+            payload = {'model': 'cogview-3', 'prompt': prompt}
+            resp = req.post('https://open.bigmodel.cn/api/paas/v4/images/generations',
+                           headers=headers, json=payload, timeout=60)
+            if resp.status_code == 200:
+                data = resp.json()
+                results = data.get('data', [])
+                if results and len(results) > 0:
+                    return results[0].get('url', None)
+        except Exception:
+            pass
+
     return None
 
 
@@ -6353,17 +6688,290 @@ AI_TOOLS = [
                 'required': ['photo_path']
             }
         }
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'query_data',
+            'description': '查询系统中的各类数据集。支持：活动列表、成员列表、学生列表、指导老师情况、工作量统计、财务登记、招募申请、赋分记录、学分、签到记录、树洞内容、反馈列表、轮播图/优秀社团/优秀活动/热点资讯、资料库文件等。根据用户角色自动过滤权限范围。管理员可查看所有数据。',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'dataset': {
+                        'type': 'string',
+                        'enum': ['activities', 'members', 'students', 'teachers', 'workload', 'finance', 'recruitments', 'scoring', 'credits', 'checkins', 'treehole', 'feedback', 'carousel', 'excellent_clubs', 'excellent_activities', 'hot_news', 'documents', 'clubs', 'notifications', 'departments', 'votes', 'surveys', 'joint_activities', 'offcampus_requests'],
+                        'description': '数据集名称。students=学生列表（支持has_club过滤），teachers=指导老师列表（支持has_club过滤）'
+                    },
+                    'filters': {
+                        'type': 'object',
+                        'description': '过滤条件，如 {"club_name":"书法社","status":"pending","has_club":"false"}',
+                        'properties': {
+                            'club_name': {'type': 'string', 'description': '社团名称'},
+                            'status': {'type': 'string', 'description': '状态过滤'},
+                            'date_from': {'type': 'string', 'description': '开始日期'},
+                            'date_to': {'type': 'string', 'description': '结束日期'},
+                            'keyword': {'type': 'string', 'description': '关键词搜索'},
+                            'has_club': {'type': 'string', 'enum': ['true', 'false'], 'description': '是否已关联社团：true=已关联，false=未关联（仅students和teachers数据集支持）'}
+                        }
+                    },
+                    'limit': {
+                        'type': 'integer',
+                        'description': '返回条数限制，默认10'
+                    }
+                },
+                'required': ['dataset']
+            }
+        }
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'create_entity',
+            'description': '创建实体。支持创建：活动、招募、投票、问卷、报名表、通知、联合活动申请、材料审批单、校外活动审批单。需要提供实体类型和属性。创建前会检查用户权限。',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'entity_type': {
+                        'type': 'string',
+                        'enum': ['activity', 'recruitment', 'vote', 'survey', 'registration_form', 'notification', 'joint_activity', 'material_approval', 'offcampus_application'],
+                        'description': '实体类型'
+                    },
+                    'attributes': {
+                        'type': 'object',
+                        'description': '实体属性，如活动名称、时间、地点等',
+                        'properties': {
+                            'name': {'type': 'string', 'description': '名称'},
+                            'club_name': {'type': 'string', 'description': '社团名称'},
+                            'description': {'type': 'string', 'description': '描述'},
+                            'start_time': {'type': 'string', 'description': '开始时间'},
+                            'end_time': {'type': 'string', 'description': '结束时间'},
+                            'location': {'type': 'string', 'description': '地点'},
+                            'content': {'type': 'string', 'description': '内容'},
+                            'options': {'type': 'array', 'items': {'type': 'string'}, 'description': '选项列表（投票/问卷）'},
+                            'max_participants': {'type': 'integer', 'description': '最大参与人数'},
+                            'checkin_method': {'type': 'string', 'enum': ['code', 'qrcode', 'gps'], 'description': '签到方式'}
+                        }
+                    }
+                },
+                'required': ['entity_type', 'attributes']
+            }
+        }
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'update_entity',
+            'description': '更新实体状态或属性。支持：修改活动时间、审批报名、赋分审核、签到/签退、成员加入/退社、审批材料等。涉及资源变更的操作会先确认。',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'entity_type': {
+                        'type': 'string',
+                        'enum': ['activity', 'registration', 'scoring', 'checkin', 'member', 'material', 'workload', 'offcampus', 'finance_permission'],
+                        'description': '实体类型'
+                    },
+                    'entity_id': {
+                        'type': 'integer',
+                        'description': '实体ID'
+                    },
+                    'updates': {
+                        'type': 'object',
+                        'description': '更新内容',
+                        'properties': {
+                            'status': {'type': 'string', 'description': '新状态：approved/rejected/completed等'},
+                            'action': {'type': 'string', 'description': '操作：approve/reject/checkin/checkout/join/leave等'},
+                            'reason': {'type': 'string', 'description': '操作理由'},
+                            'gps_lat': {'type': 'number', 'description': 'GPS纬度'},
+                            'gps_lng': {'type': 'number', 'description': 'GPS经度'}
+                        }
+                    }
+                },
+                'required': ['entity_type', 'entity_id', 'updates']
+            }
+        }
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'send_notification',
+            'description': '发送通知给特定角色或用户。支持发送给：特定成员、全体成员、社团负责人群、指导老师、管理员。',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'target': {
+                        'type': 'string',
+                        'description': '接收方：角色名(admin/user/teacher/student)、用户ID、或"all_members"全体成员'
+                    },
+                    'club_name': {
+                        'type': 'string',
+                        'description': '社团名称，发送社团通知时需要'
+                    },
+                    'content': {
+                        'type': 'string',
+                        'description': '通知内容'
+                    },
+                    'channel': {
+                        'type': 'string',
+                        'enum': ['system', 'push'],
+                        'description': '通知渠道：system=系统内通知，push=推送通知',
+                        'default': 'system'
+                    }
+                },
+                'required': ['target', 'content']
+            }
+        }
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'generate_report',
+            'description': '生成数据分析报告。支持：活动概览统计、指导老师指导情况、工作量统计、参与率趋势、财务汇总、赋分分布、预警信息。根据用户角色自动限制数据范围。',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'report_type': {
+                        'type': 'string',
+                        'enum': ['activity_overview', 'teacher_guidance', 'workload_stats', 'participation_trend', 'finance_summary', 'scoring_distribution', 'alert_summary', 'club_health'],
+                        'description': '报告类型'
+                    },
+                    'club_name': {
+                        'type': 'string',
+                        'description': '社团名称，不填则根据角色自动选择'
+                    },
+                    'date_from': {
+                        'type': 'string',
+                        'description': '开始日期'
+                    },
+                    'date_to': {
+                        'type': 'string',
+                        'description': '结束日期'
+                    }
+                },
+                'required': ['report_type']
+            }
+        }
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'ai_generate',
+            'description': 'AI生成内容。支持生成活动文案、宣传语等文本内容。',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'generate_type': {
+                        'type': 'string',
+                        'enum': ['copywriting'],
+                        'description': '生成类型：copywriting=活动文案/宣传语'
+                    },
+                    'params': {
+                        'type': 'object',
+                        'description': '生成参数',
+                        'properties': {
+                            'theme': {'type': 'string', 'description': '主题/活动名称'},
+                            'club_name': {'type': 'string', 'description': '社团名称'},
+                            'activity_type': {'type': 'string', 'description': '活动类型'},
+                            'target_audience': {'type': 'string', 'description': '目标受众'},
+                            'tone': {'type': 'string', 'description': '文案语调（如：正式、活泼、温馨）'}
+                        }
+                    }
+                },
+                'required': ['generate_type', 'params']
+            }
+        }
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'recommend',
+            'description': '为用户生成个性化推荐。支持：推荐社团、推荐活动、推荐招募（进行中的招募活动）、推荐联合活动伙伴。',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'recommend_type': {
+                        'type': 'string',
+                        'enum': ['club', 'activity', 'recruitment', 'joint_partner'],
+                        'description': '推荐类型：club=社团推荐，activity=活动推荐，recruitment=招募活动推荐，joint_partner=联合活动伙伴推荐'
+                    },
+                    'club_name': {
+                        'type': 'string',
+                        'description': '当前社团名称（推荐联合伙伴时需要）'
+                    }
+                },
+                'required': ['recommend_type']
+            }
+        }
+    },
+    {
+        'type': 'function',
+        'function': {
+            'name': 'query_database',
+            'description': '直接查询数据库，执行SQL SELECT语句获取数据。管理员可查询所有表，非管理员自动按所属社团过滤。仅允许SELECT查询，禁止任何写操作。适合query_data工具无法满足的复杂查询需求。',
+            'parameters': {
+                'type': 'object',
+                'properties': {
+                    'sql': {
+                        'type': 'string',
+                        'description': 'SQL SELECT查询语句。仅允许SELECT，禁止INSERT/UPDATE/DELETE/DROP/ALTER等写操作。查询结果最多返回50条记录。'
+                    },
+                    'description': {
+                        'type': 'string',
+                        'description': '查询目的说明，如"查询书法协会近期活动参与人数"'
+                    }
+                },
+                'required': ['sql', 'description']
+            }
+        }
     }
 ]
 
 
-def execute_tool_call(function_name, arguments):
+def execute_tool_call(function_name, arguments, current_user=None):
     conn = db.get_conn()
     try:
+        # 获取当前用户角色信息
+        user_role = current_user.get('role', 'student') if current_user else 'student'
+        user_club = current_user.get('club_name', '') if current_user else ''
+        user_id = current_user.get('id', 0) if current_user else 0
+        # 学生加入的社团
+        user_clubs = []
+        if current_user and user_role == 'student':
+            try:
+                cr = conn.execute('SELECT DISTINCT club_name FROM club_members WHERE user_id=? UNION SELECT DISTINCT club_name FROM club_cadres WHERE user_id=?', (user_id, user_id)).fetchall()
+                user_clubs = [r['club_name'] for r in cr if r['club_name']]
+            except:
+                pass
+        # 指导老师指导的社团
+        teacher_clubs = []
+        if current_user and user_role == 'teacher':
+            try:
+                tr = conn.execute('SELECT club_name FROM teacher_clubs WHERE user_id=?', (user_id,)).fetchall()
+                teacher_clubs = [r['club_name'] for r in tr if r['club_name']]
+            except:
+                pass
+        # 社团负责人如果 users.club_name 为空，尝试从 club_cadres/club_members 查找
+        if current_user and user_role == 'user' and not user_club:
+            try:
+                cr = conn.execute('SELECT DISTINCT club_name FROM club_cadres WHERE user_id=? UNION SELECT DISTINCT club_name FROM club_members WHERE user_id=?', (user_id, user_id)).fetchall()
+                if cr:
+                    user_club = cr[0]['club_name']
+            except:
+                pass
+
         if function_name == 'check_approval':
             atype = arguments.get('approval_type', 'material')
             kwargs = {}
             cn = arguments.get('club_name', '')
+            # 权限校验：学生不能查看审批
+            if user_role == 'student':
+                return json.dumps({'error': '学生角色无权查看审批信息'}, ensure_ascii=False)
+            # 社团负责人只能查看自己社团的审批
+            if user_role == 'user':
+                cn = user_club
+            # 指导老师只能查看所指导社团的审批
+            if user_role == 'teacher' and not cn:
+                if teacher_clubs:
+                    cn = teacher_clubs[0]
             if cn:
                 kwargs['club_name'] = cn
             result = approval_agent.batch_analyze(atype, **kwargs)
@@ -6372,9 +6980,29 @@ def execute_tool_call(function_name, arguments):
         elif function_name == 'search_documents':
             query = arguments.get('query', '')
             cn = arguments.get('club_name', '')
+            # 角色权限过滤
+            if user_role == 'student':
+                if cn and cn not in user_clubs:
+                    return json.dumps({'error': f'你只能搜索自己加入的社团（{", ".join(user_clubs)}）的文件'}, ensure_ascii=False)
+                if not cn and user_clubs:
+                    cn = user_clubs[0] if len(user_clubs) == 1 else ''
+            elif user_role == 'teacher':
+                if cn and cn not in teacher_clubs:
+                    return json.dumps({'error': f'你只能搜索所指导社团（{", ".join(teacher_clubs)}）的文件'}, ensure_ascii=False)
+                if not cn and len(teacher_clubs) == 1:
+                    cn = teacher_clubs[0]
+            elif user_role == 'user':
+                if cn and cn != user_club:
+                    return json.dumps({'error': f'你只能搜索自己社团（{user_club}）的文件'}, ensure_ascii=False)
+                cn = user_club
             doc_agent = DocIndexAgent(db)
             sem_results = doc_agent.semantic_search(query, top_k=10)
             if sem_results.get('search_type') == 'semantic' and sem_results.get('total', 0) > 0:
+                # 过滤语义搜索结果，只返回用户有权查看的社团文件
+                if user_role != 'admin' and cn:
+                    filtered = [r for r in sem_results.get('items', []) if r.get('club_name') == cn]
+                    sem_results['items'] = filtered
+                    sem_results['total'] = len(filtered)
                 return json.dumps(sem_results, ensure_ascii=False, default=str)
             results = doc_agent.search(query, club_name=cn)
             summary = f'找到{len(results)}个文件'
@@ -6383,17 +7011,56 @@ def execute_tool_call(function_name, arguments):
             return json.dumps({'summary': summary, 'total': len(results), 'items': results[:10]}, ensure_ascii=False, default=str)
 
         elif function_name == 'check_alerts':
+            # 权限校验：只有管理员可以查看系统预警
+            if user_role != 'admin':
+                return json.dumps({'total': 0, 'alerts': [], 'message': '系统预警仅管理员可查看，你可以查看自己社团的数据'}, ensure_ascii=False)
             alerts = notification_agent.check_all()
             return json.dumps({'total': len(alerts), 'alerts': alerts}, ensure_ascii=False, default=str)
 
         elif function_name == 'generate_insight_report':
             cn = arguments.get('club_name', '')
+            # 权限校验
+            if user_role == 'student':
+                if cn and cn not in user_clubs:
+                    return json.dumps({'error': f'你只能查看自己加入的社团报告'}, ensure_ascii=False)
+                if not cn and user_clubs:
+                    cn = user_clubs[0]
+            elif user_role == 'teacher':
+                if cn and cn not in teacher_clubs:
+                    return json.dumps({'error': f'你只能查看所指导社团的报告'}, ensure_ascii=False)
+                if not cn and teacher_clubs:
+                    cn = teacher_clubs[0]
+            elif user_role == 'user':
+                if not cn:
+                    cn = user_club
+                if cn and cn != user_club:
+                    return json.dumps({'error': f'你只能查看自己社团的报告'}, ensure_ascii=False)
             report = data_insight_agent.generate_report(club_name=cn)
             return json.dumps(report, ensure_ascii=False, default=str)
 
         elif function_name == 'query_club_data':
             cn = arguments.get('club_name', '')
             dtype = arguments.get('data_type', 'members')
+            # 权限校验
+            if user_role == 'student':
+                if cn and cn not in user_clubs:
+                    return json.dumps({'error': f'你只能查看自己加入的社团数据'}, ensure_ascii=False)
+                if not cn and user_clubs:
+                    cn = user_clubs[0]
+                if not cn:
+                    return json.dumps({'error': '你尚未加入任何社团'}, ensure_ascii=False)
+            elif user_role == 'teacher':
+                if cn and cn not in teacher_clubs:
+                    return json.dumps({'error': f'你只能查看所指导社团的数据'}, ensure_ascii=False)
+                if not cn and teacher_clubs:
+                    cn = teacher_clubs[0]
+                if not cn:
+                    return json.dumps({'error': '你尚未指导任何社团'}, ensure_ascii=False)
+            elif user_role == 'user':
+                if not cn:
+                    cn = user_club
+                if cn and cn != user_club:
+                    return json.dumps({'error': f'你只能查看自己社团的数据'}, ensure_ascii=False)
             if not cn:
                 return json.dumps({'error': '请提供社团名称'}, ensure_ascii=False)
             result = {}
@@ -6431,8 +7098,8 @@ def execute_tool_call(function_name, arguments):
             return json.dumps({'clubs': [dict(c) for c in clubs]}, ensure_ascii=False, default=str)
 
         elif function_name == 'analyze_photo':
-            photo_path = fn_args.get('photo_path', '')
-            analysis_type = fn_args.get('analysis_type', 'describe')
+            photo_path = arguments.get('photo_path', '')
+            analysis_type = arguments.get('analysis_type', 'describe')
             prompts_for_type = {
                 'describe': '请详细描述这张图片的内容，包括场景、人物、活动等信息，用中文回答。',
                 'verify': '请判断这张图片是否为真实的活动现场照片。检查：1)是否有人物活动 2)是否为摆拍或合成 3)场景是否与社团活动相关。给出判断结果和理由。',
@@ -6443,6 +7110,930 @@ def execute_tool_call(function_name, arguments):
             if not result:
                 result = json.dumps({'analysis': '视觉模型未配置，无法分析图片', 'fallback': True}, ensure_ascii=False)
             return result
+
+        elif function_name == 'query_data':
+            dataset = arguments.get('dataset', '')
+            filters = arguments.get('filters', {}) or {}
+            limit = arguments.get('limit', 10)
+            cn = filters.get('club_name', '')
+            status = filters.get('status', '')
+            keyword = filters.get('keyword', '')
+            date_from = filters.get('date_from', '')
+            date_to = filters.get('date_to', '')
+            has_club = filters.get('has_club', '')
+
+            # 角色权限过滤：非管理员只能查看自己社团的数据
+            if user_role == 'student':
+                # 学生数据集：只能查看自己
+                if dataset == 'students':
+                    pass  # 在数据集查询中过滤
+                elif dataset == 'teachers':
+                    # 学生不能查看老师列表
+                    return json.dumps({'error': '老师列表仅管理员和社团负责人可查看'}, ensure_ascii=False)
+                else:
+                    # 其他数据集：只能查看自己加入的社团数据
+                    allowed_clubs = user_clubs
+                    if not allowed_clubs:
+                        return json.dumps({'error': '你尚未加入任何社团，无法查看数据'}, ensure_ascii=False)
+                    if cn and cn not in allowed_clubs:
+                        return json.dumps({'error': f'你只能查看自己加入的社团数据（{", ".join(allowed_clubs)}）'}, ensure_ascii=False)
+                    if not cn:
+                        cn = allowed_clubs[0] if allowed_clubs else ''
+                    if dataset in ('carousel', 'hot_news', 'feedback'):
+                        if dataset == 'feedback':
+                            return json.dumps({'error': '反馈数据仅管理员可查看'}, ensure_ascii=False)
+                        if dataset == 'carousel':
+                            return json.dumps({'error': '轮播图管理仅管理员可操作'}, ensure_ascii=False)
+            elif user_role == 'teacher':
+                # 老师数据集：只能查看自己
+                if dataset == 'teachers':
+                    pass  # 在数据集查询中过滤
+                elif dataset == 'students':
+                    # 指导老师可以查看所指导社团的学生
+                    pass
+                else:
+                    # 其他数据集：只能查看所指导社团的数据
+                    allowed_clubs = teacher_clubs
+                    if not allowed_clubs:
+                        return json.dumps({'error': '你尚未指导任何社团，无法查看数据'}, ensure_ascii=False)
+                    if cn and cn not in allowed_clubs:
+                        return json.dumps({'error': f'你只能查看所指导社团的数据（{", ".join(allowed_clubs)}）'}, ensure_ascii=False)
+                    if not cn:
+                        cn = allowed_clubs[0] if len(allowed_clubs) == 1 else ''
+            elif user_role == 'user':
+                # 社团负责人只能查看自己社团的数据
+                if not cn:
+                    cn = user_club
+                if cn and cn != user_club:
+                    return json.dumps({'error': f'你只能查看自己社团（{user_club}）的数据'}, ensure_ascii=False)
+                if not cn:
+                    return json.dumps({'error': '请指定社团名称'}, ensure_ascii=False)
+
+            result_data = {}
+            if dataset == 'activities':
+                q = 'SELECT id, activity_name, club_name, status, created_at, is_completed FROM checkin_sessions WHERE 1=1'
+                params = []
+                if cn: q += ' AND club_name=?'; params.append(cn)
+                if status: q += ' AND status=?'; params.append(status)
+                if keyword: q += ' AND activity_name LIKE ?'; params.append(f'%{keyword}%')
+                if date_from: q += ' AND created_at>=?'; params.append(date_from)
+                if date_to: q += ' AND created_at<=?'; params.append(date_to)
+                q += ' ORDER BY created_at DESC LIMIT ?'; params.append(limit)
+                rows = conn.execute(q, params).fetchall()
+                total = conn.execute('SELECT COUNT(*) as c FROM checkin_sessions WHERE 1=1' + ('' if not cn else ' AND club_name=?'), ([cn] if cn else [])).fetchone()['c']
+                result_data = {'total': total, 'items': [dict(r) for r in rows]}
+            elif dataset == 'members':
+                q = 'SELECT id, username, real_name, club_name, department, specialty FROM club_members WHERE 1=1'
+                params = []
+                if cn: q += ' AND club_name=?'; params.append(cn)
+                if keyword: q += ' AND (real_name LIKE ? OR username LIKE ?)'; params.extend([f'%{keyword}%', f'%{keyword}%'])
+                q += ' ORDER BY id DESC LIMIT ?'; params.append(limit)
+                rows = conn.execute(q, params).fetchall()
+                total_q = 'SELECT COUNT(*) as c FROM club_members WHERE 1=1' + ('' if not cn else ' AND club_name=?')
+                total = conn.execute(total_q, ([cn] if cn else [])).fetchone()['c']
+                result_data = {'total': total, 'items': [dict(r) for r in rows]}
+            elif dataset == 'students':
+                # 学生列表：从 users 表查询 role=student 的用户
+                if has_club == 'false':
+                    # 查询没有加入任何社团的学生
+                    q = 'SELECT u.id, u.username, up.real_name, u.club_name FROM users u LEFT JOIN user_profiles up ON u.id=up.user_id WHERE u.role="student" AND u.id NOT IN (SELECT DISTINCT user_id FROM club_members WHERE user_id IS NOT NULL) AND u.id NOT IN (SELECT DISTINCT user_id FROM club_cadres WHERE user_id IS NOT NULL) AND (u.club_name IS NULL OR u.club_name="")'
+                    params = []
+                    if keyword: q += ' AND (u.username LIKE ? OR up.real_name LIKE ?)'; params.extend([f'%{keyword}%', f'%{keyword}%'])
+                    q += ' ORDER BY u.id LIMIT ?'; params.append(limit)
+                    rows = conn.execute(q, params).fetchall()
+                    total = conn.execute('SELECT COUNT(*) as c FROM users u WHERE u.role="student" AND u.id NOT IN (SELECT DISTINCT user_id FROM club_members WHERE user_id IS NOT NULL) AND u.id NOT IN (SELECT DISTINCT user_id FROM club_cadres WHERE user_id IS NOT NULL) AND (u.club_name IS NULL OR u.club_name="")').fetchone()['c']
+                    result_data = {'total': total, 'items': [dict(r) for r in rows], 'description': '未加入任何社团的学生'}
+                elif has_club == 'true':
+                    # 查询已加入社团的学生
+                    q = 'SELECT u.id, u.username, up.real_name, u.club_name FROM users u LEFT JOIN user_profiles up ON u.id=up.user_id WHERE u.role="student" AND (u.id IN (SELECT DISTINCT user_id FROM club_members WHERE user_id IS NOT NULL) OR u.id IN (SELECT DISTINCT user_id FROM club_cadres WHERE user_id IS NOT NULL) OR (u.club_name IS NOT NULL AND u.club_name!=""))'
+                    params = []
+                    if cn: q += ' AND u.club_name=?'; params.append(cn)
+                    if keyword: q += ' AND (u.username LIKE ? OR up.real_name LIKE ?)'; params.extend([f'%{keyword}%', f'%{keyword}%'])
+                    q += ' ORDER BY u.id LIMIT ?'; params.append(limit)
+                    rows = conn.execute(q, params).fetchall()
+                    total = conn.execute('SELECT COUNT(*) as c FROM users u WHERE u.role="student" AND (u.id IN (SELECT DISTINCT user_id FROM club_members WHERE user_id IS NOT NULL) OR u.id IN (SELECT DISTINCT user_id FROM club_cadres WHERE user_id IS NOT NULL) OR (u.club_name IS NOT NULL AND u.club_name!=""))' + ('' if not cn else ' AND u.club_name=?'), ([cn] if cn else [])).fetchone()['c']
+                    result_data = {'total': total, 'items': [dict(r) for r in rows], 'description': '已加入社团的学生'}
+                else:
+                    # 查询所有学生
+                    q = 'SELECT u.id, u.username, up.real_name, u.club_name FROM users u LEFT JOIN user_profiles up ON u.id=up.user_id WHERE u.role="student"'
+                    params = []
+                    if cn: q += ' AND u.club_name=?'; params.append(cn)
+                    if keyword: q += ' AND (u.username LIKE ? OR up.real_name LIKE ?)'; params.extend([f'%{keyword}%', f'%{keyword}%'])
+                    q += ' ORDER BY u.id LIMIT ?'; params.append(limit)
+                    rows = conn.execute(q, params).fetchall()
+                    total = conn.execute('SELECT COUNT(*) as c FROM users u WHERE u.role="student"' + ('' if not cn else ' AND u.club_name=?'), ([cn] if cn else [])).fetchone()['c']
+                    result_data = {'total': total, 'items': [dict(r) for r in rows]}
+                # 非管理员过滤：学生只能看自己，老师只能看所指导社团的
+                if user_role == 'student':
+                    result_data['items'] = [r for r in result_data['items'] if r['id'] == current_user['id']]
+                    result_data['total'] = len(result_data['items'])
+                elif user_role == 'teacher':
+                    result_data['items'] = [r for r in result_data['items'] if r.get('club_name') in teacher_clubs]
+                    result_data['total'] = len(result_data['items'])
+            elif dataset == 'teachers':
+                if has_club == 'false':
+                    # 查询没有指导任何社团的老师
+                    q = 'SELECT u.id, u.username, tp.real_name, tp.work_id FROM users u LEFT JOIN teacher_profiles tp ON u.id=tp.user_id WHERE u.role="teacher" AND u.id NOT IN (SELECT DISTINCT user_id FROM teacher_clubs)'
+                    params = []
+                    if keyword: q += ' AND (u.username LIKE ? OR tp.real_name LIKE ?)'; params.extend([f'%{keyword}%', f'%{keyword}%'])
+                    q += ' ORDER BY u.id LIMIT ?'; params.append(limit)
+                    rows = conn.execute(q, params).fetchall()
+                    total = conn.execute('SELECT COUNT(*) as c FROM users u WHERE u.role="teacher" AND u.id NOT IN (SELECT DISTINCT user_id FROM teacher_clubs)').fetchone()['c']
+                    result_data = {'total': total, 'items': [dict(r) for r in rows], 'description': '未指导任何社团的老师'}
+                elif has_club == 'true':
+                    # 查询已指导社团的老师
+                    q = 'SELECT tc.id, tc.user_id, tc.club_name, u.username, tp.real_name FROM teacher_clubs tc LEFT JOIN users u ON tc.user_id=u.id LEFT JOIN teacher_profiles tp ON tc.user_id=tp.user_id WHERE 1=1'
+                    params = []
+                    if cn: q += ' AND tc.club_name=?'; params.append(cn)
+                    if keyword: q += ' AND (u.username LIKE ? OR tp.real_name LIKE ?)'; params.extend([f'%{keyword}%', f'%{keyword}%'])
+                    q += ' ORDER BY tc.id LIMIT ?'; params.append(limit)
+                    rows = conn.execute(q, params).fetchall()
+                    result_data = {'items': [dict(r) for r in rows], 'description': '已指导社团的老师'}
+                else:
+                    # 查询所有老师及其指导社团
+                    q = 'SELECT u.id, u.username, tp.real_name, tp.work_id, GROUP_CONCAT(tc.club_name) as clubs FROM users u LEFT JOIN teacher_profiles tp ON u.id=tp.user_id LEFT JOIN teacher_clubs tc ON u.id=tc.user_id WHERE u.role="teacher" GROUP BY u.id'
+                    params = []
+                    if keyword: q += ' HAVING (u.username LIKE ? OR tp.real_name LIKE ?)'; params.extend([f'%{keyword}%', f'%{keyword}%'])
+                    q += ' ORDER BY u.id LIMIT ?'; params.append(limit)
+                    rows = conn.execute(q, params).fetchall()
+                    result_data = {'items': [dict(r) for r in rows]}
+                # 非管理员过滤：老师只能看自己
+                if user_role == 'teacher':
+                    result_data['items'] = [r for r in result_data['items'] if r.get('user_id') == current_user['id'] or r.get('id') == current_user['id']]
+                    result_data['total'] = len(result_data['items'])
+            elif dataset == 'workload':
+                q = 'SELECT id, club_name, student_name, item_name, score, status, created_at FROM workload_submissions WHERE 1=1'
+                params = []
+                if cn: q += ' AND club_name=?'; params.append(cn)
+                if status: q += ' AND status=?'; params.append(status)
+                q += ' ORDER BY created_at DESC LIMIT ?'; params.append(limit)
+                rows = conn.execute(q, params).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif dataset == 'finance':
+                q = 'SELECT id, club_name, type, amount, description, created_at FROM finance_records WHERE 1=1'
+                params = []
+                if cn: q += ' AND club_name=?'; params.append(cn)
+                if date_from: q += ' AND created_at>=?'; params.append(date_from)
+                if date_to: q += ' AND created_at<=?'; params.append(date_to)
+                q += ' ORDER BY created_at DESC LIMIT ?'; params.append(limit)
+                rows = conn.execute(q, params).fetchall()
+                income = conn.execute("SELECT COALESCE(SUM(amount),0) as s FROM finance_records WHERE type='income'" + ('' if not cn else ' AND club_name=?'), ([cn] if cn else [])).fetchone()['s']
+                expense = conn.execute("SELECT COALESCE(SUM(amount),0) as s FROM finance_records WHERE type='expense'" + ('' if not cn else ' AND club_name=?'), ([cn] if cn else [])).fetchone()['s']
+                result_data = {'income': income, 'expense': expense, 'balance': income - expense, 'items': [dict(r) for r in rows]}
+            elif dataset == 'recruitments':
+                q = 'SELECT id, club_name, title, status, created_at FROM recruitments WHERE 1=1'
+                params = []
+                if cn: q += ' AND club_name=?'; params.append(cn)
+                if status: q += ' AND status=?'; params.append(status)
+                q += ' ORDER BY created_at DESC LIMIT ?'; params.append(limit)
+                rows = conn.execute(q, params).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif dataset == 'scoring':
+                q = 'SELECT ss.id, ss.club_name, ss.status, ss.created_at, si.student_name, si.total_workload, si.final_score FROM scoring_submissions ss LEFT JOIN scoring_submission_items si ON ss.id=si.submission_id WHERE 1=1'
+                params = []
+                if cn: q += ' AND ss.club_name=?'; params.append(cn)
+                if status: q += ' AND ss.status=?'; params.append(status)
+                q += ' ORDER BY created_at DESC LIMIT ?'; params.append(limit)
+                rows = conn.execute(q, params).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif dataset == 'credits':
+                q = 'SELECT id, student_name, club1, score1, club2, score2, final_credit, semester FROM final_credits WHERE 1=1'
+                params = []
+                if cn: q += ' AND (club1=? OR club2=?)'; params.extend([cn, cn])
+                q += ' ORDER BY id DESC LIMIT ?'; params.append(limit)
+                rows = conn.execute(q, params).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif dataset == 'checkins':
+                q = 'SELECT cr.id, cr.session_id, cr.student_name, cr.student_id, cr.created_at as checkin_time, cs.activity_name, cs.club_name FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE 1=1'
+                params = []
+                if cn: q += ' AND cs.club_name=?'; params.append(cn)
+                q += ' ORDER BY cr.created_at DESC LIMIT ?'; params.append(limit)
+                rows = conn.execute(q, params).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif dataset == 'treehole':
+                q = 'SELECT id, content, scope, club_name, created_at, status FROM tree_hole WHERE 1=1'
+                params = []
+                if cn: q += ' AND club_name=?'; params.append(cn)
+                if status: q += ' AND status=?'; params.append(status)
+                q += ' ORDER BY created_at DESC LIMIT ?'; params.append(limit)
+                rows = conn.execute(q, params).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif dataset == 'feedback':
+                q = 'SELECT id, club_name, user_id, type, title, body, status, created_at FROM feedbacks WHERE 1=1'
+                params = []
+                if status: q += ' AND status=?'; params.append(status)
+                q += ' ORDER BY created_at DESC LIMIT ?'; params.append(limit)
+                rows = conn.execute(q, params).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif dataset == 'carousel':
+                rows = conn.execute('SELECT id, club_name, description, image_path FROM club_showcase ORDER BY id DESC LIMIT ?', (limit,)).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif dataset == 'excellent_clubs':
+                q = 'SELECT id, club_name, selected_at FROM excellent_clubs WHERE 1=1'
+                params = []
+                if cn: q += ' AND club_name=?'; params.append(cn)
+                q += ' ORDER BY selected_at DESC LIMIT ?'; params.append(limit)
+                rows = conn.execute(q, params).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif dataset == 'excellent_activities':
+                rows = conn.execute('SELECT id, group_id, selected_at FROM excellent_activities ORDER BY selected_at DESC LIMIT ?', (limit,)).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif dataset == 'hot_news':
+                rows = conn.execute('SELECT id, title, content, attachment_path, created_at FROM notices ORDER BY created_at DESC LIMIT ?', (limit,)).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif dataset == 'documents':
+                q = 'SELECT id, file_name, club_name, category, created_at FROM doc_index WHERE 1=1'
+                params = []
+                if cn: q += ' AND club_name=?'; params.append(cn)
+                if keyword: q += ' AND (file_name LIKE ? OR tags LIKE ?)'; params.extend([f'%{keyword}%', f'%{keyword}%'])
+                q += ' ORDER BY created_at DESC LIMIT ?'; params.append(limit)
+                rows = conn.execute(q, params).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif dataset == 'clubs':
+                rows = conn.execute('SELECT club_name, star_rating, category, description FROM club_profiles ORDER BY star_rating DESC LIMIT ?', (limit,)).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif dataset == 'notifications':
+                q = 'SELECT id, club_name, title, content, created_at FROM club_notices WHERE 1=1'
+                params = []
+                if cn: q += ' AND club_name=?'; params.append(cn)
+                q += ' ORDER BY created_at DESC LIMIT ?'; params.append(limit)
+                rows = conn.execute(q, params).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif dataset == 'departments':
+                q = 'SELECT id, club_name, dept_name, description FROM club_departments WHERE 1=1'
+                params = []
+                if cn: q += ' AND club_name=?'; params.append(cn)
+                rows = conn.execute(q, params).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif dataset == 'votes':
+                q = 'SELECT id, club_name, title, status, created_at FROM club_tools WHERE tool_type="vote" AND 1=1'
+                params = []
+                if cn: q += ' AND club_name=?'; params.append(cn)
+                q += ' ORDER BY created_at DESC LIMIT ?'; params.append(limit)
+                rows = conn.execute(q, params).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif dataset == 'surveys':
+                q = 'SELECT id, club_name, title, status, created_at FROM club_tools WHERE tool_type="survey" AND 1=1'
+                params = []
+                if cn: q += ' AND club_name=?'; params.append(cn)
+                q += ' ORDER BY created_at DESC LIMIT ?'; params.append(limit)
+                rows = conn.execute(q, params).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif dataset == 'joint_activities':
+                q = 'SELECT id, club_name, title, status, created_at FROM joint_activities WHERE 1=1'
+                params = []
+                if cn: q += ' AND club_name=?'; params.append(cn)
+                q += ' ORDER BY created_at DESC LIMIT ?'; params.append(limit)
+                rows = conn.execute(q, params).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif dataset == 'offcampus_requests':
+                q = 'SELECT id, club_name, title, status, created_at FROM offcampus_requests WHERE 1=1'
+                params = []
+                if cn: q += ' AND club_name=?'; params.append(cn)
+                if status: q += ' AND status=?'; params.append(status)
+                q += ' ORDER BY created_at DESC LIMIT ?'; params.append(limit)
+                rows = conn.execute(q, params).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            else:
+                result_data = {'error': f'未知数据集：{dataset}'}
+            return json.dumps(result_data, ensure_ascii=False, default=str)
+
+        elif function_name == 'create_entity':
+            entity_type = arguments.get('entity_type', '')
+            attrs = arguments.get('attributes', {}) or {}
+            result_data = {}
+            # 权限校验：学生不能创建实体
+            if user_role == 'student':
+                return json.dumps({'error': '学生角色无权创建内容，如需操作请联系社团负责人'}, ensure_ascii=False)
+            # 指导老师只能查看，不能创建
+            if user_role == 'teacher':
+                return json.dumps({'error': '指导老师角色无权创建内容，如需操作请联系社团负责人或管理员'}, ensure_ascii=False)
+            # 社团负责人只能为自己社团创建
+            if user_role == 'user':
+                cn = attrs.get('club_name', '')
+                if cn and cn != user_club:
+                    return json.dumps({'error': f'你只能为自己社团（{user_club}）创建内容'}, ensure_ascii=False)
+                if not cn:
+                    attrs['club_name'] = user_club
+            if entity_type == 'activity':
+                name = attrs.get('name', '未命名活动')
+                cn = attrs.get('club_name', '')
+                desc = attrs.get('description', '')
+                start = attrs.get('start_time', '')
+                end = attrs.get('end_time', '')
+                loc = attrs.get('location', '')
+                method = attrs.get('checkin_method', 'code')
+                if not cn:
+                    return json.dumps({'error': '创建活动需要指定社团名称', 'hint': '请提供 club_name 参数'}, ensure_ascii=False)
+                try:
+                    import random, string
+                    code = ''.join(random.choices(string.digits, k=6))
+                    conn.execute('INSERT INTO checkin_sessions (club_name, activity_name, checkin_code, status, created_at) VALUES (?, ?, ?, "open", CURRENT_TIMESTAMP)', (cn, name, code))
+                    conn.commit()
+                    sid = conn.execute('SELECT last_insert_rowid() as id').fetchone()['id']
+                    result_data = {'success': True, 'id': sid, 'message': f'活动"{name}"已创建，签到码：{code}'}
+                except Exception as e:
+                    result_data = {'error': f'创建活动失败：{str(e)}'}
+            elif entity_type == 'recruitment':
+                cn = attrs.get('club_name', '')
+                title = attrs.get('name', '招募')
+                desc = attrs.get('description', '')
+                if not cn:
+                    return json.dumps({'error': '创建招募需要指定社团名称'}, ensure_ascii=False)
+                try:
+                    conn.execute('INSERT INTO recruitments (club_name, title, description, status, created_at) VALUES (?, ?, ?, "pending", CURRENT_TIMESTAMP)', (cn, title, desc))
+                    conn.commit()
+                    rid = conn.execute('SELECT last_insert_rowid() as id').fetchone()['id']
+                    result_data = {'success': True, 'id': rid, 'message': f'招募"{title}"已创建，等待审批'}
+                except Exception as e:
+                    result_data = {'error': f'创建招募失败：{str(e)}'}
+            elif entity_type == 'notification':
+                cn = attrs.get('club_name', '')
+                title = attrs.get('name', '通知')
+                content = attrs.get('content', '')
+                if not cn:
+                    return json.dumps({'error': '创建通知需要指定社团名称'}, ensure_ascii=False)
+                try:
+                    conn.execute('INSERT INTO club_notices (club_name, title, content, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)', (cn, title, content))
+                    conn.commit()
+                    nid = conn.execute('SELECT last_insert_rowid() as id').fetchone()['id']
+                    result_data = {'success': True, 'id': nid, 'message': f'通知"{title}"已发布'}
+                except Exception as e:
+                    result_data = {'error': f'创建通知失败：{str(e)}'}
+            elif entity_type == 'vote':
+                cn = attrs.get('club_name', '')
+                title = attrs.get('name', '投票')
+                options = attrs.get('options', [])
+                if not cn:
+                    return json.dumps({'error': '创建投票需要指定社团名称'}, ensure_ascii=False)
+                try:
+                    conn.execute('INSERT INTO club_tools (club_name, tool_type, title, options, status, created_at) VALUES (?, "vote", ?, ?, "active", CURRENT_TIMESTAMP)', (cn, title, json.dumps(options, ensure_ascii=False)))
+                    conn.commit()
+                    vid = conn.execute('SELECT last_insert_rowid() as id').fetchone()['id']
+                    result_data = {'success': True, 'id': vid, 'message': f'投票"{title}"已创建'}
+                except Exception as e:
+                    result_data = {'error': f'创建投票失败：{str(e)}'}
+            elif entity_type == 'survey':
+                cn = attrs.get('club_name', '')
+                title = attrs.get('name', '问卷')
+                options = attrs.get('options', [])
+                if not cn:
+                    return json.dumps({'error': '创建问卷需要指定社团名称'}, ensure_ascii=False)
+                try:
+                    conn.execute('INSERT INTO club_tools (club_name, tool_type, title, options, status, created_at) VALUES (?, "survey", ?, ?, "active", CURRENT_TIMESTAMP)', (cn, title, json.dumps(options, ensure_ascii=False)))
+                    conn.commit()
+                    sid = conn.execute('SELECT last_insert_rowid() as id').fetchone()['id']
+                    result_data = {'success': True, 'id': sid, 'message': f'问卷"{title}"已创建'}
+                except Exception as e:
+                    result_data = {'error': f'创建问卷失败：{str(e)}'}
+            elif entity_type == 'joint_activity':
+                cn = attrs.get('club_name', '')
+                title = attrs.get('name', '联合活动')
+                desc = attrs.get('description', '')
+                support = attrs.get('support_needed', '')
+                if not cn:
+                    return json.dumps({'error': '创建联合活动需要指定社团名称'}, ensure_ascii=False)
+                try:
+                    conn.execute('INSERT INTO joint_activities (club_name, title, description, support_needed, status, created_at) VALUES (?, ?, ?, ?, "open", CURRENT_TIMESTAMP)', (cn, title, desc, support))
+                    conn.commit()
+                    jid = conn.execute('SELECT last_insert_rowid() as id').fetchone()['id']
+                    result_data = {'success': True, 'id': jid, 'message': f'联合活动"{title}"已创建'}
+                except Exception as e:
+                    result_data = {'error': f'创建联合活动失败：{str(e)}'}
+            elif entity_type == 'registration_form':
+                cn = attrs.get('club_name', '')
+                title = attrs.get('name', '报名表')
+                if not cn:
+                    return json.dumps({'error': '创建报名表需要指定社团名称'}, ensure_ascii=False)
+                try:
+                    conn.execute('INSERT INTO club_tools (club_name, tool_type, title, status, created_at) VALUES (?, "registration", ?, "active", CURRENT_TIMESTAMP)', (cn, title))
+                    conn.commit()
+                    rid = conn.execute('SELECT last_insert_rowid() as id').fetchone()['id']
+                    result_data = {'success': True, 'id': rid, 'message': f'报名表"{title}"已创建'}
+                except Exception as e:
+                    result_data = {'error': f'创建报名表失败：{str(e)}'}
+            else:
+                result_data = {'error': f'暂不支持创建类型：{entity_type}', 'hint': '当前支持：activity, recruitment, notification, vote, survey, joint_activity, registration_form'}
+            return json.dumps(result_data, ensure_ascii=False, default=str)
+
+        elif function_name == 'update_entity':
+            entity_type = arguments.get('entity_type', '')
+            entity_id = arguments.get('entity_id', 0)
+            updates = arguments.get('updates', {}) or {}
+            result_data = {}
+            # 权限校验
+            if user_role == 'student':
+                # 学生只能签到（checkin类型）
+                if entity_type != 'checkin':
+                    return json.dumps({'error': '学生角色无权执行此操作'}, ensure_ascii=False)
+            if user_role == 'teacher':
+                # 指导老师只能审批赋分和退社
+                if entity_type not in ('scoring', 'workload'):
+                    return json.dumps({'error': '指导老师只能审核赋分和工作量'}, ensure_ascii=False)
+            if user_role == 'user':
+                # 社团负责人只能操作自己社团的数据
+                if entity_type in ('material', 'offcampus'):
+                    return json.dumps({'error': '材料和校外活动审批仅管理员可操作'}, ensure_ascii=False)
+            if entity_type == 'registration':
+                action = updates.get('action', '')
+                reason = updates.get('reason', '')
+                if action in ('approve', 'reject'):
+                    new_status = 'approved' if action == 'approve' else 'rejected'
+                    try:
+                        # 校验社团归属：非管理员只能审批自己社团的报名
+                        reg = conn.execute('SELECT club_name FROM club_registrations WHERE id=?', (entity_id,)).fetchone()
+                        if not reg:
+                            return json.dumps({'error': '报名记录不存在'}, ensure_ascii=False)
+                        if user_role == 'user' and reg['club_name'] != user_club:
+                            return json.dumps({'error': '你只能审批自己社团的报名'}, ensure_ascii=False)
+                        if user_role == 'teacher' and reg['club_name'] not in teacher_clubs:
+                            return json.dumps({'error': '你只能审批所指导社团的报名'}, ensure_ascii=False)
+                        conn.execute('UPDATE club_registrations SET status=?, reviewed_at=CURRENT_TIMESTAMP WHERE id=?', (new_status, entity_id))
+                        conn.commit()
+                        result_data = {'success': True, 'message': f'报名已{("通过" if action=="approve" else "拒绝")}'}
+                    except Exception as e:
+                        result_data = {'error': str(e)}
+                else:
+                    result_data = {'error': '不支持的操作，请使用 approve 或 reject'}
+            elif entity_type == 'workload':
+                action = updates.get('action', '')
+                if action in ('approve', 'reject'):
+                    new_status = 'approved' if action == 'approve' else 'rejected'
+                    try:
+                        conn.execute('UPDATE workload_submissions SET status=? WHERE id=?', (new_status, entity_id))
+                        conn.commit()
+                        result_data = {'success': True, 'message': f'工作量已{("通过" if action=="approve" else "驳回")}'}
+                    except Exception as e:
+                        result_data = {'error': str(e)}
+                else:
+                    result_data = {'error': '不支持的操作'}
+            elif entity_type == 'scoring':
+                action = updates.get('action', '')
+                if action in ('approve', 'reject'):
+                    new_status = 'approved' if action == 'approve' else 'rejected'
+                    try:
+                        conn.execute('UPDATE scoring_submissions SET status=? WHERE id=?', (new_status, entity_id))
+                        conn.commit()
+                        result_data = {'success': True, 'message': f'赋分已{("通过" if action=="approve" else "驳回")}'}
+                    except Exception as e:
+                        result_data = {'error': str(e)}
+                else:
+                    result_data = {'error': '不支持的操作'}
+            elif entity_type == 'material':
+                action = updates.get('action', '')
+                if action in ('approve', 'reject'):
+                    new_status = 'approved' if action == 'approve' else 'rejected'
+                    try:
+                        conn.execute('UPDATE club_uploads SET status=? WHERE id=?', (new_status, entity_id))
+                        conn.commit()
+                        result_data = {'success': True, 'message': f'材料已{("通过" if action=="approve" else "驳回")}'}
+                    except Exception as e:
+                        result_data = {'error': str(e)}
+                else:
+                    result_data = {'error': '不支持的操作'}
+            elif entity_type == 'offcampus':
+                action = updates.get('action', '')
+                if action in ('approve', 'reject'):
+                    new_status = 'approved' if action == 'approve' else 'rejected'
+                    try:
+                        conn.execute('UPDATE offcampus_requests SET status=? WHERE id=?', (new_status, entity_id))
+                        conn.commit()
+                        result_data = {'success': True, 'message': f'校外活动申请已{("通过" if action=="approve" else "驳回")}'}
+                    except Exception as e:
+                        result_data = {'error': str(e)}
+                else:
+                    result_data = {'error': '不支持的操作'}
+            elif entity_type == 'finance_permission':
+                action = updates.get('action', '')
+                # 权限校验：只有社团负责人和管理员可以审批财务权限
+                if user_role == 'student':
+                    return json.dumps({'error': '学生无权审批财务权限'}, ensure_ascii=False)
+                if user_role == 'teacher':
+                    return json.dumps({'error': '指导老师无权审批财务权限，请联系社团负责人'}, ensure_ascii=False)
+                if action in ('approve', 'reject'):
+                    new_status = 'approved' if action == 'approve' else 'rejected'
+                    try:
+                        record = conn.execute('SELECT * FROM finance_permissions WHERE id=?', (entity_id,)).fetchone()
+                        if record:
+                            # 社团负责人只能审批自己社团的财务权限
+                            if user_role == 'user' and record['club_name'] != user_club:
+                                return json.dumps({'error': '你只能审批自己社团的财务权限'}, ensure_ascii=False)
+                            conn.execute('UPDATE finance_permissions SET status=?, reviewed_at=CURRENT_TIMESTAMP WHERE id=?', (new_status, entity_id))
+                            if action == 'approve':
+                                conn.execute('INSERT OR IGNORE INTO finance_managers (club_name, user_id, username, real_name, granted_by) VALUES (?, ?, ?, ?, ?)',
+                                    (record['club_name'], record['user_id'], record['username'], record['real_name'], 'ai_assistant'))
+                            conn.commit()
+                            result_data = {'success': True, 'message': f'财务权限已{("通过" if action=="approve" else "拒绝")}'}
+                        else:
+                            result_data = {'error': '申请不存在'}
+                    except Exception as e:
+                        result_data = {'error': str(e)}
+                else:
+                    result_data = {'error': '不支持的操作'}
+            elif entity_type == 'activity':
+                new_status = updates.get('status', '')
+                if new_status:
+                    try:
+                        conn.execute('UPDATE checkin_sessions SET status=? WHERE id=?', (new_status, entity_id))
+                        conn.commit()
+                        result_data = {'success': True, 'message': f'活动状态已更新为{new_status}'}
+                    except Exception as e:
+                        result_data = {'error': str(e)}
+                else:
+                    result_data = {'error': '请指定要更新的状态'}
+            elif entity_type == 'checkin':
+                action = updates.get('action', '')
+                if action == 'checkin':
+                    try:
+                        session = conn.execute('SELECT id, club_name, status, checkin_code FROM checkin_sessions WHERE id=?', (entity_id,)).fetchone()
+                        if not session:
+                            return json.dumps({'error': '签到会话不存在'}, ensure_ascii=False)
+                        if session['status'] != 'open':
+                            return json.dumps({'error': '该签到已关闭'}, ensure_ascii=False)
+                        conn.execute('INSERT INTO checkin_records (session_id, club_name, student_name, student_id, created_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)',
+                            (entity_id, session['club_name'], current_user.get('real_name', current_user.get('username', '')) if current_user else '', current_user.get('id', 0) if current_user else 0))
+                        conn.commit()
+                        result_data = {'success': True, 'message': '签到成功'}
+                    except Exception as e:
+                        result_data = {'error': str(e)}
+                elif action == 'checkout':
+                    try:
+                        conn.execute('UPDATE checkin_sessions SET status="closed", closed_at=CURRENT_TIMESTAMP WHERE id=?', (entity_id,))
+                        conn.commit()
+                        result_data = {'success': True, 'message': '签退成功，活动已关闭'}
+                    except Exception as e:
+                        result_data = {'error': str(e)}
+                else:
+                    result_data = {'error': '签到操作请使用 checkin 或 checkout'}
+            elif entity_type == 'member':
+                action = updates.get('action', '')
+                if action == 'join':
+                    try:
+                        if not current_user:
+                            return json.dumps({'error': '请先登录'}, ensure_ascii=False)
+                        club = updates.get('club_name', user_club)
+                        if not club:
+                            return json.dumps({'error': '请指定社团名称'}, ensure_ascii=False)
+                        existing = conn.execute('SELECT id FROM club_members WHERE user_id=? AND club_name=?', (current_user['id'], club)).fetchone()
+                        if existing:
+                            return json.dumps({'error': '已经是该社团成员'}, ensure_ascii=False)
+                        conn.execute('INSERT INTO club_members (club_name, user_id, username, real_name, joined_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)',
+                            (club, current_user['id'], current_user.get('username', ''), current_user.get('real_name', '')))
+                        conn.commit()
+                        result_data = {'success': True, 'message': f'已加入{club}'}
+                    except Exception as e:
+                        result_data = {'error': str(e)}
+                elif action == 'leave':
+                    try:
+                        if not current_user:
+                            return json.dumps({'error': '请先登录'}, ensure_ascii=False)
+                        conn.execute('DELETE FROM club_members WHERE id=?', (entity_id,))
+                        conn.commit()
+                        result_data = {'success': True, 'message': '已退出社团'}
+                    except Exception as e:
+                        result_data = {'error': str(e)}
+                else:
+                    result_data = {'error': '成员操作请使用 join 或 leave'}
+            else:
+                result_data = {'error': f'暂不支持更新类型：{entity_type}', 'hint': '当前支持：activity, registration, workload, scoring, material, offcampus, finance_permission, checkin, member'}
+            return json.dumps(result_data, ensure_ascii=False, default=str)
+
+        elif function_name == 'send_notification':
+            target = arguments.get('target', '')
+            cn = arguments.get('club_name', '')
+            content = arguments.get('content', '')
+            channel = arguments.get('channel', 'system')
+            # 权限校验
+            if user_role == 'student':
+                return json.dumps({'error': '学生角色无权发送通知'}, ensure_ascii=False)
+            if user_role == 'teacher':
+                return json.dumps({'error': '指导老师角色无权发送通知，如需通知请联系社团负责人'}, ensure_ascii=False)
+            if user_role == 'user':
+                # 社团负责人只能给自己社团发通知
+                if not cn:
+                    cn = user_club
+                if cn != user_club:
+                    return json.dumps({'error': f'你只能给自己社团（{user_club}）发送通知'}, ensure_ascii=False)
+            result_data = {}
+            try:
+                if target == 'all_members' and cn:
+                    count = conn.execute('SELECT COUNT(*) as c FROM club_members WHERE club_name=?', (cn,)).fetchone()['c']
+                    conn.execute('INSERT INTO club_notices (club_name, title, content, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)', (cn, '系统通知', content))
+                    conn.commit()
+                    result_data = {'success': True, 'message': f'通知已发送给{cn}全体成员（{count}人）'}
+                elif target in ('admin', 'user', 'teacher', 'student'):
+                    count = conn.execute('SELECT COUNT(*) as c FROM users WHERE role=?', (target,)).fetchone()['c']
+                    result_data = {'success': True, 'message': f'通知已发送给{count}位{target}角色用户', 'note': '系统内通知已记录'}
+                elif cn:
+                    conn.execute('INSERT INTO club_notices (club_name, title, content, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)', (cn, '系统通知', content))
+                    conn.commit()
+                    result_data = {'success': True, 'message': f'通知已发送到{cn}'}
+                else:
+                    result_data = {'error': '请指定通知目标（target）或社团名称（club_name）'}
+            except Exception as e:
+                result_data = {'error': str(e)}
+            return json.dumps(result_data, ensure_ascii=False, default=str)
+
+        elif function_name == 'generate_report':
+            report_type = arguments.get('report_type', '')
+            cn = arguments.get('club_name', '')
+            date_from = arguments.get('date_from', '')
+            date_to = arguments.get('date_to', '')
+            # 权限校验
+            if user_role == 'student':
+                # 学生只能看自己社团的报告
+                if not cn and user_clubs:
+                    cn = user_clubs[0]
+                if cn and cn not in user_clubs:
+                    return json.dumps({'error': f'你只能查看自己加入的社团（{", ".join(user_clubs)}）的报告'}, ensure_ascii=False)
+                # 学生不能看预警和全校报告
+                if report_type in ('alert_summary',):
+                    return json.dumps({'error': '预警报告仅管理员可查看'}, ensure_ascii=False)
+            elif user_role == 'teacher':
+                if not cn and teacher_clubs:
+                    cn = teacher_clubs[0]
+                if cn and cn not in teacher_clubs:
+                    return json.dumps({'error': f'你只能查看所指导社团（{", ".join(teacher_clubs)}）的报告'}, ensure_ascii=False)
+                if report_type in ('alert_summary',):
+                    return json.dumps({'error': '预警报告仅管理员可查看'}, ensure_ascii=False)
+            elif user_role == 'user':
+                if not cn:
+                    cn = user_club
+                if cn and cn != user_club:
+                    return json.dumps({'error': f'你只能查看自己社团（{user_club}）的报告'}, ensure_ascii=False)
+                if report_type in ('alert_summary',):
+                    return json.dumps({'error': '预警报告仅管理员可查看'}, ensure_ascii=False)
+            result_data = {}
+            if report_type == 'activity_overview':
+                if cn:
+                    total = conn.execute('SELECT COUNT(*) as c FROM checkin_sessions WHERE club_name=?', (cn,)).fetchone()['c']
+                    completed = conn.execute('SELECT COUNT(*) as c FROM checkin_sessions WHERE club_name=? AND is_completed=1', (cn,)).fetchone()['c']
+                else:
+                    total = conn.execute('SELECT COUNT(*) as c FROM checkin_sessions').fetchone()['c']
+                    completed = conn.execute('SELECT COUNT(*) as c FROM checkin_sessions WHERE is_completed=1').fetchone()['c']
+                clubs_data = conn.execute('SELECT club_name, COUNT(*) as c FROM checkin_sessions GROUP BY club_name ORDER BY c DESC LIMIT 10').fetchall()
+                result_data = {'total_activities': total, 'completed': completed, 'completion_rate': round(completed/total*100) if total > 0 else 0, 'by_club': [dict(r) for r in clubs_data]}
+            elif report_type == 'teacher_guidance':
+                # 指导老师指导情况报告：综合 teacher_clubs + teacher_profiles + teacher_checkin_checkout
+                if cn:
+                    teacher_rows = conn.execute('SELECT tc.user_id, tc.club_name, tp.real_name FROM teacher_clubs tc LEFT JOIN teacher_profiles tp ON tc.user_id=tp.user_id WHERE tc.club_name=?', (cn,)).fetchall()
+                else:
+                    teacher_rows = conn.execute('SELECT tc.user_id, tc.club_name, tp.real_name FROM teacher_clubs tc LEFT JOIN teacher_profiles tp ON tc.user_id=tp.user_id').fetchall()
+                items = []
+                for tr in teacher_rows:
+                    tid = tr['user_id']
+                    tcn = tr['club_name']
+                    tname = tr['real_name'] or ''
+                    if not tname:
+                        u = conn.execute('SELECT username FROM users WHERE id=?', (tid,)).fetchone()
+                        tname = u['username'] if u else '未知'
+                    # 签到签退指导次数
+                    checked_out = conn.execute('SELECT COUNT(*) as c FROM teacher_checkin_checkout WHERE teacher_user_id=? AND club_name=? AND status="checked_out"', (tid, tcn)).fetchone()['c']
+                    checked_in = conn.execute('SELECT COUNT(*) as c FROM teacher_checkin_checkout WHERE teacher_user_id=? AND club_name=? AND status="checked_in"', (tid, tcn)).fetchone()['c']
+                    # 指导时长
+                    duration_rows = conn.execute('SELECT checkin_time, checkout_time FROM teacher_checkin_checkout WHERE teacher_user_id=? AND club_name=? AND status="checked_out" AND checkin_time IS NOT NULL AND checkout_time IS NOT NULL', (tid, tcn)).fetchall()
+                    total_minutes = 0
+                    for dr in duration_rows:
+                        try:
+                            ci = datetime.strptime(str(dr['checkin_time']), '%Y-%m-%d %H:%M:%S')
+                            co = datetime.strptime(str(dr['checkout_time']), '%Y-%m-%d %H:%M:%S')
+                            total_minutes += max(0, (co - ci).total_seconds() / 60)
+                        except:
+                            pass
+                    # 活动数
+                    activity_count = conn.execute('SELECT COUNT(*) as c FROM checkin_sessions WHERE club_name=?', (tcn,)).fetchone()['c']
+                    items.append({
+                        'teacher_name': tname,
+                        'club_name': tcn,
+                        'guidance_count': checked_out,
+                        'in_progress': checked_in,
+                        'total_hours': round(total_minutes / 60, 1),
+                        'activity_count': activity_count
+                    })
+                result_data = {'items': items}
+            elif report_type == 'workload_stats':
+                q = 'SELECT club_name, COUNT(*) as total, SUM(CASE WHEN status="approved" THEN 1 ELSE 0 END) as approved, SUM(CASE WHEN status="pending" THEN 1 ELSE 0 END) as pending FROM workload_submissions GROUP BY club_name ORDER BY total DESC'
+                rows = conn.execute(q).fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif report_type == 'finance_summary':
+                q = 'SELECT club_name, SUM(CASE WHEN type="income" THEN amount ELSE 0 END) as income, SUM(CASE WHEN type="expense" THEN amount ELSE 0 END) as expense FROM finance_records GROUP BY club_name ORDER BY income DESC'
+                rows = conn.execute(q).fetchall()
+                items = []
+                for r in rows:
+                    d = dict(r)
+                    d['balance'] = d.get('income', 0) - d.get('expense', 0)
+                    items.append(d)
+                result_data = {'items': items}
+            elif report_type == 'participation_trend':
+                rows = conn.execute('SELECT cs.club_name, COUNT(DISTINCT cr.id) as participants, COUNT(cr.id) as checkins FROM checkin_sessions cs LEFT JOIN checkin_records cr ON cs.id=cr.session_id GROUP BY cs.club_name ORDER BY participants DESC LIMIT 10').fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif report_type == 'scoring_distribution':
+                rows = conn.execute('SELECT ss.club_name, ss.status, COUNT(*) as count FROM scoring_submissions ss GROUP BY ss.club_name, ss.status ORDER BY ss.club_name').fetchall()
+                result_data = {'items': [dict(r) for r in rows]}
+            elif report_type == 'alert_summary':
+                alerts = notification_agent.check_all() if hasattr(notification_agent, 'check_all') else []
+                result_data = {'total_alerts': len(alerts), 'alerts': alerts[:10]}
+            elif report_type == 'club_health':
+                if cn:
+                    report = data_insight_agent.generate_report(club_name=cn) if hasattr(data_insight_agent, 'generate_report') else {}
+                    result_data = report
+                else:
+                    result_data = {'error': '社团健康报告需要指定社团名称'}
+            else:
+                result_data = {'error': f'未知报告类型：{report_type}'}
+            return json.dumps(result_data, ensure_ascii=False, default=str)
+
+        elif function_name == 'ai_generate':
+            gen_type = arguments.get('generate_type', '')
+            params = arguments.get('params', {}) or {}
+            result_data = {}
+            if gen_type == 'copywriting':
+                theme = params.get('theme', '社团活动')
+                tone = params.get('tone', '活泼')
+                cn = params.get('club_name', '')
+                activity_type = params.get('activity_type', '')
+                target = params.get('target_audience', '全体同学')
+                prompt_text = f'请为{cn + "的" if cn else ""}{activity_type + "——" if activity_type else ""}"{theme}"写一段{tone}风格的宣传文案，目标受众是{target}。要求：吸引人、有号召力、200字以内。'
+                reply = call_llm_api([{'role': 'user', 'content': prompt_text}], max_tokens=500)
+                if reply:
+                    result_data = {'success': True, 'content': reply, 'message': '文案已生成'}
+                else:
+                    result_data = {'error': '文案生成失败，AI服务不可用'}
+            else:
+                result_data = {'error': f'未知生成类型：{gen_type}'}
+            return json.dumps(result_data, ensure_ascii=False, default=str)
+
+        elif function_name == 'recommend':
+            rec_type = arguments.get('recommend_type', '')
+            cn = arguments.get('club_name', '')
+            result_data = {}
+            if rec_type == 'club':
+                # 查询用户已加入的社团
+                joined_clubs = []
+                joined_count = 0
+                pending_count = 0
+                if current_user:
+                    joined_rows = conn.execute('SELECT DISTINCT club_name FROM club_members WHERE user_id=?', (user_id,)).fetchall()
+                    joined_clubs = [r['club_name'] for r in joined_rows]
+                    cadre_rows = conn.execute('SELECT DISTINCT club_name FROM club_cadres WHERE user_id=?', (user_id,)).fetchall()
+                    for r in cadre_rows:
+                        if r['club_name'] not in joined_clubs:
+                            joined_clubs.append(r['club_name'])
+                    joined_count = len(joined_clubs)
+                    pending_row = conn.execute('SELECT COUNT(*) as c FROM club_registrations WHERE user_id=? AND status="pending"', (user_id,)).fetchone()
+                    pending_count = pending_row['c'] if pending_row else 0
+                # 每人最多加入2个社团
+                remaining = max(0, 2 - joined_count - pending_count)
+                # 排除已加入的社团
+                clubs = conn.execute('SELECT cp.club_name, cp.category, cp.star_rating, cp.description, COUNT(cm.id) as member_count FROM club_profiles cp LEFT JOIN club_members cm ON cp.club_name=cm.club_name GROUP BY cp.club_name ORDER BY cp.star_rating DESC, member_count DESC').fetchall()
+                filtered = [dict(r) for r in clubs if r['club_name'] not in joined_clubs]
+                result_data = {
+                    'recommendations': filtered[:5],
+                    'joined_clubs': joined_clubs,
+                    'joined_count': joined_count,
+                    'pending_count': pending_count,
+                    'remaining_slots': remaining,
+                    'max_clubs': 2,
+                    'message': f'您已加入{joined_count}个社团' + (f'、有{pending_count}个待审批' if pending_count else '') + f'，还可加入{remaining}个社团' if remaining > 0 else '，已达到上限（每人最多2个）'
+                }
+            elif rec_type == 'activity':
+                activities = conn.execute('SELECT cs.activity_name, cs.club_name, cs.created_at, COUNT(cr.id) as participant_count FROM checkin_sessions cs LEFT JOIN checkin_records cr ON cs.id=cr.session_id WHERE cs.status="open" OR cs.is_completed=0 GROUP BY cs.id ORDER BY participant_count DESC, cs.created_at DESC LIMIT 5').fetchall()
+                result_data = {'recommendations': [dict(r) for r in activities], 'message': '基于参与热度的活动推荐'}
+            elif rec_type == 'joint_partner':
+                if not cn:
+                    return json.dumps({'error': '推荐联合活动伙伴需要指定当前社团名称'}, ensure_ascii=False)
+                other_clubs = conn.execute('SELECT cp.club_name, cp.category, COUNT(cs.id) as activity_count FROM club_profiles cp LEFT JOIN checkin_sessions cs ON cp.club_name=cs.club_name WHERE cp.club_name!=? GROUP BY cp.club_name ORDER BY activity_count DESC LIMIT 5', (cn,)).fetchall()
+                result_data = {'recommendations': [dict(r) for r in other_clubs], 'message': f'适合与{cn}联合活动的社团推荐'}
+            elif rec_type == 'recruitment':
+                # 推荐进行中的招募活动，优先推荐用户未报名的
+                recruitments = conn.execute('SELECT r.id, r.club_name, r.title, r.description, r.status, r.created_at, COUNT(rs.id) as signup_count FROM recruitments r LEFT JOIN recruitment_signups rs ON r.id=rs.recruitment_id WHERE r.status="open" OR r.status="active" GROUP BY r.id ORDER BY r.created_at DESC LIMIT 5').fetchall()
+                items = [dict(r) for r in recruitments]
+                # 如果是学生，标记是否已报名
+                if user_role == 'student' and items:
+                    for item in items:
+                        signed = conn.execute('SELECT COUNT(*) as c FROM recruitment_signups WHERE recruitment_id=? AND user_id=?', (item['id'], user_id)).fetchone()['c']
+                        item['already_signed'] = signed > 0
+                result_data = {'recommendations': items, 'message': '进行中的招募活动推荐'}
+            else:
+                result_data = {'error': f'未知推荐类型：{rec_type}'}
+            return json.dumps(result_data, ensure_ascii=False, default=str)
+
+        elif function_name == 'query_database':
+            sql = arguments.get('sql', '').strip()
+            query_desc = arguments.get('description', '')
+            if not sql:
+                return json.dumps({'error': '请提供SQL查询语句'}, ensure_ascii=False)
+            # 安全检查：只允许SELECT
+            sql_upper = sql.upper().strip()
+            forbidden_keywords = ['INSERT', 'UPDATE', 'DELETE', 'DROP', 'ALTER', 'CREATE', 'ATTACH', 'DETACH', 'REPLACE', 'PRAGMA']
+            for kw in forbidden_keywords:
+                if kw in sql_upper.split():
+                    return json.dumps({'error': f'安全限制：禁止执行{kw}操作，仅允许SELECT查询'}, ensure_ascii=False)
+            if not sql_upper.startswith('SELECT') and not sql_upper.startswith('WITH'):
+                return json.dumps({'error': '安全限制：仅允许SELECT查询语句'}, ensure_ascii=False)
+            import re as _re
+            sql_lower = sql.lower()
+            # 禁止的表（敏感数据）
+            forbidden_tables = ['users', 'sms_codes', 'ai_chat_history', 'ai_pets']
+            for ft in forbidden_tables:
+                if _re.search(r'\b' + ft + r'\b', sql_lower):
+                    if user_role != 'admin':
+                        return json.dumps({'error': f'安全限制：无权查询{ft}表'}, ensure_ascii=False)
+            # 用户隔离：非管理员自动注入社团过滤
+            # 判断SQL中涉及的表
+            club_columns = {
+                'club_members': 'club_name',
+                'club_cadres': 'club_name',
+                'club_notices': 'club_name',
+                'club_profiles': 'club_name',
+                'club_departments': 'club_name',
+                'club_tools': 'club_name',
+                'club_uploads': 'club_name',
+                'club_registrations': 'club_name',
+                'club_showcase': 'club_name',
+                'club_favorites': 'club_name',
+                'checkin_sessions': 'club_name',
+                'checkin_records': 'club_name',
+                'finance_records': 'club_name',
+                'finance_permissions': 'club_name',
+                'finance_managers': 'club_name',
+                'workload_submissions': 'club_name',
+                'scoring_submissions': 'club_name',
+                'scoring_submission_items': None,  # 通过submission_id关联
+                'recruitments': 'club_name',
+                'recruitment_signups': None,
+                'teacher_clubs': 'club_name',
+                'teacher_checkin_checkout': 'club_name',
+                'joint_activities': 'club_name',
+                'joint_replies': None,
+                'offcampus_requests': 'club_name',
+                'excellent_clubs': 'club_name',
+                'excellent_activities': None,
+                'feedbacks': 'club_name',
+                'tree_hole': 'club_name',
+                'doc_index': 'club_name',
+                'notices': None,
+                'notifications': None,
+                'user_profiles': None,
+                'teacher_profiles': None,
+                'final_credits': None,
+                'scoring_rules': None,
+                'scoring_club_overrides': 'club_name',
+                'location_checkins': None,
+                'quit_applications': None,
+                'teacher_club_requests': None,
+            }
+            if user_role != 'admin':
+                # 检测SQL中涉及的含club_name列的表
+                tables_in_sql = []
+                for tbl in club_columns:
+                    if _re.search(r'\b' + tbl + r'\b', sql_lower):
+                        tables_in_sql.append(tbl)
+                # 非管理员：如果有含club_name的表，需要注入过滤
+                if tables_in_sql:
+                    # 确定用户可访问的社团
+                    if user_role == 'student':
+                        allowed_clubs = user_clubs
+                    elif user_role == 'teacher':
+                        allowed_clubs = teacher_clubs
+                    else:
+                        allowed_clubs = [user_club] if user_club else []
+                    if not allowed_clubs:
+                        return json.dumps({'error': '你尚未关联任何社团，无法查询数据'}, ensure_ascii=False)
+                    # 检查SQL是否已有club_name过滤
+                    has_club_filter = 'club_name' in sql_lower
+                    if not has_club_filter:
+                        # 注入WHERE条件
+                        club_placeholders = ','.join(['?' for _ in allowed_clubs])
+                        if 'WHERE' in sql_upper:
+                            sql = sql.replace('WHERE', f'WHERE club_name IN ({club_placeholders}) AND', 1)
+                        elif 'GROUP BY' in sql_upper:
+                            sql = sql.replace('GROUP BY', f'WHERE club_name IN ({club_placeholders}) GROUP BY', 1)
+                        elif 'ORDER BY' in sql_upper:
+                            sql = sql.replace('ORDER BY', f'WHERE club_name IN ({club_placeholders}) ORDER BY', 1)
+                        elif 'LIMIT' in sql_upper:
+                            sql = sql.replace('LIMIT', f'WHERE club_name IN ({club_placeholders}) LIMIT', 1)
+                        else:
+                            sql += f' WHERE club_name IN ({club_placeholders})'
+                        # 执行带参数
+                        # 限制返回条数
+                        if 'LIMIT' not in sql_upper:
+                            sql += ' LIMIT 50'
+                        try:
+                            rows = conn.execute(sql, allowed_clubs).fetchall()
+                        except Exception as e:
+                            return json.dumps({'error': f'SQL执行错误：{str(e)}'}, ensure_ascii=False)
+                        result_data = {'items': [dict(r) for r in rows], 'total': len(rows), 'description': query_desc, 'sql': sql}
+                        return json.dumps(result_data, ensure_ascii=False, default=str)
+            # 管理员或已有club_name过滤的查询：直接执行
+            if 'LIMIT' not in sql_upper:
+                sql += ' LIMIT 50'
+            try:
+                rows = conn.execute(sql).fetchall()
+            except Exception as e:
+                return json.dumps({'error': f'SQL执行错误：{str(e)}'}, ensure_ascii=False)
+            result_data = {'items': [dict(r) for r in rows], 'total': len(rows), 'description': query_desc, 'sql': sql}
+            return json.dumps(result_data, ensure_ascii=False, default=str)
 
         return json.dumps({'error': f'未知工具：{function_name}'}, ensure_ascii=False)
     except Exception as e:
@@ -6973,7 +8564,7 @@ class ApprovalAgent:
                 checkin_match = False
                 if student_id and item_name:
                     matched = conn.execute(
-                        'SELECT cs.id FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE cr.student_id=? AND cs.club_name=? AND cs.title LIKE ? AND cs.is_completed=1 LIMIT 1',
+                        'SELECT cs.id FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE cr.student_id=? AND cs.club_name=? AND cs.activity_name LIKE ? AND cs.status="closed" LIMIT 1',
                         (student_id, cn, f'%{item_name[:6]}%')).fetchone()
                     if matched:
                         checkin_match = True
@@ -7018,7 +8609,7 @@ class ApprovalAgent:
                 confidence = min(95, max(30, score_val if recommendation == 'approve' else (100 - score_val) if recommendation == 'reject' else abs(50 - score_val) + 30))
                 results.append({
                     'id': r['id'],
-                    'club_name': c['club_name'],
+                    'club_name': cn,
                     'student_name': r['student_name'],
                     'item_name': r['item_name'],
                     'score': item_score,
@@ -8062,7 +9653,12 @@ def agent_approval_preview(approval_type):
     kwargs = {}
     if club_name:
         kwargs['club_name'] = club_name
-    result = approval_agent.batch_analyze(approval_type, **kwargs)
+    try:
+        result = approval_agent.batch_analyze(approval_type, **kwargs)
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 200
     return jsonify({'success': True, 'data': result})
 
 
@@ -8240,9 +9836,9 @@ def smart_intent_detect(message, user):
                 dtype = 'checkins'
             elif match(['财务', '收支', '收入', '支出', '经费', '余额', '财务情况', '财务怎么样']):
                 dtype = 'finance'
-            elif match(['工作量', '赋分', '工时', '课时']):
+            elif match(['工作量', '工时', '课时']):
                 dtype = 'workload'
-            elif match(['赋分', '评分', '打分']):
+            elif match(['赋分', '评分', '打分', '学分']):
                 dtype = 'scoring'
             elif match(['招募', '纳新', '招新']):
                 dtype = 'recruitments'
@@ -8258,6 +9854,32 @@ def smart_intent_detect(message, user):
         if not any(i['tool'] == 'list_clubs' for i in intents):
             intents.append({'tool': 'list_clubs', 'args': {}})
 
+    # 优秀社团/优秀活动查询意图
+    excellent_kw = ['优秀社团', '被评为优秀', '评优', '优秀名单', '评选优秀']
+    excellent_fuzzy = [r'.*优秀.*社团.*', r'社团.*优秀.*', r'.*评优.*', r'.*优秀.*名单.*']
+    if match(excellent_kw) or fuzzy_match(excellent_fuzzy):
+        cn = _extract_club_name(original, club_name)
+        filters = {}
+        if cn: filters['club_name'] = cn
+        intents.append({'tool': 'query_data', 'args': {'dataset': 'excellent_clubs', 'filters': filters}})
+
+    # 学生未加入社团 / 老师未指导社团 查询意图
+    no_club_student_kw = ['没有加入社团', '未加入社团', '没加社团', '哪些学生没有', '没有社团的学生',
+                          '未入社', '没入社', '学生没有社团', '学生没加入']
+    no_club_teacher_kw = ['没有指导社团', '未指导社团', '哪个老师没有', '没有社团的老师',
+                          '老师没有指导', '老师未指导', '哪些老师没有']
+    no_club_fuzzy = [r'学生.*没有.*社团', r'没有.*社团.*学生', r'学生.*未.*社团',
+                     r'老师.*没有.*社团', r'没有.*社团.*老师', r'老师.*未.*社团']
+    if match(no_club_student_kw) or (fuzzy_match(no_club_fuzzy) and match(['学生'])):
+        intents.append({'tool': 'query_data', 'args': {'dataset': 'students', 'filters': {'has_club': 'false'}}})
+    if match(no_club_teacher_kw) or (fuzzy_match(no_club_fuzzy) and match(['老师', '教师'])):
+        intents.append({'tool': 'query_data', 'args': {'dataset': 'teachers', 'filters': {'has_club': 'false'}}})
+    # 学生列表 / 老师列表 通用查询
+    if match(['学生列表', '所有学生', '学生名单', '学生总数', '多少学生', '学生概况']):
+        intents.append({'tool': 'query_data', 'args': {'dataset': 'students', 'filters': {}}})
+    if match(['老师列表', '所有老师', '老师名单', '老师总数', '多少老师', '指导老师列表']):
+        intents.append({'tool': 'query_data', 'args': {'dataset': 'teachers', 'filters': {}}})
+
     photo_kw = ['分析照片', '识别图片', '照片分析', '图片分析', '验证照片', '照片真伪',
                 '照片验证', '识别文字', 'OCR', '图片内容', '看图', '分析图片',
                 '照片内容', '图片识别', '活动照片', '现场照片', '照片审核']
@@ -8270,6 +9892,100 @@ def smart_intent_detect(message, user):
         elif match(['OCR', '文字', '识别文字', '提取文字']):
             analysis_type = 'ocr'
         intents.append({'tool': 'analyze_photo', 'args': {'analysis_type': analysis_type}})
+
+    # 创建活动意图
+    create_activity_kw = ['创建活动', '办活动', '发起活动', '新建活动', '添加活动', '举办活动', '开展活动',
+                          '办个活动', '搞个活动', '组织活动', '策划活动', '办一场', '搞一场',
+                          '办个比赛', '办比赛', '篮球赛', '足球赛', '运动会', '文艺演出', '晚会']
+    create_activity_fuzzy = [r'办.*活动', r'搞.*活动', r'创建.*活动', r'发起.*活动', r'举办.*活动', r'组织.*活动', r'想办', r'想搞']
+    if match(create_activity_kw) or fuzzy_match(create_activity_fuzzy):
+        cn = _extract_club_name(original, club_name)
+        attrs = {'name': original}
+        if cn:
+            attrs['club_name'] = cn
+        intents.append({'tool': 'create_entity', 'args': {'entity_type': 'activity', 'attributes': attrs}})
+
+    # 创建招募意图
+    create_recruit_kw = ['发布招募', '发起招募', '创建招募', '纳新', '招新', '招募新成员', '发招募令']
+    if match(create_recruit_kw):
+        cn = _extract_club_name(original, club_name)
+        attrs = {'name': original}
+        if cn:
+            attrs['club_name'] = cn
+        intents.append({'tool': 'create_entity', 'args': {'entity_type': 'recruitment', 'attributes': attrs}})
+
+    # 发送通知意图
+    notify_kw = ['发通知', '发送通知', '通知成员', '通知大家', '提醒成员', '发公告', '发布公告',
+                 '通知全体', '通知所有人', '群发通知', '发个通知', '提醒一下']
+    notify_fuzzy = [r'通知.*成员', r'通知.*大家', r'发.*通知', r'发.*公告', r'提醒.*成员']
+    if match(notify_kw) or fuzzy_match(notify_fuzzy):
+        cn = _extract_club_name(original, club_name)
+        args = {'target': 'all_members', 'content': original}
+        if cn:
+            args['club_name'] = cn
+        intents.append({'tool': 'send_notification', 'args': args})
+
+    # 生成文案意图
+    copywriting_kw = ['生成文案', '写文案', '写宣传语', '宣传文案', '活动文案', '招募文案',
+                      '帮我写文案', '帮我写宣传', '写个文案', '写一段文案']
+    if match(copywriting_kw):
+        cn = _extract_club_name(original, club_name)
+        params = {'theme': original}
+        if cn:
+            params['club_name'] = cn
+        intents.append({'tool': 'ai_generate', 'args': {'generate_type': 'copywriting', 'params': params}})
+
+    # 推荐意图
+    recommend_club_kw = ['推荐社团', '推荐一个社团', '有什么社团推荐', '适合我的社团', '感兴趣的社团',
+                         '还可以加入', '还能加入', '可以加入', '加入什么社团', '还能报什么', '还能参加什么社团']
+    recommend_activity_kw = ['推荐活动', '推荐一个活动', '有什么活动推荐', '适合我的活动', '感兴趣的活动']
+    recommend_recruitment_kw = ['推荐招募', '报名招募', '想报名', '招募活动', '招募推荐', '有什么招募', '推荐报名', '想报一个招募', '招募报名']
+    recommend_partner_kw = ['推荐联合', '联合活动伙伴', '合作社团', '一起办活动', '联合举办']
+    if match(recommend_club_kw):
+        intents.append({'tool': 'recommend', 'args': {'recommend_type': 'club'}})
+    if match(recommend_activity_kw):
+        intents.append({'tool': 'recommend', 'args': {'recommend_type': 'activity'}})
+    if match(recommend_recruitment_kw):
+        intents.append({'tool': 'recommend', 'args': {'recommend_type': 'recruitment'}})
+    if match(recommend_partner_kw):
+        cn = _extract_club_name(original, club_name)
+        args = {'recommend_type': 'joint_partner'}
+        if cn:
+            args['club_name'] = cn
+        intents.append({'tool': 'recommend', 'args': args})
+
+    # 生成报告意图
+    report_kw = ['生成报告', '数据报告', '分析报告', '统计报告', '活动概览', '财务汇总',
+                 '工作量统计', '赋分分布', '参与率', '预警报告', '社团健康', '健康度']
+    report_fuzzy = [r'生成.*报告', r'出.*报告', r'统计.*报告', r'分析.*报告']
+    if match(report_kw) or fuzzy_match(report_fuzzy):
+        report_type = 'activity_overview'
+        if match(['工作量', '工时']):
+            report_type = 'workload_stats'
+        elif match(['财务', '收支', '经费']):
+            report_type = 'finance_summary'
+        elif match(['赋分', '评分']):
+            report_type = 'scoring_distribution'
+        elif match(['指导', '老师']):
+            report_type = 'teacher_guidance'
+        elif match(['参与率', '出勤']):
+            report_type = 'participation_trend'
+        elif match(['预警', '异常']):
+            report_type = 'alert_summary'
+        elif match(['健康', '社团评估']):
+            report_type = 'club_health'
+        cn = _extract_club_name(original, club_name)
+        args = {'report_type': report_type}
+        if cn:
+            args['club_name'] = cn
+        intents.append({'tool': 'generate_report', 'args': args})
+
+    # 审批操作意图
+    approve_kw = ['通过审批', '批准', '审批通过', '同意审批', '驳回审批', '拒绝审批',
+                  '帮我审批', '批量通过', '批量驳回']
+    if match(approve_kw):
+        action = 'approve' if match(['通过', '批准', '同意', '批准']) else 'reject'
+        intents.append({'tool': 'update_entity', 'args': {'entity_type': 'material', 'entity_id': 0, 'updates': {'action': action}}})
 
     return intents
 
@@ -8328,7 +10044,7 @@ def format_tool_result_for_human(tool_name, tool_args, raw_result):
                     if suggestion:
                         line += f' → {suggestion}'
                     if confidence and isinstance(confidence, (int, float)):
-                        line += f'（置信度 {min(int(confidence*100),99)}%）'
+                        line += f'（置信度 {min(int(confidence),99) if confidence > 1 else min(int(confidence*100),99)}%）'
                     if reason:
                         line += f'\n   💬 {reason}'
                     lines.append(line)
@@ -8372,6 +10088,10 @@ def format_tool_result_for_human(tool_name, tool_args, raw_result):
     elif tool_name == 'check_alerts':
         total = data.get('total', 0)
         alerts = data.get('alerts', [])
+        message = data.get('message', '')
+        # 检查是否有权限错误信息
+        if message and ('仅管理员可查看' in message or '无权限' in message):
+            return f'⚠️ {message}\n\n💡 你可以询问关于自己社团的活动、成员、财务等数据，我会帮你查询。'
         if total == 0:
             return '✅ 系统运行正常，没有异常预警！\n\n💡 一切正常，你可以查看审批情况或生成数据报告。'
         lines = [f'⚠️ **发现 {total} 条预警：**\n']
@@ -8589,6 +10309,178 @@ def format_tool_result_for_human(tool_name, tool_args, raw_result):
             lines.append('\n💡 视觉模型未配置，以上为离线提示。配置 QWEN_API_KEY 后可使用AI分析。')
         return '\n'.join(lines)
 
+    elif tool_name == 'query_data':
+        dataset = tool_args.get('dataset', '')
+        items = data.get('items', [])
+        total = data.get('total', len(items))
+        dataset_names = {'activities': '活动', 'members': '成员', 'students': '学生', 'teachers': '指导老师', 'workload': '工作量',
+                        'finance': '财务', 'recruitments': '招募', 'scoring': '赋分', 'credits': '学分',
+                        'checkins': '签到', 'treehole': '树洞', 'feedback': '反馈', 'carousel': '轮播图',
+                        'excellent_clubs': '优秀社团', 'excellent_activities': '优秀活动', 'hot_news': '热点资讯', 'documents': '资料库',
+                        'clubs': '社团', 'notifications': '通知', 'departments': '部门', 'votes': '投票',
+                        'surveys': '问卷', 'joint_activities': '联合活动', 'offcampus_requests': '校外活动申请'}
+        dname = dataset_names.get(dataset, dataset)
+        desc = data.get('description', '')
+        if not items and not data.get('income') and data.get('error'):
+            return f'❌ {data.get("error", "查询失败")}'
+        lines = [f'📊 **{desc or dname + "数据"}查询结果：**\n']
+        if data.get('income') is not None or data.get('expense') is not None:
+            lines.append(f'• 收入：**¥{data.get("income", 0)}**')
+            lines.append(f'• 支出：**¥{data.get("expense", 0)}**')
+            bal = data.get('balance', 0)
+            lines.append(f'• 余额：{"🟢" if bal >= 0 else "🔴"} **¥{bal}**')
+        if total:
+            lines.append(f'• 共 **{total}** 条记录')
+        for item in items[:6]:
+            if isinstance(item, dict):
+                name = item.get('activity_name', item.get('real_name', item.get('title', item.get('club_name', item.get('name', '')))))
+                status = item.get('status', '')
+                extra = item.get('club_name', '') or item.get('department', '') or item.get('category', '')
+                line = f'  • {name}'
+                if extra and extra != name:
+                    line += f' ({extra})'
+                if status:
+                    line += f' [{status}]'
+                lines.append(line)
+        if len(items) > 6:
+            lines.append(f'  ...还有 {len(items)-6} 条')
+        return '\n'.join(lines)
+
+    elif tool_name == 'create_entity':
+        if data.get('success'):
+            return f'✅ {data.get("message", "创建成功")}'
+        return f'❌ {data.get("error", "创建失败")}'
+
+    elif tool_name == 'update_entity':
+        if data.get('success'):
+            return f'✅ {data.get("message", "更新成功")}'
+        return f'❌ {data.get("error", "更新失败")}'
+
+    elif tool_name == 'send_notification':
+        if data.get('success'):
+            return f'📢 {data.get("message", "通知已发送")}'
+        return f'❌ {data.get("error", "发送失败")}'
+
+    elif tool_name == 'generate_report':
+        items = data.get('items', [])
+        if not items and not data.get('total_activities') and data.get('error'):
+            return f'❌ {data["error"]}'
+        lines = ['📑 **数据报告：**\n']
+        if data.get('total_activities') is not None:
+            lines.append(f'• 活动总数：**{data["total_activities"]}**')
+            lines.append(f'• 已完成：**{data.get("completed", 0)}**')
+            lines.append(f'• 完成率：**{data.get("completion_rate", 0)}%**')
+        # 检查是否为 teacher_guidance 报告（有 teacher_name 字段）
+        if items and isinstance(items[0], dict) and 'teacher_name' in items[0]:
+            lines.append('**指导老师指导情况：**\n')
+            for item in items[:10]:
+                tname = item.get('teacher_name', '未知')
+                cn = item.get('club_name', '')
+                gc = item.get('guidance_count', 0)
+                ip = item.get('in_progress', 0)
+                th = item.get('total_hours', 0)
+                ac = item.get('activity_count', 0)
+                line = f'  • **{tname}** — 指导社团：{cn}'
+                line += f'，已指导 **{gc}** 次'
+                if ip > 0:
+                    line += f'（进行中 {ip} 次）'
+                if th > 0:
+                    line += f'，累计 **{th}** 小时'
+                line += f'，社团活动 **{ac}** 场'
+                lines.append(line)
+        else:
+            for item in items[:8]:
+                if isinstance(item, dict):
+                    name = item.get('club_name', item.get('name', ''))
+                    vals = [f'{k}={v}' for k, v in item.items() if k != 'club_name' and k != 'name' and v is not None]
+                    line = f'  • **{name}**'
+                    if vals:
+                        line += f' — {", ".join(vals[:4])}'
+                    lines.append(line)
+        if len(items) > 10:
+            lines.append(f'  ...还有 {len(items)-10} 条')
+        return '\n'.join(lines)
+
+    elif tool_name == 'ai_generate':
+        if data.get('success'):
+            content = data.get('content', data.get('message', ''))
+            return f'🎨 **内容已生成：**\n\n{content}'
+        error = data.get('error', '生成失败')
+        hint = data.get('hint', '')
+        prompt = data.get('prompt', '')
+        result = f'❌ {error}'
+        if hint:
+            result += f'\n\n💡 {hint}'
+        if prompt:
+            result += f'\n\n📝 已生成提示词：{prompt}'
+        return result
+
+    elif tool_name == 'recommend':
+        recs = data.get('recommendations', [])
+        msg = data.get('message', '')
+        remaining = data.get('remaining_slots')
+        joined_clubs = data.get('joined_clubs', [])
+        if not recs and remaining is not None and remaining == 0:
+            return f'💡 {msg}\n\n您已加入：{"、".join(joined_clubs)}'
+        if not recs:
+            return f'💡 {msg}\n\n暂无推荐结果。'
+        lines = [f'💡 **{msg}：**\n']
+        if joined_clubs:
+            lines.append(f'📋 已加入：**{"、".join(joined_clubs)}**')
+        if remaining is not None:
+            lines.append(f'📌 还可加入 **{remaining}** 个社团（每人最多2个）\n')
+        for i, r in enumerate(recs, 1):
+            if isinstance(r, dict):
+                # 招募推荐
+                title = r.get('title', '')
+                if title:
+                    club = r.get('club_name', '')
+                    desc = r.get('description', '')
+                    signup_count = r.get('signup_count', 0)
+                    already = r.get('already_signed', False)
+                    line = f'{i}. **{title}** — {club}'
+                    if signup_count:
+                        line += f'（{signup_count}人已报名）'
+                    if already:
+                        line += ' ✅已报名'
+                    if desc:
+                        line += f'\n   {desc[:60]}'
+                    lines.append(line)
+                    continue
+                # 社团/活动推荐
+                name = r.get('club_name', r.get('activity_name', ''))
+                cat = r.get('category', '')
+                star = r.get('star_rating', '')
+                count = r.get('member_count', r.get('participant_count', r.get('activity_count', '')))
+                line = f'{i}. **{name}**'
+                if cat:
+                    line += f' · {cat}'
+                if star:
+                    line += f' {"⭐" * min(int(star), 5)}'
+                if count:
+                    line += f' ({count}人)'
+                lines.append(line)
+        return '\n'.join(lines)
+
+    elif tool_name == 'query_database':
+        items = data.get('items', [])
+        total = data.get('total', 0)
+        desc = data.get('description', '')
+        if data.get('error'):
+            return f'❌ {data["error"]}'
+        if not items:
+            return f'🔍 **数据库查询**（{desc}）：无匹配结果'
+        lines = [f'🔍 **数据库查询**（{desc}）：共 **{total}** 条记录\n']
+        # 动态展示列名
+        if items and isinstance(items[0], dict):
+            cols = list(items[0].keys())
+            for item in items[:8]:
+                vals = [f'{k}={v}' for k, v in item.items() if v is not None and k != 'id']
+                lines.append(f'  • {" | ".join(vals[:6])}')
+            if total > 8:
+                lines.append(f'  ...还有 {total-8} 条')
+        return '\n'.join(lines)
+
     return json.dumps(data, ensure_ascii=False, default=str)[:500]
 
 
@@ -8637,7 +10529,19 @@ def generate_smart_suggestions(tool_name, tool_result_data, user):
         if club_name:
             suggestions.append(f'查看{club_name}成员数据')
     elif tool_name == 'query_club_data':
-        dtype = user.get('_last_dtype', 'members')
+        dtype = 'members'
+        try:
+            if isinstance(tool_result_data, dict):
+                keys = list(tool_result_data.keys())
+                if 'items' in keys:
+                    first_item = tool_result_data['items'][0] if tool_result_data['items'] else {}
+                    item_keys = list(first_item.keys()) if first_item else []
+                    if 'activity_name' in item_keys: dtype = 'activities'
+                    elif 'amount' in item_keys or 'income' in item_keys: dtype = 'finance'
+                    elif 'checkin_time' in item_keys or 'session_id' in item_keys: dtype = 'checkins'
+                    elif 'item_name' in item_keys or 'score' in item_keys: dtype = 'workload'
+        except:
+            pass
         if club_name:
             other_types = {'members': '活动数据', 'activities': '财务数据', 'finance': '签到数据', 'checkins': '工作量数据', 'workload': '成员数据'}
             other = other_types.get(dtype, '其他数据')
@@ -8646,6 +10550,70 @@ def generate_smart_suggestions(tool_name, tool_result_data, user):
     elif tool_name == 'list_clubs':
         suggestions.append('查看某个社团的详细数据')
         suggestions.append('生成全校数据报告')
+    elif tool_name == 'query_data':
+        dataset = 'members'
+        try:
+            if isinstance(tool_result_data, dict):
+                keys = list(tool_result_data.keys())
+                if 'items' in keys:
+                    first_item = tool_result_data['items'][0] if tool_result_data['items'] else {}
+                    item_keys = list(first_item.keys()) if first_item else []
+                    if 'activity_name' in item_keys: dataset = 'activities'
+                    elif 'amount' in item_keys or 'income' in item_keys: dataset = 'finance'
+                    elif 'checkin_time' in item_keys: dataset = 'checkins'
+                    elif 'item_name' in item_keys: dataset = 'workload'
+                    elif 'content' in item_keys and 'scope' in item_keys: dataset = 'treehole'
+                    elif 'title' in item_keys and 'body' in item_keys: dataset = 'feedback'
+                    elif 'selected_at' in item_keys and 'club_name' in item_keys: dataset = 'excellent_clubs'
+                    elif 'selected_at' in item_keys and 'group_id' in item_keys: dataset = 'excellent_activities'
+        except:
+            pass
+        if club_name:
+            suggestions.append(f'查看{club_name}的其他数据')
+        suggestions.append('生成分析报告')
+        if role == 'student':
+            suggestions.append('推荐我感兴趣的活动')
+        elif role == 'admin':
+            suggestions.append('检查系统预警')
+    elif tool_name == 'create_entity':
+        suggestions.append('查看创建结果')
+        if role in ('user', 'admin'):
+            suggestions.append('发通知告诉成员')
+            suggestions.append('生成活动海报')
+    elif tool_name == 'update_entity':
+        suggestions.append('查看审批情况')
+        suggestions.append('生成分析报告')
+    elif tool_name == 'send_notification':
+        suggestions.append('查看通知记录')
+        suggestions.append('查看审批情况')
+    elif tool_name == 'generate_report':
+        suggestions.append('检查系统预警')
+        if club_name:
+            suggestions.append(f'查看{club_name}成员数据')
+        suggestions.append('查看待审批项目')
+    elif tool_name == 'ai_generate':
+        if role in ('user', 'admin'):
+            suggestions.append('创建活动')
+            suggestions.append('发通知告诉成员')
+        suggestions.append('查看社团数据')
+    elif tool_name == 'recommend':
+        if role == 'student':
+            suggestions.append('推荐我感兴趣的社团')
+            suggestions.append('查看我的工作量')
+        elif role == 'user':
+            suggestions.append('查看社团数据')
+            suggestions.append('生成分析报告')
+
+    # 角色通用建议补充
+    if not suggestions:
+        if role == 'admin':
+            suggestions.extend(['查看待审批项目', '检查系统预警', '生成全校数据报告'])
+        elif role == 'user':
+            suggestions.extend(['查看社团数据', '创建活动', '生成分析报告'])
+        elif role == 'teacher':
+            suggestions.extend(['查看赋分审核', '查看指导情况', '检查系统预警'])
+        elif role == 'student':
+            suggestions.extend(['推荐社团', '推荐活动', '查看我的数据'])
 
     return list(dict.fromkeys(suggestions))[:3]
 
@@ -8659,6 +10627,7 @@ def ai_chat():
     message = data.get('message', '').strip()
     context = data.get('context', 'student')
     page = data.get('page', '')
+    page_section = data.get('pageSection', '')
     if not message:
         return jsonify({'error': '请输入消息'}), 400
     club_name = user.get('club_name', '') if user else ''
@@ -8672,27 +10641,174 @@ def ai_chat():
     finally:
         conn.close()
 
-    system_prompt = f'''你是"济幼社团管理系统"的AI智能助手，名叫小济。你活泼、友好、专业，善于用简洁有趣的方式回答问题。
+    role_label = "管理员" if role == "admin" else "社团负责人" if role == "user" else "指导老师" if role == "teacher" else "学生"
+
+    # 获取学生加入的社团列表
+    user_clubs = []
+    if role == 'student':
+        try:
+            conn = db.get_conn()
+            club_rows = conn.execute('SELECT DISTINCT club_name FROM club_members WHERE user_id=? UNION SELECT DISTINCT club_name FROM club_cadres WHERE user_id=?', (user['id'], user['id'])).fetchall()
+            user_clubs = [r['club_name'] for r in club_rows if r['club_name']]
+            conn.close()
+        except:
+            pass
+
+    # 获取指导老师指导的社团
+    teacher_clubs = []
+    if role == 'teacher':
+        try:
+            conn = db.get_conn()
+            tc_rows = conn.execute('SELECT club_name FROM teacher_clubs WHERE user_id=?', (user['id'],)).fetchall()
+            teacher_clubs = [r['club_name'] for r in tc_rows if r['club_name']]
+            conn.close()
+        except:
+            pass
+
+    # 社团负责人如果 club_name 为空，尝试从 club_cadres/club_members 查找
+    if role == 'user' and not club_name:
+        try:
+            conn = db.get_conn()
+            cr = conn.execute('SELECT DISTINCT club_name FROM club_cadres WHERE user_id=? UNION SELECT DISTINCT club_name FROM club_members WHERE user_id=?', (user['id'], user['id'])).fetchall()
+            if cr:
+                club_name = cr[0]['club_name']
+                user['club_name'] = club_name
+            conn.close()
+        except:
+            pass
+
+    # 页面上下文映射
+    page_context_map = {
+        'dashboard.html': {'name': '管理中心', 'desc': '包含社团管理、活动开展、招募管理、财务登记、工作量统计、树洞等功能'},
+        'club-tools.html': {'name': '社团工具', 'desc': '包含活动开展、招募管理、成员管理、财务登记、工作量统计等功能'},
+        'club-teacher.html': {'name': '指导老师管理', 'desc': '包含活动签到签退、赋分审核、工作量统计、招募管理、指导情况等功能'},
+        'index.html': {'name': '管理后台', 'desc': '包含社团管理、用户管理、材料审批、通知管理、热点资讯等功能'},
+        'upload.html': {'name': '材料上传', 'desc': '材料上传与审批管理'},
+        'workload.html': {'name': '工作量审核', 'desc': '工作量提交与审核'},
+        'feedback.html': {'name': '问题反馈', 'desc': '问题反馈与处理'},
+        'stats.html': {'name': '数据统计', 'desc': '全校数据统计分析'},
+        'checkin.html': {'name': '签到管理', 'desc': '活动签到签退管理'},
+        'club-detail.html': {'name': '社团详情', 'desc': '社团信息展示页面'}
+    }
+    page_info = page_context_map.get(page, {})
+    page_name = page_info.get('name', '')
+    page_desc = page_info.get('desc', '')
+    # 子区域上下文
+    section_context_map = {
+        'home': '首页概览', 'notif': '消息通知', 'enroll': '报名审批', 'recruit': '招募管理',
+        'member': '成员管理', 'checkin': '活动签到', 'finance': '财务登记', 'scoring': '赋分管理',
+        'workload': '工作量统计', 'treehole': '树洞', 'notices': '管理员通知', 'showcase': '社团风采',
+        'offcampus': '校外活动', 'joint': '联合活动', 'quitManage': '退社管理', 'scoringRules': '赋分规则',
+        'feedback': '问题反馈', 'profile': '社团资料', 'tools': '协助工具'
+    }
+    if page_section and page_section in section_context_map:
+        page_desc = f'当前在{section_context_map[page_section]}页面。{page_desc}'
+
+    system_prompt = f'''你是"云智社联管理系统"的AI智能助手，名叫小通，是本系统的"智慧大脑"和"智能管家"。你可以调取所有相关数据，提供精准的信息查询、预测建议和执行操作。
 
 ## 你的身份
-- 你是济幼社团管理系统的AI助手，名叫小济
-- 你拥有多种工具能力，可以查询真实数据、分析审批、搜索文件、检查预警、生成报告
-- 当用户询问社团数据、审批情况、文件查找、系统预警等问题时，请主动使用工具获取真实数据
+- 你是云智社联管理系统的AI助手，名叫小通，是系统的"智慧大脑"和"智能管家"
+- 你拥有多种工具能力，可以查询真实数据、创建实体、更新状态、发送通知、生成报告、生成文案、个性化推荐
+- 当用户询问社团数据、审批情况等问题时，请主动使用工具获取真实数据
 - 你也是一个知识渊博的通用AI助手，可以回答任何领域的问题
 
 ## 当前用户信息
 - 用户名：{username}
-- 角色：{"管理员" if role=="admin" else "社团负责人" if role=="user" else "学生"}
+- 角色：{role_label}
 - 所属社团：{club_name or "未关联社团"}
+{"- 加入的社团：" + "、".join(user_clubs) if user_clubs else ""}
+{"- 指导的社团：" + "、".join(teacher_clubs) if teacher_clubs else ""}
+{"- 当前页面：" + page_name + " — " + page_desc if page_name else ""}
 
 ## 工具使用指南
+### 数据查询类
 - 用户问审批/待审核/待审批 → 使用 check_approval 工具
 - 用户问找文件/搜索文件/找资料 → 使用 search_documents 工具
 - 用户问预警/异常/超时/问题 → 使用 check_alerts 工具
-- 用户问分析/报告/数据洞察 → 使用 generate_insight_report 工具
-- 用户问社团数据/成员/活动/签到/财务 → 使用 query_club_data 工具
-- 用户问有哪些社团/社团列表 → 使用 list_clubs 工具
-- 不要编造数据，所有社团相关数据必须通过工具获取
+- 用户问分析/报告/数据洞察 → 使用 generate_report 工具（比 generate_insight_report 更全面）
+- 用户问社团数据/成员/活动/签到/财务 → 使用 query_data 工具（比 query_club_data 更全面）
+- 用户问有哪些社团/社团列表 → 使用 list_clubs 或 query_data(dataset="clubs") 工具
+- query_data 支持的数据集：activities(活动)、members(成员)、students(学生，支持has_club过滤)、teachers(指导老师，支持has_club过滤)、workload(工作量)、finance(财务)、recruitments(招募)、scoring(赋分)、credits(学分)、checkins(签到)、treehole(树洞)、feedback(反馈)、excellent_clubs(优秀社团)、excellent_activities(优秀活动)、hot_news(热点资讯)、documents(资料库)、clubs(社团)、notifications(通知)、departments(部门)、votes(投票)、surveys(问卷)、joint_activities(联合活动)、offcampus_requests(校外活动申请)
+- 查询未加入社团的学生：query_data(dataset="students", filters={"has_club":"false"})
+- 查询未指导社团的老师：query_data(dataset="teachers", filters={"has_club":"false"})
+- 复杂查询需求（query_data无法满足时）→ 使用 query_database 工具直接执行SQL SELECT查询
+- query_database 示例：query_database(sql="SELECT club_name, COUNT(*) as cnt FROM club_members GROUP BY club_name ORDER BY cnt DESC", description="查询各社团人数")
+
+### 创建操作类
+- 用户想创建活动/办活动 → 使用 create_entity(entity_type="activity") 工具
+- 用户想发布招募/纳新 → 使用 create_entity(entity_type="recruitment") 工具
+- 用户想发通知/公告 → 使用 create_entity(entity_type="notification") 或 send_notification 工具
+- 用户想发起投票 → 使用 create_entity(entity_type="vote") 工具
+
+### 更新操作类
+- 用户想审批/通过/驳回 → 使用 update_entity 工具（需确认后再执行）
+- 用户想修改活动状态 → 使用 update_entity(entity_type="activity") 工具
+
+### 通知发送类
+- 用户想通知/提醒某人 → 使用 send_notification 工具
+
+### 报告生成类
+- 用户要活动概览 → generate_report(report_type="activity_overview")
+- 用户要指导情况 → generate_report(report_type="teacher_guidance")
+- 用户要工作量统计 → generate_report(report_type="workload_stats")
+- 用户要财务汇总 → generate_report(report_type="finance_summary")
+- 用户要赋分分布 → generate_report(report_type="scoring_distribution")
+- 用户要预警信息 → generate_report(report_type="alert_summary")
+- 用户要社团健康度 → generate_report(report_type="club_health")
+
+### AI生成类
+- 用户要生成文案/宣传语 → ai_generate(generate_type="copywriting")
+
+### 推荐类
+- 学生问推荐社团 → recommend(recommend_type="club")
+- 学生问推荐活动 → recommend(recommend_type="activity")
+- 学生问推荐招募/想报名招募 → recommend(recommend_type="recruitment")
+- 负责人问联合活动伙伴 → recommend(recommend_type="joint_partner")
+
+## 角色权限规则
+### 管理员（admin）
+- 可查看全校所有社团数据、审批所有类型、管理用户、配置首页内容
+- 可审批：材料审批、校外活动审批、赋分审核
+- 可配置：轮播图、优秀活动、热点资讯、赋分规则
+- 可查看预警中心，主动推送预警
+
+### 社团负责人（user）
+- 只能操作自己社团的数据
+- 可创建：活动、招募、投票、问卷、通知
+- 可审批：报名审批、财务权限审批
+- 可管理：成员增删、部门设置、骨干设置
+- 可查看：社团数据、工作量、财务、签到记录
+- 可生成文案
+
+### 指导老师（teacher）
+- 只能查看所指导社团的数据
+- 可查看：活动详情、签到签退记录（含GPS）、成员活跃度
+- 可审批：赋分审核、退社审批
+- 可查看：工作量统计、招募进展
+- 可给出指导建议
+
+### 学生（student）
+- 只能查看自己加入的社团数据
+- 可操作：活动签到、活动报名、查看自己的工作量和学分
+- 可参与：投票、问卷
+- 可使用树洞匿名社区
+- 可获取个性化推荐（社团、活动、招募）
+- 每人最多加入2个社团，推荐社团时需排除已加入的社团并提示剩余名额
+
+## 工作原则
+1. **主动预测**：检测到异常或机会时主动推送建议
+2. **模糊理解**：将口语转化为精确操作，如"我想办个篮球赛" → 自动调用 create_entity
+3. **多步确认**：涉及资源变更或审批的操作，先给出计划，征得同意后再执行
+4. **可解释性**：每个推荐或决策附带依据
+5. **不要编造数据**：所有社团相关数据必须通过工具获取
+6. **数据隔离**：严格遵守角色权限，非管理员只能查看自己所属社团的数据，系统会自动过滤
+
+## 消息格式说明
+- 用户消息会自动带上身份标签，格式为 `[身份：角色，社团：xxx，页面：xxx] 实际消息内容`
+- 你应根据身份标签中的角色和社团信息，自动限制数据查询和操作范围
+- 当需要查询数据或执行操作时，请使用提供的工具（function calling），系统会自动执行并将结果返回给你
+- 你可以连续调用多个工具（最多3轮），例如先查询数据，再根据结果调用另一个工具
+- 如果工具调用结果不足以回答问题，可以继续调用更多工具
 
 ## 回答原则
 - 社团相关问题：优先使用工具获取真实数据，结合数据给出专业准确的回答
@@ -8708,8 +10824,13 @@ def ai_chat():
             notice_count = conn.execute('SELECT COUNT(*) as c FROM club_notices WHERE club_name=?', (club_name,)).fetchone()['c']
             dept_count = conn.execute('SELECT COUNT(*) as c FROM club_departments WHERE club_name=?', (club_name,)).fetchone()['c']
             recruit_count = conn.execute('SELECT COUNT(*) as c FROM recruitments WHERE club_name=? AND status="approved"', (club_name,)).fetchone()['c']
+            # 额外数据
+            pending_workload = conn.execute('SELECT COUNT(*) as c FROM workload_submissions WHERE club_name=? AND status="pending"', (club_name,)).fetchone()['c']
+            pending_scoring = conn.execute('SELECT COUNT(*) as c FROM scoring_submissions WHERE club_name=? AND status="pending"', (club_name,)).fetchone()['c']
+            income = conn.execute("SELECT COALESCE(SUM(amount),0) as s FROM finance_records WHERE club_name=? AND type='income'", (club_name,)).fetchone()['s']
+            expense = conn.execute("SELECT COALESCE(SUM(amount),0) as s FROM finance_records WHERE club_name=? AND type='expense'", (club_name,)).fetchone()['s']
             conn.close()
-            system_prompt += f'\n\n## {club_name} 实时数据\n- 成员数：{member_count}人\n- 活动数：{activity_count}次\n- 公告数：{notice_count}条\n- 部门数：{dept_count}个\n- 招募数：{recruit_count}个'
+            system_prompt += f'\n\n## {club_name} 实时数据\n- 成员数：{member_count}人\n- 活动数：{activity_count}次\n- 公告数：{notice_count}条\n- 部门数：{dept_count}个\n- 招募数：{recruit_count}个\n- 待审工作量：{pending_workload}项\n- 待审赋分：{pending_scoring}项\n- 财务余额：¥{income - expense}（收入¥{income} 支出¥{expense}）'
         except:
             pass
     elif role == 'admin':
@@ -8718,12 +10839,50 @@ def ai_chat():
             total_students = conn.execute('SELECT COUNT(*) as c FROM users WHERE role="student"').fetchone()['c']
             total_clubs = conn.execute('SELECT COUNT(DISTINCT club_name) as c FROM users WHERE role="user" AND club_name!=""').fetchone()['c']
             total_activities = conn.execute('SELECT COUNT(*) as c FROM checkin_sessions').fetchone()['c']
+            pending_materials = conn.execute('SELECT COUNT(*) as c FROM club_uploads WHERE status="pending"').fetchone()['c']
+            pending_offcampus = conn.execute('SELECT COUNT(*) as c FROM offcampus_requests WHERE status="pending"').fetchone()['c']
             conn.close()
-            system_prompt += f'\n\n## 全校数据\n- 学生总数：{total_students}人\n- 社团数：{total_clubs}个\n- 活动总数：{total_activities}次'
+            system_prompt += f'\n\n## 全校数据\n- 学生总数：{total_students}人\n- 社团数：{total_clubs}个\n- 活动总数：{total_activities}次\n- 待审材料：{pending_materials}项\n- 待审校外活动：{pending_offcampus}项'
+        except:
+            pass
+    elif role == 'teacher' and teacher_clubs:
+        try:
+            conn = db.get_conn()
+            club_data_parts = []
+            for tc in teacher_clubs[:5]:
+                ac = conn.execute('SELECT COUNT(*) as c FROM checkin_sessions WHERE club_name=?', (tc,)).fetchone()['c']
+                mc = conn.execute('SELECT COUNT(*) as c FROM club_members WHERE club_name=?', (tc,)).fetchone()['c']
+                club_data_parts.append(f'{tc}：{mc}人/{ac}次活动')
+            conn.close()
+            system_prompt += f'\n\n## 指导社团数据\n- ' + '\n- '.join(club_data_parts)
+        except:
+            pass
+    elif role == 'student' and user_clubs:
+        try:
+            conn = db.get_conn()
+            club_data_parts = []
+            for uc in user_clubs[:5]:
+                ac = conn.execute('SELECT COUNT(*) as c FROM checkin_sessions WHERE club_name=?', (uc,)).fetchone()['c']
+                mc = conn.execute('SELECT COUNT(*) as c FROM club_members WHERE club_name=?', (uc,)).fetchone()['c']
+                club_data_parts.append(f'{uc}：{mc}人/{ac}次活动')
+            conn.close()
+            system_prompt += f'\n\n## 加入社团数据\n- ' + '\n- '.join(club_data_parts)
         except:
             pass
 
     qwen_messages = [{'role': 'system', 'content': system_prompt}]
+
+    # 构造身份标签
+    identity_tag = f'[身份：{role_label}'
+    if club_name:
+        identity_tag += f'，社团：{club_name}'
+    elif user_clubs:
+        identity_tag += f'，社团：{"、".join(user_clubs[:3])}'
+    elif teacher_clubs:
+        identity_tag += f'，指导：{"、".join(teacher_clubs[:3])}'
+    if page_name:
+        identity_tag += f'，页面：{page_name}'
+    identity_tag += ']'
 
     try:
         conn = db.get_conn()
@@ -8734,7 +10893,9 @@ def ai_chat():
     except:
         pass
 
-    qwen_messages.append({'role': 'user', 'content': message})
+    # 用户消息前自动加上身份标签
+    tagged_message = f'{identity_tag} {message}'
+    qwen_messages.append({'role': 'user', 'content': tagged_message})
 
     tool_calls_made = []
     reply = None
@@ -8748,25 +10909,51 @@ def ai_chat():
             tool_calls = assistant_msg.get('tool_calls')
 
             if tool_calls:
-                qwen_messages.append(assistant_msg)
-                for tc in tool_calls:
-                    fn = tc.get('function', {})
-                    fn_name = fn.get('name', '')
-                    fn_args_str = fn.get('arguments', '{}')
-                    try:
-                        fn_args = json.loads(fn_args_str) if isinstance(fn_args_str, str) else fn_args_str
-                    except json.JSONDecodeError:
-                        fn_args = {}
-                    tool_result = execute_tool_call(fn_name, fn_args)
-                    tool_calls_made.append({'name': fn_name, 'arguments': fn_args, 'result_preview': tool_result[:200]})
-                    qwen_messages.append({
-                        'role': 'tool',
-                        'tool_call_id': tc.get('id', ''),
-                        'content': tool_result
-                    })
-                final_response = call_llm_api(qwen_messages, max_tokens=1000)
-                if final_response:
-                    reply = final_response
+                # 支持多轮工具调用，最多3轮
+                max_rounds = 3
+                for round_idx in range(max_rounds):
+                    qwen_messages.append(assistant_msg)
+                    for tc in tool_calls:
+                        fn = tc.get('function', {})
+                        fn_name = fn.get('name', '')
+                        fn_args_str = fn.get('arguments', '{}')
+                        try:
+                            fn_args = json.loads(fn_args_str) if isinstance(fn_args_str, str) else fn_args_str
+                        except json.JSONDecodeError:
+                            fn_args = {}
+                        tool_result = execute_tool_call(fn_name, fn_args, current_user=user)
+                        tool_calls_made.append({'name': fn_name, 'arguments': fn_args, 'result_preview': tool_result[:200]})
+                        qwen_messages.append({
+                            'role': 'tool',
+                            'tool_call_id': tc.get('id', ''),
+                            'content': tool_result
+                        })
+                    # 把工具结果返回给AI，让AI继续对话或调用更多工具
+                    next_response = call_llm_api(qwen_messages, tools=AI_TOOLS, max_tokens=1000)
+                    if next_response and isinstance(next_response, dict):
+                        next_choice = next_response.get('choices', [{}])[0]
+                        next_msg = next_choice.get('message', {})
+                        next_tool_calls = next_msg.get('tool_calls')
+                        if next_tool_calls:
+                            # AI还想继续调用工具
+                            assistant_msg = next_msg
+                            tool_calls = next_tool_calls
+                            continue
+                        else:
+                            # AI给出了最终回复
+                            reply = next_msg.get('content', '')
+                            break
+                    elif next_response and isinstance(next_response, str):
+                        reply = next_response
+                        break
+                    else:
+                        break
+
+                if not reply:
+                    # 多轮工具调用后仍无回复，做一次不带工具的调用
+                    final_response = call_llm_api(qwen_messages, max_tokens=1000)
+                    if final_response:
+                        reply = final_response
                 if not reply:
                     reply = '我已查询了相关数据，但生成回复时遇到了问题，请稍后再试。'
             else:
@@ -8775,10 +10962,6 @@ def ai_chat():
     if not reply:
         reply = call_llm_api(qwen_messages)
     if not reply:
-        llm_result = call_llm_api(qwen_messages)
-        if llm_result:
-            reply = llm_result
-    if not reply:
         intents = smart_intent_detect(message, user)
         if intents:
             parts = []
@@ -8786,7 +10969,7 @@ def ai_chat():
             for intent in intents:
                 fn_name = intent['tool']
                 fn_args = intent['args']
-                tool_result = execute_tool_call(fn_name, fn_args)
+                tool_result = execute_tool_call(fn_name, fn_args, current_user=user)
                 tool_calls_made.append({'name': fn_name, 'arguments': fn_args, 'result_preview': tool_result[:200]})
                 human_result = format_tool_result_for_human(fn_name, fn_args, tool_result)
                 parts.append(human_result)
@@ -8909,7 +11092,7 @@ def generate_ai_reply(message, user, context):
     def get_club_stats(club):
         try:
             conn = db.get_conn()
-            mc = conn.execute('SELECT COUNT(*) as c FROM users WHERE club_name=? AND role="student"', (club,)).fetchone()['c']
+            mc = conn.execute('SELECT COUNT(*) as c FROM club_members WHERE club_name=?', (club,)).fetchone()['c']
             ac = conn.execute('SELECT COUNT(*) as c FROM checkin_sessions WHERE club_name=?', (club,)).fetchone()['c']
             cc = conn.execute('SELECT COUNT(*) as c FROM checkin_records WHERE club_name=?', (club,)).fetchone()['c']
             dc = conn.execute('SELECT COUNT(*) as c FROM club_departments WHERE club_name=?', (club,)).fetchone()['c']
@@ -8923,7 +11106,7 @@ def generate_ai_reply(message, user, context):
 
     if has_any(msg, ['你好', '嗨', 'hello', 'hi', '在吗', '嘿', '哈喽', '早上好', '下午好', '晚上好']):
         greetings = [
-            f'你好{username}！😊 我是小济，你的社团AI助手。有什么可以帮你的吗？',
+            f'你好{username}！😊 我是小通，你的社团AI助手。有什么可以帮你的吗？',
             f'嗨！👋 很高兴见到你！今天想了解什么？',
             f'你好呀！🌟 我随时准备为你服务！可以问我任何关于社团的问题~',
             f'Hi！✨ 有什么需要帮忙的尽管说！'
@@ -8939,42 +11122,62 @@ def generate_ai_reply(message, user, context):
         return random.choice(replies)
 
     if has_any(msg, ['你是谁', '你叫什么', '介绍自己', '你是什么', '自我介绍']):
-        return f'''🤖 我是小济，济幼社团管理系统的AI助手！
+        role = user.get('role', 'student') if user else 'student'
+        role_label = {'admin': '管理员', 'user': '社团负责人', 'teacher': '指导老师', 'student': '学生'}.get(role, '')
+        role_features = {
+            'admin': '📊 全校数据分析、📋 材料审批、⚠️ 预警监控、📑 报告生成',
+            'user': '✨ 创建活动/招募/投票、📋 报名审批、💰 财务管理、🎨 海报文案生成',
+            'teacher': '📋 赋分审核、📊 指导情况分析、👥 成员活跃度分析',
+            'student': '💡 社团/活动推荐、📊 工作量学分查询、🎯 活动报名签到'
+        }
+        return f'''🤖 我是小通，云智社联管理系统的"智慧大脑"！
 
-我可以帮你做很多事情：
-📊 **数据分析** — 查看社团成员、活动、签到等数据
-📝 **内容生成** — 纳新文案、报名表、活动方案、公告润色
-🏥 **社团评估** — 健康度评分、成员分析
-💡 **活动建议** — 创意推荐、策划方案
-🐾 **宠物互动** — 喂食、游戏、养成
-💬 **日常问答** — 闲聊、知识问答
+作为{role_label}，你可以通过我：
+{role_features.get(role, '📊 数据查询、✨ 创建操作、📢 发送通知、📑 报告生成、🎨 AI创作、💡 智能推荐')}
+
+🔧 **核心能力**：
+- 📊 **数据查询** — 查询活动、成员、财务、签到等所有数据
+- ✨ **创建操作** — 创建活动、招募、投票、通知等
+- 🔄 **状态更新** — 审批通过/驳回、修改活动状态等
+- 📢 **发送通知** — 给成员、负责人、老师发通知
+- 📑 **报告生成** — 活动概览、工作量统计、财务汇总等
+- 🎨 **AI生成** — 海报图片、活动文案
+- 💡 **智能推荐** — 社团推荐、活动推荐、联合伙伴推荐
 
 试试问我点什么吧！'''
 
     if has_any(msg, ['帮助', '能做什么', '功能', '怎么用', '使用方法', '帮我']):
-        return '''🤖 我可以帮你做这些：
+        return '''🤖 我是小通，系统的"智慧大脑"，可以帮你做这些：
 
-📊 **数据分析**：
-• "分析成员数据" — 查看社团成员概况
+📊 **数据查询**：
+• "查看成员数据" — 查看社团成员概况
 • "活动情况" — 查看活动签到统计
-• "社团评估" — 社团健康度评分
+• "财务数据" — 查看收支情况
+• "查询签到记录" — 查看签到详情
 
-📝 **内容生成**：
-• "生成纳新文案" — 招新宣传文案
-• "生成报名表" — 纳新报名表模板
-• "活动策划" — 详细活动方案
-• "公告润色" — 优化公告文案
-• "活动总结" — 活动总结报告
-• "学期规划" — 学期工作计划
-• "招募优化" — 优化招募描述
+✨ **创建操作**：
+• "帮我创建一个活动" — 创建新活动
+• "发布招募" — 发起招募
+• "发起投票" — 创建投票
+• "发通知" — 给成员发通知
 
-💡 **建议创意**：
-• "活动创意" — 获取活动灵感
+🔄 **审批操作**：
+• "查看待审批" — 查看待审批项目
+• "帮我审批" — 审批通过或驳回
 
-🐾 **宠物养成**：
-• 右下角按钮查看宠物
-• 喂食不同食物获取经验
-• 玩猜数字和石头剪刀布
+📑 **报告生成**：
+• "生成活动报告" — 活动概览统计
+• "生成财务报告" — 财务汇总
+• "生成工作量报告" — 工作量统计
+
+🎨 **AI创作**：
+• "写文案" — 生成宣传文案
+
+💡 **智能推荐**：
+• "推荐社团" — 推荐适合的社团
+• "推荐活动" — 推荐感兴趣的活动
+• "推荐招募" — 推荐可报名的招募活动
+• "推荐联合伙伴" — 推荐合作社团
 
 💬 也可以直接问我任何问题！'''
 
@@ -9047,8 +11250,8 @@ def generate_ai_reply(message, user, context):
             try:
                 conn = db.get_conn()
                 total = conn.execute('SELECT COUNT(*) as c FROM users WHERE role="student"').fetchone()['c']
-                by_club = conn.execute('SELECT club_name, COUNT(*) as c FROM users WHERE role="student" AND club_name!="" GROUP BY club_name ORDER BY c DESC LIMIT 10').fetchall()
-                no_club = conn.execute('SELECT COUNT(*) as c FROM users WHERE role="student" AND (club_name="" OR club_name IS NULL)').fetchone()['c']
+                by_club = conn.execute('SELECT club_name, COUNT(*) as c FROM club_members WHERE club_name!="" GROUP BY club_name ORDER BY c DESC LIMIT 10').fetchall()
+                no_club = conn.execute('SELECT COUNT(*) as c FROM users WHERE role="student" AND id NOT IN (SELECT DISTINCT user_id FROM club_members)').fetchone()['c']
                 conn.close()
                 reply = f'📊 全校成员概况：\n\n注册学生总数：{total}人\n已加入社团：{total - no_club}人\n未加入社团：{no_club}人\n\n各社团人数：\n'
                 for r in by_club:
@@ -9063,11 +11266,11 @@ def generate_ai_reply(message, user, context):
                 if stats['depts'] > 0:
                     try:
                         conn = db.get_conn()
-                        depts = conn.execute('SELECT name, description FROM club_departments WHERE club_name=?', (club_name,)).fetchall()
+                        depts = conn.execute('SELECT dept_name, description FROM club_departments WHERE club_name=?', (club_name,)).fetchall()
                         conn.close()
                         reply += f'\n部门列表：\n'
                         for d in depts:
-                            reply += f'• {d["name"]}'
+                            reply += f'• {d["dept_name"]}'
                             if d['description']:
                                 reply += f' - {d["description"]}'
                             reply += '\n'
@@ -10116,7 +12319,7 @@ def handle_checkin_sessions():
             rows = conn.execute(f'SELECT * FROM checkin_sessions WHERE club_name=?{date_where} ORDER BY created_at DESC', date_params).fetchall()
         finally:
             conn.close()
-        return jsonify({'success': True, 'data': [{'id': r['id'], 'clubName': r['club_name'], 'activityName': r['activity_name'], 'checkinCode': r['checkin_code'], 'locationName': r['location_name'], 'status': r['status'], 'activityTime': r['activity_time'] if 'activity_time' in r.keys() else '', 'startTime': r['start_time'] if 'start_time' in r.keys() else '', 'endTime': r['end_time'] if 'end_time' in r.keys() else '', 'checkinMethod': r['checkin_method'] if 'checkin_method' in r.keys() else 'qrcode', 'activityContent': r['activity_content'] if 'activity_content' in r.keys() else '', 'planText': r['plan_text'] if 'plan_text' in r.keys() else '', 'planPath': r['plan_path'] if 'plan_path' in r.keys() else '', 'summaryText': r['summary_text'] if 'summary_text' in r.keys() else '', 'summaryPath': r['summary_path'] if 'summary_path' in r.keys() else '', 'teacherIds': r['teacher_ids'] if 'teacher_ids' in r.keys() else '', 'isCompleted': r['is_completed'] if 'is_completed' in r.keys() else 0, 'completionPhoto': r['completion_photo'] if 'completion_photo' in r.keys() else '', 'warning': r['warning'] if 'warning' in r.keys() else '', 'warningReason': r['warning_reason'] if 'warning_reason' in r.keys() else '', 'checkoutCode': r['checkout_code'] if 'checkout_code' in r.keys() else '', 'checkoutMethod': r['checkout_method'] if 'checkout_method' in r.keys() else '', 'time': local_time(r['created_at'])} for r in rows]})
+        return jsonify({'success': True, 'data': [{'id': r['id'], 'clubName': r['club_name'], 'activityName': r['activity_name'], 'checkinCode': r['checkin_code'], 'locationName': r['location_name'], 'status': r['status'], 'activityTime': r['activity_time'] if 'activity_time' in r.keys() else '', 'startTime': r['start_time'] if 'start_time' in r.keys() else '', 'endTime': r['end_time'] if 'end_time' in r.keys() else '', 'checkinMethod': r['checkin_method'] if 'checkin_method' in r.keys() else 'qrcode', 'activityContent': r['activity_content'] if 'activity_content' in r.keys() else '', 'planText': r['plan_text'] if 'plan_text' in r.keys() else '', 'planPath': r['plan_path'] if 'plan_path' in r.keys() else '', 'summaryText': r['summary_text'] if 'summary_text' in r.keys() else '', 'summaryPath': r['summary_path'] if 'summary_path' in r.keys() else '', 'teacherIds': r['teacher_ids'] if 'teacher_ids' in r.keys() else '', 'isCompleted': r['is_completed'] if 'is_completed' in r.keys() else 0, 'completionPhoto': r['completion_photo'] if 'completion_photo' in r.keys() else '', 'warning': r['warning'] if 'warning' in r.keys() else '', 'warningReason': r['warning_reason'] if 'warning_reason' in r.keys() else '', 'checkoutCode': r['checkout_code'] if 'checkout_code' in r.keys() else '', 'checkoutMethod': r['checkout_method'] if 'checkout_method' in r.keys() else '', 'locationLat': r['location_lat'] if 'location_lat' in r.keys() else 0, 'locationLng': r['location_lng'] if 'location_lng' in r.keys() else 0, 'time': local_time(r['created_at'])} for r in rows]})
     else:
         user = get_current_user()
         if not user or user['role'] not in ('user', 'admin', 'student', 'teacher'):
@@ -10222,7 +12425,7 @@ def manage_checkin_session(sid):
                     except:
                         pass
             teacher_checkins = conn.execute('SELECT teacher_user_id, status FROM teacher_checkin_checkout WHERE session_id=?', (sid,)).fetchall()
-            result = {'id': sess_row['id'], 'clubName': sess_row['club_name'], 'activityName': sess_row['activity_name'], 'checkinCode': sess_row['checkin_code'], 'status': sess_row['status'], 'startTime': sess_row['start_time'] if 'start_time' in sess_row.keys() else '', 'endTime': sess_row['end_time'] if 'end_time' in sess_row.keys() else '', 'activityTime': sess_row['activity_time'] if 'activity_time' in sess_row.keys() else '', 'locationName': sess_row['location_name'] if 'location_name' in sess_row.keys() else '', 'activityContent': sess_row['activity_content'] if 'activity_content' in sess_row.keys() else '', 'checkinMethod': sess_row['checkin_method'] if 'checkin_method' in sess_row.keys() else 'qrcode', 'checkoutCode': sess_row['checkout_code'] if 'checkout_code' in sess_row.keys() else '', 'checkoutMethod': sess_row['checkout_method'] if 'checkout_method' in sess_row.keys() else '', 'checkinCount': conn.execute('SELECT COUNT(*) as c FROM checkin_records WHERE session_id=?', (sid,)).fetchone()['c'], 'teacherCheckins': [{'teacherUserId': t['teacher_user_id'], 'status': t['status']} for t in teacher_checkins], 'time': local_time(sess_row['created_at'])}
+            result = {'id': sess_row['id'], 'clubName': sess_row['club_name'], 'activityName': sess_row['activity_name'], 'checkinCode': sess_row['checkin_code'], 'status': sess_row['status'], 'startTime': sess_row['start_time'] if 'start_time' in sess_row.keys() else '', 'endTime': sess_row['end_time'] if 'end_time' in sess_row.keys() else '', 'activityTime': sess_row['activity_time'] if 'activity_time' in sess_row.keys() else '', 'locationName': sess_row['location_name'] if 'location_name' in sess_row.keys() else '', 'activityContent': sess_row['activity_content'] if 'activity_content' in sess_row.keys() else '', 'checkinMethod': sess_row['checkin_method'] if 'checkin_method' in sess_row.keys() else 'qrcode', 'checkoutCode': sess_row['checkout_code'] if 'checkout_code' in sess_row.keys() else '', 'checkoutMethod': sess_row['checkout_method'] if 'checkout_method' in sess_row.keys() else '', 'planText': sess_row['plan_text'] if 'plan_text' in sess_row.keys() else '', 'planPath': sess_row['plan_path'] if 'plan_path' in sess_row.keys() else '', 'summaryText': sess_row['summary_text'] if 'summary_text' in sess_row.keys() else '', 'summaryPath': sess_row['summary_path'] if 'summary_path' in sess_row.keys() else '', 'isCompleted': sess_row['is_completed'] if 'is_completed' in sess_row.keys() else 0, 'completionPhoto': sess_row['completion_photo'] if 'completion_photo' in sess_row.keys() else '', 'warning': sess_row['warning'] if 'warning' in sess_row.keys() else '', 'warningReason': sess_row['warning_reason'] if 'warning_reason' in sess_row.keys() else '', 'locationLat': sess_row['location_lat'] if 'location_lat' in sess_row.keys() else 0, 'locationLng': sess_row['location_lng'] if 'location_lng' in sess_row.keys() else 0, 'checkinCount': conn.execute('SELECT COUNT(*) as c FROM checkin_records WHERE session_id=?', (sid,)).fetchone()['c'], 'teacherCheckins': [{'teacherUserId': t['teacher_user_id'], 'status': t['status']} for t in teacher_checkins], 'time': local_time(sess_row['created_at'])}
             return jsonify({'success': True, 'data': result})
         if request.method == 'DELETE':
             conn.execute('DELETE FROM checkin_records WHERE session_id=?', (sid,))
@@ -10846,27 +13049,187 @@ def reverse_geocode():
         return jsonify({'success': False, 'address': ''})
     if lat_f == 0 and lng_f == 0:
         return jsonify({'success': False, 'address': ''})
+    # 优先使用高德逆地理编码（国内服务更稳定）
     try:
         import urllib.request
-        url = f'https://nominatim.openstreetmap.org/reverse?format=json&lat={lat_f}&lon={lng_f}&accept-language=zh'
+        url = f'https://restapi.amap.com/v3/geocode/regeo?key=2454fd77342fd22574cbe266eb5c647b&location={lng_f},{lat_f}&extensions=all&output=JSON'
         req = urllib.request.Request(url, headers={'User-Agent': 'ClubStats/1.0'})
-        with urllib.request.urlopen(req, timeout=8) as resp:
+        with urllib.request.urlopen(req, timeout=5) as resp:
             data = json.loads(resp.read().decode('utf-8'))
-            address = data.get('display_name', '')
-            return jsonify({'success': True, 'address': address})
+            if data.get('status') == '1' and data.get('regeocode'):
+                addr = data['regeocode'].get('formatted_address', '')
+                # 提取更详细的周边信息
+                comp = data['regeocode'].get('addressComponent', {})
+                neighborhood = comp.get('neighborhood', {})
+                if isinstance(neighborhood, dict) and neighborhood.get('name'):
+                    addr += '（附近：' + neighborhood['name'] + '）'
+                elif isinstance(neighborhood, str) and neighborhood:
+                    addr += '（附近：' + neighborhood + '）'
+                return jsonify({'success': True, 'address': addr})
     except Exception:
-        try:
-            import urllib.request
-            url2 = f'https://restapi.amap.com/v3/geocode/regeo?key=4c9b9a5e19b7e6b7c8c1b7e6b7c8c1b7&location={lng_f},{lat_f}&extensions=base&output=JSON'
-            req2 = urllib.request.Request(url2, headers={'User-Agent': 'ClubStats/1.0'})
-            with urllib.request.urlopen(req2, timeout=5) as resp2:
-                data2 = json.loads(resp2.read().decode('utf-8'))
-                if data2.get('status') == '1' and data2.get('regeocode'):
-                    address2 = data2['regeocode'].get('formatted_address', '')
-                    return jsonify({'success': True, 'address': address2})
-        except Exception:
-            pass
-        return jsonify({'success': True, 'address': f'纬度:{lat_f:.4f},经度:{lng_f:.4f}'})
+        pass
+    # 备用：OpenStreetMap
+    try:
+        import urllib.request
+        url2 = f'https://nominatim.openstreetmap.org/reverse?format=json&lat={lat_f}&lon={lng_f}&accept-language=zh'
+        req2 = urllib.request.Request(url2, headers={'User-Agent': 'ClubStats/1.0'})
+        with urllib.request.urlopen(req2, timeout=8) as resp2:
+            data2 = json.loads(resp2.read().decode('utf-8'))
+            address2 = data2.get('display_name', '')
+            return jsonify({'success': True, 'address': address2})
+    except Exception:
+        pass
+    return jsonify({'success': True, 'address': f'纬度:{lat_f:.4f},经度:{lng_f:.4f}'})
+
+
+@app.route('/api/location-checkin', methods=['POST'])
+def location_checkin():
+    import math
+    data = request.json or {}
+    lat = data.get('lat', 0)
+    lng = data.get('lng', 0)
+    session_id = data.get('sessionId', 0)
+    code = data.get('code', '').strip()
+    student_name = data.get('studentName', '').strip()
+    student_class = data.get('studentClass', '').strip()
+    student_id = data.get('studentId', '').strip()
+    college = data.get('college', '').strip() or data.get('studentCollege', '').strip()
+    user = get_current_user()
+    try:
+        lat_f = float(lat)
+        lng_f = float(lng)
+    except (ValueError, TypeError):
+        return jsonify({'error': '经纬度格式错误'}), 400
+    if lat_f == 0 and lng_f == 0:
+        return jsonify({'error': '无法获取位置信息，请确保已开启定位权限'}), 400
+
+    # 通过签到码查找session
+    conn = db.get_conn()
+    sess_row = None
+    try:
+        if code:
+            sess_row = conn.execute('SELECT * FROM checkin_sessions WHERE checkin_code=?', (code,)).fetchone()
+        if not sess_row and session_id:
+            sess_row = conn.execute('SELECT * FROM checkin_sessions WHERE id=?', (session_id,)).fetchone()
+    except Exception:
+        pass
+    if sess_row:
+        session_id = sess_row['id']
+        # 检查签到是否已结束
+        if sess_row['status'] != 'open':
+            conn.close()
+            return jsonify({'error': '签到已结束'}), 400
+        # 检查是否在活动时间内
+        start_time = sess_row['start_time'] if 'start_time' in sess_row.keys() else ''
+        end_time = sess_row['end_time'] if 'end_time' in sess_row.keys() else ''
+        if start_time and end_time:
+            from datetime import datetime as _dt
+            now = _dt.now()
+            try:
+                st = _dt.strptime(start_time, '%Y-%m-%dT%H:%M')
+                et = _dt.strptime(end_time, '%Y-%m-%dT%H:%M')
+                if now < st or now > et:
+                    conn.close()
+                    return jsonify({'error': '当前不在活动时间内，无法签到'}), 400
+            except:
+                pass
+        # 距离校验：如果session设置了签到位置，检查距离是否在范围内
+        sess_lat = sess_row['location_lat'] if 'location_lat' in sess_row.keys() else 0
+        sess_lng = sess_row['location_lng'] if 'location_lng' in sess_row.keys() else 0
+        if sess_lat and sess_lng:
+            try:
+                sess_lat_f = float(sess_lat)
+                sess_lng_f = float(sess_lng)
+                # Haversine公式计算距离（米）
+                R = 6371000
+                dlat = math.radians(lat_f - sess_lat_f)
+                dlng = math.radians(lng_f - sess_lng_f)
+                a = math.sin(dlat/2)**2 + math.cos(math.radians(sess_lat_f)) * math.cos(math.radians(lat_f)) * math.sin(dlng/2)**2
+                c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+                distance = R * c
+                print(f'[定位签到] 学生位置: ({lat_f}, {lng_f}), 签到位置: ({sess_lat_f}, {sess_lng_f}), 距离: {distance:.1f}米')
+                if distance > 500:
+                    conn.close()
+                    return jsonify({'error': f'距离活动地点{distance:.0f}米，超出500米签到范围'}), 400
+            except (ValueError, TypeError):
+                pass
+        # 检查是否已签到
+        sname = student_name or (user['username'] if user else '')
+        sclas = student_class or ''
+        ssid = student_id or ''
+        existing = conn.execute('SELECT id FROM checkin_records WHERE session_id=? AND student_name=? AND student_id=? AND student_class=?',
+                               (session_id, sname, ssid, sclas)).fetchone()
+        if existing:
+            conn.close()
+            return jsonify({'error': '您已签到过'}), 400
+
+    address = ''
+    try:
+        import urllib.request
+        url = f'https://restapi.amap.com/v3/geocode/regeo?key=2454fd77342fd22574cbe266eb5c647b&location={lng_f},{lat_f}&extensions=base&output=JSON'
+        req = urllib.request.Request(url, headers={'User-Agent': 'ClubStats/1.0'})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            rdata = json.loads(resp.read().decode('utf-8'))
+            if rdata.get('status') == '1' and rdata.get('regeocode'):
+                address = rdata['regeocode'].get('formatted_address', '')
+    except Exception:
+        address = f'纬度:{lat_f:.4f},经度:{lng_f:.4f}'
+    try:
+        if user:
+            conn.execute('INSERT INTO location_checkins (user_id, username, role, club_name, session_id, lat, lng, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                         (user['id'], user['username'], user['role'], user.get('club_name', ''), session_id, lat_f, lng_f, address))
+        else:
+            conn.execute('INSERT INTO location_checkins (user_id, username, role, club_name, session_id, lat, lng, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                         (0, student_name, 'student', '', session_id, lat_f, lng_f, address))
+        if session_id and sess_row:
+            sname = student_name or (user['username'] if user else '')
+            sclas = student_class or ''
+            ssid = student_id or ''
+            scol = college or ''
+            conn.execute('INSERT INTO checkin_records (session_id, club_name, student_name, student_class, student_id, college, checkin_method) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                        (session_id, sess_row['club_name'], sname, sclas, ssid, scol, 'location'))
+        conn.commit()
+    finally:
+        conn.close()
+    result = {'success': True, 'address': address, 'lat': lat_f, 'lng': lng_f, 'activityName': sess_row['activity_name'] if sess_row else '', 'clubName': sess_row['club_name'] if sess_row else ''}
+    if sess_row:
+        sess_lat = sess_row['location_lat'] if 'location_lat' in sess_row.keys() else 0
+        sess_lng = sess_row['location_lng'] if 'location_lng' in sess_row.keys() else 0
+        if sess_lat and sess_lng:
+            result['sessionLat'] = float(sess_lat)
+            result['sessionLng'] = float(sess_lng)
+            R = 6371000
+            dlat = math.radians(lat_f - float(sess_lat))
+            dlng = math.radians(lng_f - float(sess_lng))
+            a = math.sin(dlat/2)**2 + math.cos(math.radians(float(sess_lat))) * math.cos(math.radians(lat_f)) * math.sin(dlng/2)**2
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+            result['distance'] = round(R * c)
+    return jsonify(result)
+
+
+@app.route('/api/location-checkin-records')
+def get_location_checkin_records():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': '请先登录'}), 401
+    conn = db.get_conn()
+    try:
+        if user['role'] == 'admin':
+            rows = conn.execute('SELECT * FROM location_checkins ORDER BY checkin_time DESC LIMIT 200').fetchall()
+        elif user['role'] == 'teacher':
+            club_names = [r['club_name'] for r in conn.execute('SELECT club_name FROM teacher_clubs WHERE teacher_user_id=?', (user['id'],)).fetchall()]
+            if club_names:
+                placeholders = ','.join(['?'] * len(club_names))
+                rows = conn.execute(f'SELECT * FROM location_checkins WHERE club_name IN ({placeholders}) ORDER BY checkin_time DESC LIMIT 200', club_names).fetchall()
+            else:
+                rows = []
+        elif user['role'] == 'user' and user.get('club_name'):
+            rows = conn.execute('SELECT * FROM location_checkins WHERE club_name=? ORDER BY checkin_time DESC LIMIT 200', (user['club_name'],)).fetchall()
+        else:
+            rows = conn.execute('SELECT * FROM location_checkins WHERE user_id=? ORDER BY checkin_time DESC LIMIT 200', (user['id'],)).fetchall()
+    finally:
+        conn.close()
+    return jsonify({'success': True, 'data': [dict(r) for r in rows]})
 
 
 @app.route('/api/ip-location')
@@ -10907,6 +13270,10 @@ def teacher_checkin():
         return jsonify({'error': '请先以指导老师身份登录'}), 401
     data = request.json or {}
     session_id = data.get('sessionId')
+    try:
+        session_id = int(session_id)
+    except (ValueError, TypeError):
+        return jsonify({'error': '活动会话ID格式错误'}), 400
     lat = data.get('lat', 0)
     lng = data.get('lng', 0)
     address = data.get('address', '')
@@ -10951,6 +13318,10 @@ def teacher_checkout():
     if not user or user['role'] != 'teacher':
         return jsonify({'error': '请先以指导老师身份登录'}), 401
     session_id = request.form.get('sessionId', '')
+    try:
+        session_id = int(session_id)
+    except (ValueError, TypeError):
+        return jsonify({'error': '活动会话ID格式错误'}), 400
     lat = request.form.get('lat', 0)
     lng = request.form.get('lng', 0)
     address = request.form.get('address', '')
@@ -12398,7 +14769,7 @@ def admin_get_users():
                 if not item['clubs'] and r['club_name']:
                     item['clubs'] = [r['club_name']]
             if r['role'] == 'student':
-                club_rows = conn.execute('SELECT club_name FROM club_members WHERE user_id=? ORDER BY club_name', (r['id'],)).fetchall()
+                club_rows = conn.execute('SELECT DISTINCT club_name FROM club_members WHERE user_id=? UNION SELECT DISTINCT club_name FROM club_cadres WHERE user_id=?', (r['id'], r['id'])).fetchall()
                 item['clubs'] = [cr['club_name'] for cr in club_rows if cr['club_name']]
                 if not item['clubs'] and r['club_name']:
                     item['clubs'] = [r['club_name']]
@@ -12471,7 +14842,7 @@ def admin_delete_user(uid):
         profile = conn.execute('SELECT real_name, student_id FROM user_profiles WHERE user_id=?', (uid,)).fetchone()
         del_name = profile['real_name'] if profile else ''
         del_sid = profile['student_id'] if profile else ''
-        user_clubs = conn.execute('SELECT DISTINCT club_name FROM club_members WHERE user_id=?', (uid,)).fetchall()
+        user_clubs = conn.execute('SELECT DISTINCT club_name FROM club_members WHERE user_id=? UNION SELECT DISTINCT club_name FROM club_cadres WHERE user_id=?', (uid, uid)).fetchall()
         club_names = [c['club_name'] for c in user_clubs]
         conn.execute('DELETE FROM user_profiles WHERE user_id=?', (uid,))
         conn.execute('DELETE FROM teacher_profiles WHERE user_id=?', (uid,))
@@ -14274,7 +16645,11 @@ def workload_pending():
     user = get_current_user()
     if not user or user['role'] not in ('user', 'admin'):
         return jsonify({'error': '仅社团负责人可查看'}), 403
-    club_name = user.get('club_name') or '' if user['role'] == 'user' else request.args.get('club', '')
+    req_club = request.args.get('club', '').strip()
+    if user['role'] == 'user':
+        club_name = req_club if req_club else (user.get('club_name') or '')
+    else:
+        club_name = req_club
     if not club_name:
         return jsonify({'success': True, 'data': []})
     start_date = request.args.get('start_date', '').strip()
@@ -15842,6 +18217,311 @@ def handle_quit_application(app_id):
             conn.execute('UPDATE quit_applications SET status=?, handler_note=?, handled_at=CURRENT_TIMESTAMP WHERE id=?', ('rejected', handler_note, app_id))
             conn.commit()
             return jsonify({'success': True, 'message': '已拒绝退社申请'})
+    finally:
+        conn.close()
+
+
+# ==================== 智能周报 API ====================
+
+@app.route('/api/weekly-report/generate', methods=['POST'])
+def generate_weekly_report():
+    user = get_current_user()
+    if not user or user['role'] not in ('user', 'admin'):
+        return jsonify({'error': '请先登录'}), 401
+
+    from datetime import datetime, timedelta
+    now = datetime.now()
+    # 本周一到今天
+    week_start_date = now - timedelta(days=now.weekday())
+    week_start = week_start_date.strftime('%Y-%m-%d')
+    week_end = now.strftime('%Y-%m-%d')
+
+    conn = db.get_conn()
+    try:
+        if user['role'] == 'user':
+            club_name = user.get('club_name', '')
+            if not club_name:
+                return jsonify({'error': '您未关联社团，无法生成周报'}), 400
+
+            # 社团活动次数
+            activity_count = conn.execute(
+                'SELECT COUNT(*) as c FROM online_activity_data WHERE club_name=? AND activity_date>=? AND activity_date<=?',
+                (club_name, week_start, week_end)
+            ).fetchone()['c']
+
+            # 各活动的参加人数（通过 checkin_sessions + checkin_records 统计）
+            activities = conn.execute(
+                'SELECT id, activity_title, activity_date FROM online_activity_data WHERE club_name=? AND activity_date>=? AND activity_date<=?',
+                (club_name, week_start, week_end)
+            ).fetchall()
+
+            activity_participants = []
+            for act in activities:
+                # 通过 checkin_sessions 查找该活动对应的签到场次，统计参加人数
+                sessions = conn.execute(
+                    "SELECT id FROM checkin_sessions WHERE club_name=? AND activity_name=? AND date(created_at)>=? AND date(created_at)<=?",
+                    (club_name, act['activity_title'] or '', week_start, week_end)
+                ).fetchall()
+                total = 0
+                for s in sessions:
+                    cnt = conn.execute(
+                        'SELECT COUNT(*) as c FROM checkin_records WHERE session_id=?', (s['id'],)
+                    ).fetchone()['c']
+                    total += cnt
+                activity_participants.append({
+                    'title': act['activity_title'] or '未命名活动',
+                    'count': total
+                })
+
+            max_activity = None
+            min_activity = None
+            if activity_participants:
+                max_activity = max(activity_participants, key=lambda x: x['count'])
+                min_activity = min(activity_participants, key=lambda x: x['count'])
+
+            # 指导老师指导次数
+            teacher_guidance_count = conn.execute(
+                'SELECT COUNT(*) as c FROM teacher_checkin_checkout WHERE club_name=? AND date(checkin_time)>=? AND date(checkin_time)<=?',
+                (club_name, week_start, week_end)
+            ).fetchone()['c']
+
+            # 组织周报内容
+            content_lines = [
+                f'【{club_name} 周报】',
+                f'统计周期：{week_start} 至 {week_end}',
+                '',
+                f'一、社团活动概况',
+                f'本周共开展活动 {activity_count} 次。',
+            ]
+            if max_activity:
+                content_lines.append(f'参加人数最多的活动：「{max_activity["title"]}」，共 {max_activity["count"]} 人参加。')
+            if min_activity:
+                content_lines.append(f'参加人数最少的活动：「{min_activity["title"]}」，共 {min_activity["count"]} 人参加。')
+            content_lines.append('')
+            content_lines.append(f'二、指导老师指导情况')
+            content_lines.append(f'本周指导老师到校指导 {teacher_guidance_count} 次。')
+
+            content = '\n'.join(content_lines)
+
+            # 检查本周是否已有该社团的周报
+            existing = conn.execute(
+                'SELECT id FROM weekly_reports WHERE role=? AND club_name=? AND week_start=? AND week_end=?',
+                ('user', club_name, week_start, week_end)
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    'UPDATE weekly_reports SET content=?, created_at=CURRENT_TIMESTAMP WHERE id=?',
+                    (content, existing['id'])
+                )
+                report_id = existing['id']
+            else:
+                conn.execute(
+                    'INSERT INTO weekly_reports (role, club_name, week_start, week_end, content) VALUES (?, ?, ?, ?, ?)',
+                    ('user', club_name, week_start, week_end, content)
+                )
+                report_id = conn.execute('SELECT last_insert_rowid() as id').fetchone()['id']
+            conn.commit()
+
+            report = conn.execute('SELECT id, week_start, week_end, content, created_at FROM weekly_reports WHERE id=?', (report_id,)).fetchone()
+            return jsonify({'success': True, 'report': dict(report)})
+
+        elif user['role'] == 'admin':
+            # 活动的社团个数
+            active_club_count = conn.execute(
+                'SELECT COUNT(DISTINCT club_name) as c FROM online_activity_data WHERE activity_date>=? AND activity_date<=?',
+                (week_start, week_end)
+            ).fetchone()['c']
+
+            # 活动次数最多的五个社团
+            top5_activity_clubs = conn.execute(
+                'SELECT club_name, COUNT(*) as c FROM online_activity_data WHERE activity_date>=? AND activity_date<=? GROUP BY club_name ORDER BY c DESC LIMIT 5',
+                (week_start, week_end)
+            ).fetchall()
+
+            # 指导老师指导次数最多的五个老师
+            top5_teachers = conn.execute(
+                'SELECT tcc.teacher_user_id, tp.real_name, COUNT(*) as c FROM teacher_checkin_checkout tcc LEFT JOIN teacher_profiles tp ON tcc.teacher_user_id=tp.user_id WHERE date(tcc.checkin_time)>=? AND date(tcc.checkin_time)<=? GROUP BY tcc.teacher_user_id ORDER BY c DESC LIMIT 5',
+                (week_start, week_end)
+            ).fetchall()
+
+            # 提交材料情况
+            upload_rows = conn.execute(
+                'SELECT club_name, COUNT(*) as c FROM club_uploads WHERE date(upload_time)>=? AND date(upload_time)<=? GROUP BY club_name',
+                (week_start, week_end)
+            ).fetchall()
+            has_uploads = len(upload_rows) > 0
+
+            # 外出情况
+            offcampus_rows = conn.execute(
+                'SELECT club_name, COUNT(*) as c FROM offcampus_requests WHERE date(created_at)>=? AND date(created_at)<=? GROUP BY club_name',
+                (week_start, week_end)
+            ).fetchall()
+            has_offcampus = len(offcampus_rows) > 0
+
+            # 联合活动发布情况
+            joint_rows = conn.execute(
+                'SELECT club_name, COUNT(*) as c FROM joint_activities WHERE date(created_at)>=? AND date(created_at)<=? GROUP BY club_name',
+                (week_start, week_end)
+            ).fetchall()
+            has_joint = len(joint_rows) > 0
+
+            # 招募情况
+            recruit_rows = conn.execute(
+                'SELECT club_name, COUNT(*) as c FROM recruitments WHERE date(created_at)>=? AND date(created_at)<=? GROUP BY club_name',
+                (week_start, week_end)
+            ).fetchall()
+            has_recruit = len(recruit_rows) > 0
+
+            # 组织周报内容
+            content_lines = [
+                '【管理员周报】',
+                f'统计周期：{week_start} 至 {week_end}',
+                '',
+                f'一、活动概况',
+                f'本周共有 {active_club_count} 个社团开展了活动。',
+            ]
+            if top5_activity_clubs:
+                content_lines.append('活动次数最多的社团：')
+                for i, row in enumerate(top5_activity_clubs, 1):
+                    content_lines.append(f'  {i}. {row["club_name"]}：{row["c"]} 次')
+            content_lines.append('')
+
+            content_lines.append('二、指导老师指导情况')
+            if top5_teachers:
+                content_lines.append('指导次数最多的老师：')
+                for i, row in enumerate(top5_teachers, 1):
+                    name = row['real_name'] or f'老师(ID:{row["teacher_user_id"]})'
+                    content_lines.append(f'  {i}. {name}：{row["c"]} 次')
+            else:
+                content_lines.append('本周暂无指导老师指导记录。')
+            content_lines.append('')
+
+            cn_list = ['一', '二', '三', '四', '五', '六']
+            sec_idx = 2  # 一=活动概况, 二=指导老师, 从三开始
+
+            if has_uploads:
+                content_lines.append(f'{cn_list[sec_idx]}、材料提交情况')
+                for row in upload_rows:
+                    content_lines.append(f'  {row["club_name"]}：提交 {row["c"]} 份材料')
+                content_lines.append('')
+                sec_idx += 1
+
+            if has_offcampus:
+                content_lines.append(f'{cn_list[sec_idx]}、外出申请情况')
+                for row in offcampus_rows:
+                    content_lines.append(f'  {row["club_name"]}：{row["c"]} 条申请')
+                content_lines.append('')
+                sec_idx += 1
+
+            if has_joint:
+                content_lines.append(f'{cn_list[sec_idx]}、联合活动发布情况')
+                for row in joint_rows:
+                    content_lines.append(f'  {row["club_name"]}：发布 {row["c"]} 条联合活动')
+                content_lines.append('')
+                sec_idx += 1
+
+            if has_recruit:
+                content_lines.append(f'{cn_list[sec_idx]}、招募情况')
+                for row in recruit_rows:
+                    content_lines.append(f'  {row["club_name"]}：发布 {row["c"]} 条招募')
+                content_lines.append('')
+
+            content = '\n'.join(content_lines)
+
+            # 检查本周是否已有管理员周报
+            existing = conn.execute(
+                'SELECT id FROM weekly_reports WHERE role=? AND week_start=? AND week_end=?',
+                ('admin', week_start, week_end)
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    'UPDATE weekly_reports SET content=?, created_at=CURRENT_TIMESTAMP WHERE id=?',
+                    (content, existing['id'])
+                )
+                report_id = existing['id']
+            else:
+                conn.execute(
+                    'INSERT INTO weekly_reports (role, club_name, week_start, week_end, content) VALUES (?, ?, ?, ?, ?)',
+                    ('admin', '', week_start, week_end, content)
+                )
+                report_id = conn.execute('SELECT last_insert_rowid() as id').fetchone()['id']
+            conn.commit()
+
+            report = conn.execute('SELECT id, week_start, week_end, content, created_at FROM weekly_reports WHERE id=?', (report_id,)).fetchone()
+            return jsonify({'success': True, 'report': dict(report)})
+    finally:
+        conn.close()
+
+
+@app.route('/api/weekly-report/latest', methods=['GET'])
+def get_latest_weekly_report():
+    user = get_current_user()
+    if not user or user['role'] not in ('user', 'admin'):
+        return jsonify({'error': '请先登录'}), 401
+
+    conn = db.get_conn()
+    try:
+        if user['role'] == 'user':
+            club_name = user.get('club_name', '')
+            report = conn.execute(
+                'SELECT id, role, club_name, week_start, week_end, content, created_at FROM weekly_reports WHERE role=? AND club_name=? ORDER BY created_at DESC LIMIT 1',
+                ('user', club_name)
+            ).fetchone()
+        else:
+            report = conn.execute(
+                'SELECT id, role, club_name, week_start, week_end, content, created_at FROM weekly_reports WHERE role=? ORDER BY created_at DESC LIMIT 1',
+                ('admin',)
+            ).fetchone()
+        if report:
+            return jsonify({'success': True, 'report': dict(report)})
+        else:
+            return jsonify({'success': True, 'report': None})
+    finally:
+        conn.close()
+
+
+@app.route('/api/weekly-report/list', methods=['GET'])
+def list_weekly_reports():
+    user = get_current_user()
+    if not user or user['role'] not in ('user', 'admin'):
+        return jsonify({'error': '请先登录'}), 401
+
+    conn = db.get_conn()
+    try:
+        if user['role'] == 'user':
+            club_name = user.get('club_name', '')
+            rows = conn.execute(
+                "SELECT id, role, club_name, week_start, week_end, content, created_at FROM weekly_reports WHERE role=? AND club_name=? AND created_at>=date('now','-30 days') ORDER BY created_at DESC",
+                ('user', club_name)
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT id, role, club_name, week_start, week_end, content, created_at FROM weekly_reports WHERE role=? AND created_at>=date('now','-30 days') ORDER BY created_at DESC",
+                ('admin',)
+            ).fetchall()
+        return jsonify({'success': True, 'list': [dict(r) for r in rows]})
+    finally:
+        conn.close()
+
+
+@app.route('/api/weekly-report/<int:report_id>', methods=['GET'])
+def get_weekly_report(report_id):
+    user = get_current_user()
+    if not user or user['role'] not in ('user', 'admin'):
+        return jsonify({'error': '请先登录'}), 401
+
+    conn = db.get_conn()
+    try:
+        report = conn.execute(
+            'SELECT id, role, club_name, week_start, week_end, content, created_at FROM weekly_reports WHERE id=?',
+            (report_id,)
+        ).fetchone()
+        if not report:
+            return jsonify({'error': '周报不存在'}), 404
+        # 权限校验：社团负责人只能看自己社团的
+        if user['role'] == 'user' and report['club_name'] != user.get('club_name', ''):
+            return jsonify({'error': '无权限查看该周报'}), 403
+        return jsonify({'success': True, 'report': dict(report)})
     finally:
         conn.close()
 

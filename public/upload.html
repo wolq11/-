@@ -62,7 +62,7 @@ body{font-family:'Microsoft YaHei','PingFang SC',sans-serif;background:#f4f5fb;m
 .material-card .mc-images{display:flex;flex-wrap:wrap;gap:8px}
 .material-card .mc-images img{width:100px;height:100px;object-fit:cover;border-radius:8px;border:1px solid #eee;cursor:pointer;transition:transform .2s}
 .material-card .mc-images img:hover{transform:scale(1.05)}
-.status-tag{display:inline-block;padding:3px 10px;border-radius:10px;font-size:0.72em;font-weight:600}
+.status-tag{display:inline-block;padding:3px 10px;border-radius:10px;font-size:0.72em;font-weight:600;white-space:nowrap}
 .status-tag.pending{background:rgba(255,193,7,0.15);color:#ffc107}
 .status-tag.approved{background:rgba(67,233,123,0.15);color:#00b894}
 .status-tag.rejected{background:rgba(245,87,108,0.15);color:#e74c3c}
@@ -72,6 +72,7 @@ body{font-family:'Microsoft YaHei','PingFang SC',sans-serif;background:#f4f5fb;m
 .toolbar .filter-btn:hover{background:#f5f5ff;color:#1a1a2e}
 .toolbar .filter-btn.active{background:rgba(67,233,123,0.15);color:#00b894;border-color:rgba(67,233,123,0.3)}
 .toolbar .export-btn{padding:6px 14px;border-radius:8px;border:1px solid rgba(67,233,123,0.3);background:rgba(67,233,123,0.1);color:#00b894;font-size:0.8em;cursor:pointer;font-weight:600;transition:all .2s;margin-left:auto}
+.toolbar-actions{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .toolbar .export-btn:hover{background:rgba(67,233,123,0.2)}
 .empty{text-align:center;padding:32px;color:#a0a3bd;font-size:0.88em}
 .toast{position:fixed;top:20px;right:20px;padding:14px 24px;border-radius:12px;font-size:0.88em;z-index:9999;animation:slideIn .3s;max-width:360px}
@@ -163,6 +164,9 @@ body{font-family:'Microsoft YaHei','PingFang SC',sans-serif;background:#f4f5fb;m
   .material-card .mc-header{flex-wrap:nowrap!important}
   .btn{white-space:normal;word-break:break-word}
   .toolbar input[type="date"]{width:100%;min-width:0}
+  .toolbar-actions{flex-wrap:nowrap!important;overflow-x:auto;white-space:nowrap}
+  .toolbar-actions .export-btn{margin-left:0!important;white-space:nowrap}
+  .toolbar-actions .filter-btn{white-space:nowrap}
 }
 @media(max-width:480px){
   .container{padding:16px 12px}
@@ -215,9 +219,9 @@ body{font-family:'Microsoft YaHei','PingFang SC',sans-serif;background:#f4f5fb;m
             <div class="upload-area" id="photoArea">
                 <div class="icon">📁</div>
                 <div class="text">拖拽文件到此处，或 <b>点击选择文件</b></div>
-                <div class="hint">支持照片（JPG、PNG）、PDF、Word（DOC、DOCX）格式</div>
+                <div class="hint">支持照片（JPG、PNG）、视频、PDF、Word（DOC、DOCX）格式</div>
                 <div class="preview" id="photoPreview"></div>
-                <input type="file" id="photoInput" accept="image/jpeg,image/png,image/gif,image/webp,.pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document" multiple style="display:none" />
+                <input type="file" id="photoInput" multiple style="display:none" />
             </div>
         </div>
         <div style="text-align:center">
@@ -236,9 +240,11 @@ body{font-family:'Microsoft YaHei','PingFang SC',sans-serif;background:#f4f5fb;m
             <span style="color:#a0a3bd;font-size:0.8em">至</span>
             <input type="date" id="matEndDate" style="padding:6px 10px;border-radius:8px;border:1px solid #e8e8f0;background:#fff;color:#1a1a2e;font-size:0.8em" />
             <button class="filter-btn" onclick="loadAllMaterials()">筛选日期</button>
+            <div class="toolbar-actions">
             <button class="export-btn" onclick="exportMaterials('approved')">📥 导出已通过</button>
             <button class="export-btn" onclick="exportMaterials('all')" style="margin-left:6px;background:#f5f5ff;color:#6b6d8a;border-color:#e8e8f0">📥 导出全部</button>
             <button class="filter-btn" onclick="toggleAgentPanel()" style="background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;border-color:transparent;font-weight:600">智能审批</button>
+            </div>
         </div>
         <div id="adminBatchBar" class="admin-batch-bar">
             <input type="checkbox" id="selectAllMats" class="mat-checkbox" onchange="toggleSelectAll(this)" />
@@ -372,15 +378,15 @@ document.getElementById('photoArea').addEventListener('dragleave',function(){thi
 document.getElementById('photoArea').addEventListener('drop',function(e){e.preventDefault();this.classList.remove('dragover');addPhotos(Array.from(e.dataTransfer.files))});
 
 function addPhotos(files){
-    var validExts=['.jpg','.jpeg','.png','.gif','.webp','.pdf','.doc','.docx'];
-    var validTypes=['image/'];
+    var validExts=['.jpg','.jpeg','.png','.gif','.webp','.pdf','.doc','.docx','.mp4','.mov','.avi','.mkv','.mp3','.wav'];
+    var validTypes=['image/','video/','audio/'];
     var accepted=files.filter(function(f){
         var ext='.'+f.name.split('.').pop().toLowerCase();
         if(validExts.indexOf(ext)>=0)return true;
         for(var i=0;i<validTypes.length;i++){if(f.type.startsWith(validTypes[i]))return true}
         return false;
     });
-    if(!accepted.length){toast('请选择照片、PDF或Word文件','error');return}
+    if(!accepted.length){toast('请选择照片、视频、PDF或Word文件','error');return}
     selectedPhotos=selectedPhotos.concat(accepted);renderPhotoPreview();checkForm();
 }
 function renderPhotoPreview(){
@@ -400,7 +406,7 @@ function renderPhotoPreview(){
             c.appendChild(wrap);
         }else{
             var ext=f.name.split('.').pop().toLowerCase();
-            var icon=ext==='pdf'?'📕':(ext==='doc'||ext==='docx'?'📘':'📄');
+            var icon=ext==='pdf'?'📕':(ext==='doc'||ext==='docx'?'📘':(f.type.startsWith('video/')?'🎬':(f.type.startsWith('audio/')?'🎵':'📄')));
             var div=document.createElement('div');
             div.style.cssText='width:80px;height:80px;border-radius:8px;border:1px solid #eee;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;background:#fafaff';
             div.innerHTML='<div style="font-size:1.8em">'+icon+'</div><div style="font-size:0.6em;color:#6b6d8a;margin-top:4px;max-width:70px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(f.name)+'</div>';
@@ -600,7 +606,7 @@ function renderAllMaterials(data){
         var pendingCnt=items.filter(function(m){return m.status==='pending'}).length;
         var approvedCnt=items.filter(function(m){return m.status==='approved'}).length;
         var rejectedCnt=items.filter(function(m){return m.status==='rejected'}).length;
-        h+='<div class="club-group"><h3 style="cursor:pointer" onclick="toggleMatDetail(\'cg-'+gIdx+'\')">'+esc(club)+' <span class="badge">'+items.length+'条';
+        h+='<div class="club-group"><h3 style="cursor:pointer;white-space:nowrap;overflow-x:auto" onclick="toggleMatDetail(\'cg-'+gIdx+'\')">'+esc(club)+' <span class="badge" style="white-space:nowrap">'+items.length+'条';
         if(pendingCnt)h+=' · '+pendingCnt+'条待审批';
         if(approvedCnt)h+=' · '+approvedCnt+'条已通过';
         if(rejectedCnt)h+=' · '+rejectedCnt+'条已打回';

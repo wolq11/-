@@ -69,6 +69,7 @@ table{width:100%;border-collapse:collapse;font-size:0.84em}
 th{background:#fafaff;color:#6b6d8a;font-weight:600;text-align:left;padding:10px 12px;border-bottom:2px solid #f0f0f8;font-size:0.78em}
 td{padding:10px 12px;border-bottom:1px solid #f5f5ff;color:#1a1a2e}
 tr:hover td{background:#fafaff}
+#clubStatsTable th,#clubStatsTable td{white-space:nowrap}
 .clickable{color:#667eea;cursor:pointer;font-weight:700;text-decoration:underline;text-underline-offset:3px}
 .clickable:hover{color:#764ba2}
 
@@ -133,6 +134,8 @@ body.role-student .club-selector-bar select:focus{border-color:#00b894;box-shado
   .toast{left:16px;right:16px;text-align:center}
   .tab-btn{min-height:36px}
   table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
+  #clubStatsTable{display:table!important;width:max-content!important;min-width:100%!important}
+  #clubStatsTable th,#clubStatsTable td{white-space:nowrap!important}
   [style*="min-width"]{min-width:0!important}
   [style*="display:flex"][style*="justify-content:space-between"]{flex-wrap:wrap!important}
   .btn{white-space:normal;word-break:break-word}
@@ -141,6 +144,7 @@ body.role-student .club-selector-bar select:focus{border-color:#00b894;box-shado
   .detail-item{flex-wrap:wrap}
   .detail-item .di-score{min-width:auto}
   .club-selector-bar{flex-wrap:wrap}
+  .wl-history-table th,.wl-history-table td{white-space:nowrap!important}
 }
 @media(max-width:480px){
   .header .logo-text{display:none}
@@ -157,7 +161,7 @@ body.role-student .club-selector-bar select:focus{border-color:#00b894;box-shado
         <div class="logo-icon">📊</div>
         <div class="logo-text">工作量统计</div>
     </div>
-    <button class="back-btn" onclick="history.back()">← 返回</button>
+
 </div>
 
 <div class="main">
@@ -231,6 +235,7 @@ function buildUI(){
             loadMyScore();
         });
     }else if(role==='user'){
+        selectedClub=currentUser.clubName||'';
         loadClubStats();
         loadPending();
     }
@@ -266,6 +271,7 @@ function onClubChange(){
     loadMyScore();
     loadSubmitForm();
     loadMyHistory();
+    loadPending();
 }
 
 function switchTab(id,btn){
@@ -428,7 +434,7 @@ function loadMyHistory(){
         var h='<div class="card"><div class="card-title">📋 我的提交记录 <span class="badge">'+data.length+'条</span></div>';
         if(!data.length){h+='<div class="empty">暂无提交记录</div>'}
         else{
-            h+='<table><thead><tr><th>社团</th><th>活动/事项</th><th>分数</th><th>状态</th><th>审核备注</th><th>提交时间</th></tr></thead><tbody>';
+            h+='<table class="wl-history-table"><thead><tr><th>社团</th><th>活动/事项</th><th>分数</th><th>状态</th><th>审核备注</th><th>提交时间</th></tr></thead><tbody>';
             data.forEach(function(d){
                 var statusText={pending:'待审核',approved:'已通过',rejected:'已驳回'};
                 h+='<tr><td>'+esc(d.club_name||'-')+'</td><td>'+esc(d.item_name)+'</td><td>'+d.score+'</td><td><span class="status-tag '+d.status+'">'+statusText[d.status]+'</span></td><td>'+(d.review_note?esc(d.review_note):'-')+'</td><td>'+(d.created_at||'')+'</td></tr>';
@@ -451,7 +457,7 @@ function loadClubStats(){
         if(!data.length){h+='<div class="empty">暂无成员数据</div>'}
         else{
             h+='<div class="search-bar"><input type="text" id="clubSearchInput" placeholder="搜索姓名/学号/班级..." oninput="filterClubTable()" /></div>';
-            h+='<table id="clubStatsTable"><thead><tr><th>姓名</th><th>学号</th><th>班级</th><th>活动次数</th><th>其他工作量</th><th>总分</th></tr></thead><tbody>';
+            h+='<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table id="clubStatsTable" style="width:max-content;min-width:100%"><thead><tr><th>姓名</th><th>学号</th><th>班级</th><th>活动次数</th><th>其他工作量</th><th>总分</th></tr></thead><tbody>';
             data.forEach(function(d){
             var canClick=d.user_id&&d.user_id>0;
             h+='<tr data-search="'+esc((d.real_name||'')+' '+(d.student_id_num||'')+' '+(d.class_name||''))+'">';
@@ -464,7 +470,7 @@ function loadClubStats(){
             h+='</tr>';
             h+='<tr data-search="'+esc((d.real_name||'')+' '+(d.student_id_num||'')+' '+(d.class_name||''))+'" class="detail-row" id="clubDetailRow-'+d.user_id+'" style="display:none"><td colspan="6" style="padding:12px;background:#fafaff"><div id="clubDetailContent-'+d.user_id+'"><div class="empty">加载中...</div></div></td></tr>';
             });
-            h+='</tbody></table>';
+            h+='</tbody></table></div>';
         }
         h+='</div>';
         document.getElementById('panel-clubStats').innerHTML=h;
@@ -526,7 +532,9 @@ function filterClubTable(){
 }
 
 function loadPending(){
-    fetch(api+'/api/workload/pending').then(function(r){return r.json()}).then(function(res){
+    var url=api+'/api/workload/pending';
+    if(selectedClub)url+='?club='+encodeURIComponent(selectedClub);
+    fetch(url).then(function(r){return r.json()}).then(function(res){
         if(!res.success)return;
         var data=res.data;
         var h='';
@@ -552,16 +560,25 @@ function loadPending(){
 
 var workloadAgentCache=null;
 function loadWorkloadAgent(){
-    fetch(api+'/api/agent/approval-preview/workload').then(function(r){return r.json()}).then(function(res){
-        if(!res.success)return;
+    var bar=document.getElementById('agentBar');
+    var url=api+'/api/agent/approval-preview/workload';
+    if(selectedClub)url+='?club='+encodeURIComponent(selectedClub);
+    fetch(url).then(function(r){
+        if(!r.ok)throw new Error('HTTP '+r.status);
+        return r.json();
+    }).then(function(res){
+        if(!res.success){
+            if(bar)bar.querySelector('.agent-summary').textContent=res.error||'智能审批分析失败';
+            return;
+        }
         workloadAgentCache=res.data;
-        var bar=document.getElementById('agentBar');
         if(bar){
             var items=res.data.items||[];
             var autoCount=items.filter(function(it){return it.auto_approvable}).length;
             bar.querySelector('.agent-summary').innerHTML=res.data.summary+(autoCount>0?' (其中'+autoCount+'项可自动通过)':'');
         }
         var recMap={'approve':'建议通过','reject':'建议驳回'};
+        var items=res.data.items||[];
         items.forEach(function(item){
             var slot=document.getElementById('agent-slot-'+item.id);
             if(slot){
@@ -570,6 +587,8 @@ function loadWorkloadAgent(){
                 slot.innerHTML='<span class="agent-tag '+rec+'">'+recMap[rec]+' '+score+'分</span>';
             }
         });
+    }).catch(function(err){
+        if(bar)bar.querySelector('.agent-summary').textContent='智能审批分析加载失败，请点击"分析"重试';
     });
 }
 

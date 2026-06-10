@@ -6,6 +6,8 @@
 <title>指导老师 - 社团管理</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+<script src="https://webapi.amap.com/maps?v=2.0&key=e4a44b5e4246612039bcfcfa569f98e3"></script>
+<script type="text/javascript">window._AMapSecurityConfig={securityJsCode:'07120c6bdb6b1361bb6c26a199ca8dc0'};</script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{height:100%;overflow:hidden}
@@ -97,6 +99,10 @@ a{text-decoration:none;color:inherit}
 .session-row:hover{border-color:#b2f0e0;background:#f0fdf9}
 .session-row.active{border-color:#00b894;background:rgba(0,184,148,0.03)}
 .session-info{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.ni{padding:10px 0;border-bottom:1px solid #f5f5ff;display:flex;align-items:flex-start;gap:12px}
+.ni:last-child{border-bottom:none}
+.ni-body{flex:1;min-width:0}
+.ni .ni-title{font-size:0.82em;color:#1a1a2e;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:5px}
 .session-name{font-size:0.88em;font-weight:600;color:#1a1a2e}
 .session-meta{display:flex;gap:10px;flex-wrap:wrap;font-size:0.74em;color:#a0a3bd;margin-top:4px}
 .session-status{font-size:0.76em;font-weight:600;padding:4px 10px;border-radius:6px}
@@ -244,6 +250,7 @@ a{text-decoration:none;color:inherit}
   .carousel-slide .cs-overlay{padding:16px}
   .carousel-arrow{width:44px;height:44px}
   .iframe-wrap{height:calc(100vh - 140px)}
+  #page-joint .iframe-wrap,#page-recruit .iframe-wrap{width:calc(100% + 24px);margin:0 -12px;border-radius:0}
   .form-row .field input,.form-row .field textarea,.form-row .field select{font-size:16px}
   .form-row .field{min-width:0;flex:1 1 100%}
   .toast{left:16px;right:16px;text-align:center}
@@ -269,6 +276,12 @@ a{text-decoration:none;color:inherit}
   .score-review-table th,.score-review-table td{white-space:nowrap!important}
   .ma-stats-table th,.ma-stats-table td{white-space:nowrap!important}
   .checkin-input-area,.checkin-scan-area{min-width:100%!important}
+  #page-guidance .session-info{display:grid!important;grid-template-columns:1fr auto;gap:12px;align-items:center}
+  #page-guidance .session-meta{flex-wrap:wrap!important;min-width:0}
+  #page-guidance .checkin-status-tag{white-space:nowrap!important;flex-shrink:0}
+  .ni-body{overflow-wrap:break-word!important;word-break:break-word!important}
+  .ni-body .ni-title{white-space:normal!important;overflow-wrap:break-word!important}
+  .checkin-action-area{display:none!important}
 }
 @media(max-width:480px){
   .stat-grid{gap:8px}
@@ -308,7 +321,7 @@ a{text-decoration:none;color:inherit}
 <div class="sidebar">
     <div class="sb-head">
         <div class="sb-logo">👨‍🏫</div>
-        <div><div class="sb-title">济幼社团</div><div class="sb-subtitle">TEACHER PORTAL</div></div>
+        <div><div class="sb-title">云智社联</div><div class="sb-subtitle">TEACHER PORTAL</div></div>
     </div>
     <div class="sb-role"><span class="sb-role-badge">👨‍🏫 <span>指导老师</span></span></div>
     <div class="sb-club" id="sbClub">
@@ -414,7 +427,10 @@ function switchPage(id){
     if(_featureMap[id])dismissBadge(_featureMap[id]);
     if(id==='joint'){
         var jf=document.querySelector('#page-joint iframe');
-        if(jf)jf.src='/club-tools.html?panel=joint&club='+encodeURIComponent(currentClub||'')+'&t='+Date.now();
+        if(jf){
+            jf.onload=function(){if(window.innerWidth<=768){try{var d=this.contentDocument||this.contentWindow.document;this.style.height=d.documentElement.scrollHeight+'px'}catch(e){}}};
+            jf.src='/club-tools.html?panel=joint&club='+encodeURIComponent(currentClub||'')+'&t='+Date.now();
+        }
     }
     if(id==='home')loadTeacherHomeData();
     if(id==='checkin')loadCheckinSessions();
@@ -451,10 +467,12 @@ function switchClub(cn){
     if(descEl)descEl.textContent=cn+' · 成员数据可视化';
     var jointIframe=document.querySelector('#page-joint iframe');
     if(jointIframe){
+        jointIframe.onload=function(){if(window.innerWidth<=768){try{var d=this.contentDocument||this.contentWindow.document;this.style.height=d.documentElement.scrollHeight+'px'}catch(e){}}};
         jointIframe.src='/club-tools.html?panel=joint&club='+encodeURIComponent(cn)+'&t='+Date.now();
     }
     var recruitIframe=document.querySelector('#page-recruit iframe');
     if(recruitIframe){
+        recruitIframe.onload=function(){if(window.innerWidth<=768){try{var d=this.contentDocument||this.contentWindow.document;this.style.height=d.documentElement.scrollHeight+'px'}catch(e){}}};
         recruitIframe.src='/club-tools.html?panel=recruit&club='+encodeURIComponent(cn);
     }
     var activePage=document.querySelector('.nav-item.active');
@@ -488,7 +506,25 @@ function buildPages(){
         h+='<div class="page'+(id==='home'?' active':'')+'" id="page-'+id+'">'+pages[id]+'</div>';
     }
     main.innerHTML=h;
+    ['joint','recruit'].forEach(function(pid){
+        var iframe=document.querySelector('#page-'+pid+' iframe');
+        if(iframe){
+            iframe.onload=function(){if(window.innerWidth<=768){try{var d=this.contentDocument||this.contentWindow.document;this.style.height=d.documentElement.scrollHeight+'px'}catch(e){}}};
+        }
+    });
 }
+
+window.addEventListener('message',function(e){
+    if(e.data&&e.data.type==='resize-iframe'){
+        var iframes=document.querySelectorAll('#page-joint iframe, #page-recruit iframe');
+        for(var i=0;i<iframes.length;i++){
+            if(iframes[i].contentWindow===e.source){
+                if(window.innerWidth<=768) iframes[i].style.height=e.data.height+'px';
+                break;
+            }
+        }
+    }
+});
 
 function teacherHomePage(){
     return '<div class="carousel" id="homeCarousel">'+
@@ -558,7 +594,7 @@ function loadTeacherHomeData(){
             res.data.forEach(function(s){carouselSlides.push({title:s.clubName,desc:s.description||'',img:s.imageUrl||''})});
         }
         if(!carouselSlides.length){
-            carouselSlides=[{title:'欢迎来到济幼社团',desc:'发现精彩社团活动',img:''}];
+            carouselSlides=[{title:'欢迎来到云智社联',desc:'发现精彩社团活动',img:''}];
         }
         renderCarousel();
         startCarouselTimer();
@@ -688,7 +724,7 @@ function showNoticeDetail(id){
         h+=esc(n.title)+'</h3><div style="font-size:0.72em;color:#c8cade;margin-top:4px">'+esc(n.time||'')+'</div></div>';
         h+='<button style="border:none;background:#f0f0f8;width:28px;height:28px;border-radius:50%;cursor:pointer;font-size:1em;color:#6b6d8a;flex-shrink:0;margin-left:12px" onclick="var m=document.getElementById(\''+mid+'\');if(m)m.remove();event.stopPropagation()">✕</button></div>';
         if(n.content)h+='<div style="font-size:0.88em;color:#4a4d6a;line-height:1.7;margin-bottom:12px">'+n.content+'</div>';
-        if(n.attachmentName)h+='<div style="margin-top:8px"><a href="'+api+'/api/notice-file/'+n.id+'" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;background:rgba(0,184,148,0.06);color:#00b894;font-size:0.82em;font-weight:600;text-decoration:none">📎 '+esc(n.attachmentName)+'</a></div>';
+        if(n.attachmentName)h+='<div style="margin-top:8px"><a href="'+api+'/api/notice-file/'+n.id+'" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;background:rgba(0,184,148,0.06);color:#00b894;font-size:0.82em;font-weight:600;text-decoration:none">📎 '+esc(n.attachmentName)+'</a></div>';
         h+='</div></div>';
         document.body.insertAdjacentHTML('beforeend',h);
     }).catch(function(){toast('加载通知详情失败','error')});
@@ -734,6 +770,7 @@ function checkinPage(){
     '<button class="btn btn-primary" style="padding:12px 24px;font-size:0.92em;width:100%" onclick="openTeacherScanner()">📷 打开摄像头扫码</button></div>'+
     '</div>'+
     '<div id="quickCheckinResult" style="display:none"></div>'+
+    '<div id="teacherLocMapArea" style="display:none;margin-top:12px"><div id="teacherLocMap" style="width:100%;height:220px;border-radius:10px;border:1px solid #f0f0f8"></div></div>'+
     '</div>'+
     '<div id="checkinQuickAction" style="margin-bottom:16px"></div>'+
     '<div class="card"><div class="card-title">📋 进行中的活动 <span class="badge">点击签到/签退</span></div>'+
@@ -905,6 +942,7 @@ function renderCheckinSessions(sessions){
     var openH='',closedH='';
     sessions.sort(function(a,b){return b.id-a.id});
     var openSessions=sessions.filter(function(s){return s.status==='open'});
+    window._teacherOpenSessions=openSessions;
     var quickBox=document.getElementById('checkinQuickAction');
     if(quickBox&&openSessions.length){
         var qh='<div style="background:linear-gradient(135deg,rgba(0,184,148,0.06),rgba(85,239,196,0.06));border:1.5px solid rgba(0,184,148,0.15);border-radius:14px;padding:18px">';
@@ -952,7 +990,7 @@ function renderCheckinSessions(sessions){
         }else{
             statusText='⏹ 已结束';
         }
-        var methodTag=s.checkinMethod==='code'?'🔢 签到码':'📱 二维码';
+        var methodTag=s.checkinMethod==='code'?'🔢 签到码':s.checkinMethod==='location'?'📍 定位':'📱 二维码';
         var row='<div class="session-row" id="csRow-'+s.id+'" onclick="if(event.target.closest(\'input,select,textarea,button,a,.checkin-action-area,.session-detail\'))return;toggleCheckinSession('+s.id+')">';
         row+='<div class="session-info">';
         row+='<div><div class="session-name">'+esc(s.activityName||'未命名活动')+'</div>';
@@ -1068,6 +1106,9 @@ function renderCheckinSessionDetail(session,detail){
 function loadTeacherCheckinStatus(sid,session){
     var box=document.getElementById('checkinAction-'+sid);
     if(!box)return;
+    if(session.locationLat&&session.locationLng){
+        sessionLocations[sid]={lat:parseFloat(session.locationLat),lng:parseFloat(session.locationLng)};
+    }
     fetch(api+'/api/teacher-checkin-status?sessionId='+sid).then(function(r){return r.json()}).then(function(res){
         if(!res.success){box.innerHTML='<div class="empty">获取状态失败</div>';return}
         var status=res.status;
@@ -1076,7 +1117,7 @@ function loadTeacherCheckinStatus(sid,session){
             if(!status||status==='none'){
                 h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span class="checkin-status-tag pending">⏳ 待签到</span></div>';
                 h+='<div class="location-hint" id="locHint-'+sid+'">📍 正在获取位置...</div>';
-                h+='<button class="btn btn-primary" onclick="doTeacherCheckin('+sid+')" id="checkinBtn-'+sid+'" style="margin-top:8px">✅ 签到</button>';
+                h+='<button class="btn btn-primary" onclick="doTeacherCheckin('+sid+')" id="checkinBtn-'+sid+'" style="margin-top:8px" disabled>⏳ 获取位置中...</button>';
                 h+='<div style="font-size:0.72em;color:#e8876a;margin-top:6px">⚠️ 签到必须获取位置信息，请确保已开启定位权限</div>';
                 getLocation(sid);
             }else if(status==='checked_in'){
@@ -1086,7 +1127,7 @@ function loadTeacherCheckinStatus(sid,session){
                 h+='<div style="font-size:0.82em;color:#4a4d6a;font-weight:600;margin-bottom:6px">🔑 签退码</div>';
                 h+='<div style="font-size:0.74em;color:#a0a3bd;margin-bottom:8px">请向社团负责人获取签退码，负责人在「活动开展」签到信息面板中点击「生成签退码」</div>';
                 h+='<input type="text" id="checkoutCode-'+sid+'" placeholder="输入6位签退码" style="width:100%;padding:10px 14px;border:1.5px solid #e8e8f0;border-radius:10px;font-size:1.1em;letter-spacing:6px;text-align:center;box-sizing:border-box;font-weight:700" maxlength="6" onclick="event.stopPropagation()" onfocus="event.stopPropagation()" /></div>';
-                h+='<button class="btn btn-primary" onclick="doTeacherCheckout('+sid+')" id="checkoutBtn-'+sid+'" style="margin-top:8px">签退</button>';
+                h+='<button class="btn btn-primary" onclick="doTeacherCheckout('+sid+')" id="checkoutBtn-'+sid+'" style="margin-top:8px" disabled>⏳ 获取位置中...</button>';
                 h+='<div style="font-size:0.72em;color:#e8876a;margin-top:6px">⚠️ 签退必须获取位置信息，请确保已开启定位权限</div>';
                 getLocation(sid);
             }else if(status==='checked_out'){
@@ -1111,6 +1152,18 @@ var locationWatchId=null;
 var locationError='';
 var isSecureContext=window.isSecureContext;
 
+// WGS-84 → GCJ-02 坐标转换
+function wgs84ToGcj02(lat,lng){
+    var PI=Math.PI;var a=6378245.0;var ee=0.00669342162296594323;
+    if(lng<72.004||lng>137.8347||lat<0.8293||lat>55.8271){return {lat:lat,lng:lng}}
+    var dLat=_tLat(lng-105.0,lat-35.0);var dLng=_tLng(lng-105.0,lat-35.0);
+    var radLat=lat/180.0*PI;var magic=Math.sin(radLat);magic=1-ee*magic*magic;var sqrtMagic=Math.sqrt(magic);
+    dLat=(dLat*180.0)/((a*(1-ee))/(magic*sqrtMagic)*PI);dLng=(dLng*180.0)/(a/sqrtMagic*Math.cos(radLat)*PI);
+    return {lat:lat+dLat,lng:lng+dLng};
+}
+function _tLat(x,y){var r=-100+2*x+3*y+0.2*y*y+0.1*x*y+0.2*Math.sqrt(Math.abs(x));r+=(20*Math.sin(6*x*Math.PI)+20*Math.sin(2*x*Math.PI))*2/3;r+=(20*Math.sin(y*Math.PI)+40*Math.sin(y/3*Math.PI))*2/3;r+=(160*Math.sin(y/12*Math.PI)+320*Math.sin(y*Math.PI/30))*2/3;return r}
+function _tLng(x,y){var r=300+x+2*y+0.1*x*x+0.1*x*y+0.1*Math.sqrt(Math.abs(x));r+=(20*Math.sin(6*x*Math.PI)+20*Math.sin(2*x*Math.PI))*2/3;r+=(20*Math.sin(x*Math.PI)+40*Math.sin(x/3*Math.PI))*2/3;r+=(150*Math.sin(x/12*Math.PI)+300*Math.sin(x/30*Math.PI))*2/3;return r}
+
 function startLocationWatch(){
     if(!navigator.geolocation){
         locationError='浏览器不支持定位功能';
@@ -1122,48 +1175,109 @@ function startLocationWatch(){
     }
     var opts={enableHighAccuracy:true,timeout:15000,maximumAge:0};
     navigator.geolocation.getCurrentPosition(function(pos){
-        cachedLocation={lat:pos.coords.latitude,lng:pos.coords.longitude,ready:true,address:''};
+        var gcj=wgs84ToGcj02(pos.coords.latitude,pos.coords.longitude);
+        cachedLocation={lat:gcj.lat,lng:gcj.lng,ready:true,address:''};
         locationError='';
-        reverseGeocode(pos.coords.latitude,pos.coords.longitude,function(addr){
+        reverseGeocode(gcj.lat,gcj.lng,function(addr){
             if(addr)cachedLocation.address=addr;
+            refreshAllLocHints();
         });
+        refreshAllLocHints();
     },function(err){
         cachedLocation.ready=false;
         if(err.code===1)locationError='定位权限被拒绝，请在浏览器设置中允许定位权限';
         else if(err.code===2)locationError='无法获取位置信息，请检查设备定位是否开启';
         else if(err.code===3)locationError='定位超时，请稍后重试';
         else locationError='定位失败，错误码：'+err.code;
+        refreshAllLocHints();
     },opts);
     if(locationWatchId!==null){navigator.geolocation.clearWatch(locationWatchId)}
     locationWatchId=navigator.geolocation.watchPosition(function(pos){
-        cachedLocation={lat:pos.coords.latitude,lng:pos.coords.longitude,ready:true,address:''};
+        var gcj=wgs84ToGcj02(pos.coords.latitude,pos.coords.longitude);
+        cachedLocation={lat:gcj.lat,lng:gcj.lng,ready:true,address:''};
         locationError='';
-        reverseGeocode(pos.coords.latitude,pos.coords.longitude,function(addr){
+        reverseGeocode(gcj.lat,gcj.lng,function(addr){
             if(addr)cachedLocation.address=addr;
+            refreshAllLocHints();
         });
+        refreshAllLocHints();
     },function(err){
         cachedLocation.ready=false;
         if(err.code===1)locationError='定位权限被拒绝，请在浏览器设置中允许定位权限';
         else if(err.code===2)locationError='无法获取位置信息，请检查设备定位是否开启';
         else if(err.code===3)locationError='定位超时，请稍后重试';
         else locationError='定位失败';
+        refreshAllLocHints();
     },opts);
 }
 
+function refreshAllLocHints(){
+    document.querySelectorAll('[id^="locHint-"]').forEach(function(el){
+        var sid=el.id.replace('locHint-','');
+        if(sid)getLocation(parseInt(sid));
+    });
+}
+
 function reverseGeocode(lat,lng,callback){
-    fetch(api+'/api/reverse-geocode?lat='+lat+'&lng='+lng).then(function(r){return r.json()}).then(function(res){
-        if(res.success&&res.address){callback(res.address)}else{callback('')}
-    }).catch(function(){callback('')});
+    var url='https://restapi.amap.com/v3/geocode/regeo?key=2454fd77342fd22574cbe266eb5c647b&location='+lng+','+lat+'&extensions=all&output=JSON';
+    console.log('[逆地理编码] 请求URL:', url);
+    fetch(url).then(function(r){return r.json()}).then(function(res){
+        console.log('[逆地理编码] 返回数据:', JSON.stringify(res));
+        if(res.status==='1'&&res.regeocode){
+            var addr=res.regeocode.formatted_address||'';
+            var comp=res.regeocode.addressComponent||{};
+            var nb=comp.neighborhood||{};
+            if(typeof nb==='object'&&nb.name){addr+='（附近：'+nb.name+'）'}
+            else if(typeof nb==='string'&&nb){addr+='（附近：'+nb+'）'}
+            console.log('[逆地理编码] 解析地址:', addr);
+            callback(addr);
+        }else{
+            console.warn('[逆地理编码] 接口返回失败:', res);
+            // 备用：通过后端代理
+            fetch(api+'/api/reverse-geocode?lat='+lat+'&lng='+lng).then(function(r2){return r2.json()}).then(function(res2){
+                if(res2.success&&res2.address){callback(res2.address)}else{callback('')}
+            }).catch(function(){callback('')});
+        }
+    }).catch(function(err){
+        console.error('[逆地理编码] 请求失败:', err);
+        // 备用：通过后端代理
+        fetch(api+'/api/reverse-geocode?lat='+lat+'&lng='+lng).then(function(r2){return r2.json()}).then(function(res2){
+            if(res2.success&&res2.address){callback(res2.address)}else{callback('')}
+        }).catch(function(){callback('')});
+    });
+}
+
+var sessionLocations={};
+
+function haversineDistance(lat1,lng1,lat2,lng2){
+    var R=6371000;
+    var dLat=(lat2-lat1)*Math.PI/180;
+    var dLng=(lng2-lng1)*Math.PI/180;
+    var a=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLng/2)*Math.sin(dLng/2);
+    return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
 }
 
 function getLocation(sid){
     var hint=document.getElementById('locHint-'+sid);
+    var checkinBtn=document.getElementById('checkinBtn-'+sid);
+    var checkoutBtn=document.getElementById('checkoutBtn-'+sid);
     if(!hint)return;
     if(cachedLocation.ready){
-        var addrText=cachedLocation.address?' ('+esc(cachedLocation.address.substring(0,30))+')':'';
-        hint.innerHTML='📍 已获取位置 <span class="loc-ok">✔</span>'+addrText;
+        var addrText=cachedLocation.address?' ('+esc(cachedLocation.address)+')':'';
+        var info='📍 已获取位置 <span class="loc-ok">✔</span>'+addrText;
+        info+='<br/><span style="font-size:0.9em;color:#6b6d8a">经纬度：'+cachedLocation.lat.toFixed(4)+', '+cachedLocation.lng.toFixed(4)+'</span>';
+        var sloc=sessionLocations[sid];
+        if(sloc&&sloc.lat&&sloc.lng){
+            var dist=haversineDistance(cachedLocation.lat,cachedLocation.lng,sloc.lat,sloc.lng);
+            info+='<br/><span style="font-size:0.9em;color:'+(dist>500?'#e74c3c':'#00b894')+'">距离签到点：'+Math.round(dist)+' 米</span>';
+        }
+        hint.innerHTML=info;
+        if(checkinBtn){checkinBtn.disabled=false;checkinBtn.textContent='✅ 签到'}
+        if(checkoutBtn){checkoutBtn.disabled=false;checkoutBtn.textContent='签退'}
     }else if(locationError){
         hint.innerHTML='<span class="loc-far">⚠️ '+esc(locationError)+'</span>';
+        if(checkinBtn){checkinBtn.disabled=true;checkinBtn.textContent='⚠️ 定位失败'}
+        if(checkoutBtn){checkoutBtn.disabled=true;checkoutBtn.textContent='⚠️ 定位失败'}
     }else{
         hint.innerHTML='📍 正在获取位置...';
     }
@@ -1235,6 +1349,29 @@ function deleteTeacherCheckinRecord(recordId,sessionId){
     });
 }
 
+var teacherLocMap=null;
+var teacherLocCircle=null;
+var TEACHER_CHECKIN_RADIUS=200;
+function showTeacherLocMap(lat,lng,addr){
+    var mapArea=document.getElementById('teacherLocMapArea');
+    if(!mapArea)return;
+    mapArea.style.display='block';
+    if(lat&&lng){
+        if(!teacherLocMap){
+            teacherLocMap=new AMap.Map('teacherLocMap',{center:[lng,lat],zoom:15,resizeEnable:true});
+        }else{
+            teacherLocMap.setCenter([lng,lat]);
+        }
+        teacherLocMap.clearMap();
+        var marker=new AMap.Marker({position:[lng,lat],title:'签到位置'});
+        teacherLocMap.add(marker);
+        if(teacherLocCircle){teacherLocMap.remove(teacherLocCircle)}
+        teacherLocCircle=new AMap.Circle({center:[lng,lat],radius:TEACHER_CHECKIN_RADIUS,strokeColor:'#00b894',strokeOpacity:0.6,strokeWeight:2,fillColor:'#00b894',fillOpacity:0.1});
+        teacherLocMap.add(teacherLocCircle);
+        teacherLocMap.setFitView([marker,teacherLocCircle]);
+    }
+}
+
 function fetchIpLocation(callback){
     fetch(api+'/api/ip-location').then(function(r){return r.json()}).then(function(res){
         if(res.success){callback(res.lat,res.lon,res.address||'')}
@@ -1247,14 +1384,25 @@ function doTeacherCheckin(sid){
     var hint=document.getElementById('locHint-'+sid);
     if(btn){btn.disabled=true;btn.textContent='定位中...'}
     function doCheckin(lat,lng,addr){
+        showTeacherLocMap(lat,lng,addr);
+        if(hint){hint.innerHTML='<span style="color:#00b894">📍 已获取位置：'+esc(addr||'经纬度:'+lat.toFixed(4)+','+lng.toFixed(4))+'</span>'}
         if(btn){btn.textContent='签到中...'}
+        console.log('[老师签到] sessionId:', sid, '位置:', lat, lng, '地址:', addr);
         fetch(api+'/api/teacher-checkin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:sid,lat:lat,lng:lng,address:addr})})
-        .then(function(r){return r.json()}).then(function(res){
+        .then(function(r){
+            console.log('[老师签到] 响应状态:', r.status);
+            return r.json().then(function(res){return {status:r.status,data:res}}).catch(function(){return {status:r.status,data:{error:'服务器返回异常(status:'+r.status+')'}}});
+        }).then(function(result){
+            var res=result.data;
+            console.log('[老师签到] 响应数据:', JSON.stringify(res));
             if(res.error){toast(res.error,'error');if(btn){btn.disabled=false;btn.textContent='✅ 签到'}return}
-            toast('签到成功！','success');
-            toggleCheckinSession(sid);
-            setTimeout(function(){toggleCheckinSession(sid)},100);
-        }).catch(function(){toast('签到失败','error');if(btn){btn.disabled=false;btn.textContent='✅ 签到'}});
+            var successMsg='签到成功！';
+            if(addr){successMsg+=' 当前位置：'+addr}
+            toast(successMsg,'success');
+            if(hint){hint.innerHTML='<span style="color:#00b894">✅ 已签到 | 位置：'+esc(addr||'未知')+'</span>'}
+            loadTeacherCheckinStatus(sid,{});
+            loadCheckinSessions();
+        }).catch(function(err){console.error('[老师签到] 请求失败:', err);toast('签到失败，请重试','error');if(btn){btn.disabled=false;btn.textContent='✅ 签到'}});
     }
     function tryIpFallback(errMsg){
         if(btn){btn.textContent='IP定位中...'}
@@ -1265,8 +1413,8 @@ function doTeacherCheckin(sid){
                 cachedLocation={lat:ipLat,lng:ipLng,ready:true,address:ipAddr||''};
                 doCheckin(ipLat,ipLng,ipAddr||'');
             }else{
-                if(hint)hint.innerHTML='<span style="color:#f0ad4e">⚠️ 定位不可用，将以手动签到方式记录</span>';
-                doCheckin(0,0,'');
+                if(hint)hint.innerHTML='<span style="color:#e74c3c">⚠️ 定位不可用，无法签到，请确保开启定位权限后重试</span>';
+                if(btn){btn.disabled=false;btn.textContent='✅ 签到'}
             }
         });
     }
@@ -1274,7 +1422,8 @@ function doTeacherCheckin(sid){
         doCheckin(cachedLocation.lat,cachedLocation.lng,cachedLocation.address||'');
     }else if(isSecureContext&&navigator.geolocation){
         navigator.geolocation.getCurrentPosition(function(pos){
-            var lat=pos.coords.latitude,lng=pos.coords.longitude;
+            var gcj=wgs84ToGcj02(pos.coords.latitude,pos.coords.longitude);
+            var lat=gcj.lat,lng=gcj.lng;
             reverseGeocode(lat,lng,function(addr){
                 cachedLocation={lat:lat,lng:lng,ready:true,address:addr||''};
                 doCheckin(lat,lng,addr||'');
@@ -1317,7 +1466,7 @@ function handleQuickCheckinOrCheckout(code,allSessions,resultBox){
     fetch(api+'/api/teacher-checkin-status?sessionId='+openSession.id).then(function(r){return r.json()}).then(function(res){
         if(!res.success){resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#e74c3c">查询状态失败</div>';return}
         if(res.status==='none'){
-            resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#a0a3bd">正在获取位置并签到...</div>';
+            resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#00b894;font-weight:600">✅ 签到码正确！<br><span style="font-size:0.82em;font-weight:400;color:#a0a3bd">正在获取位置并签到...</span></div>';
             doQuickCheckin(openSession,resultBox);
         }else if(res.status==='checked_in'){
             resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#a0a3bd">';
@@ -1333,13 +1482,24 @@ function handleQuickCheckinOrCheckout(code,allSessions,resultBox){
 
 function doQuickCheckin(session,resultBox){
     function doCheckin(lat,lng,addr){
+        showTeacherLocMap(lat,lng,addr);
+        resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#00b894;font-weight:600">📍 已获取位置'+(addr?'：'+esc(addr):'')+'<br><span style="font-size:0.82em;font-weight:400;color:#a0a3bd">正在签到...</span></div>';
+        console.log('[快速签到] sessionId:', session.id, '位置:', lat, lng);
         fetch(api+'/api/teacher-checkin',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:session.id,lat:lat,lng:lng,address:addr})})
-        .then(function(r){return r.json()}).then(function(res){
+        .then(function(r){
+            console.log('[快速签到] 响应状态:', r.status);
+            return r.json().then(function(res){return {status:r.status,data:res}}).catch(function(){return {status:r.status,data:{error:'服务器返回异常(status:'+r.status+')'}}});
+        }).then(function(result){
+            var res=result.data;
+            console.log('[快速签到] 响应数据:', JSON.stringify(res));
             if(res.error){resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#e74c3c;font-weight:600">❌ '+esc(res.error)+'</div>';return}
-            resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#00b894;font-weight:600">✅ 签到成功！<br><span style="font-size:0.82em;font-weight:400;color:#6b6d8a">'+esc(session.activityName)+' · '+esc(session.clubName)+'</span></div>';
+            var successHtml='<div style="padding:12px;text-align:center;color:#00b894;font-weight:600">✅ 签到成功！<br><span style="font-size:0.82em;font-weight:400;color:#6b6d8a">'+esc(session.activityName)+' · '+esc(session.clubName)+'</span>';
+            if(addr){successHtml+='<br><span style="font-size:0.78em;font-weight:400;color:#6b6d8a">📍 当前位置：'+esc(addr)+'</span>'}
+            successHtml+='</div>';
+            resultBox.innerHTML=successHtml;
             document.getElementById('quickCheckinCode').value='';
             loadCheckinSessions();
-        });
+        }).catch(function(err){console.error('[快速签到] 请求失败:', err);resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#e74c3c">签到失败，请重试</div>'});
     }
     function tryIpFallback(errMsg){
         resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#f0ad4e">⚠️ GPS定位失败，正在尝试网络定位...</div>';
@@ -1348,16 +1508,17 @@ function doQuickCheckin(session,resultBox){
                 cachedLocation={lat:ipLat,lng:ipLng,ready:true,address:ipAddr||''};
                 doCheckin(ipLat,ipLng,ipAddr||'');
             }else{
-                resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#f0ad4e">⚠️ 定位不可用，将以手动签到方式记录</div>';
-                doCheckin(0,0,'');
+                resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#e74c3c">⚠️ 定位不可用，无法签到，请确保开启定位权限后重试</div>';
             }
         });
     }
+    resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#a0a3bd">📍 正在获取位置...</div>';
     if(cachedLocation.ready){
         doCheckin(cachedLocation.lat,cachedLocation.lng,cachedLocation.address||'');
     }else if(isSecureContext&&navigator.geolocation){
         navigator.geolocation.getCurrentPosition(function(pos){
-            var lat=pos.coords.latitude,lng=pos.coords.longitude;
+            var gcj=wgs84ToGcj02(pos.coords.latitude,pos.coords.longitude);
+            var lat=gcj.lat,lng=gcj.lng;
             reverseGeocode(lat,lng,function(addr){
                 cachedLocation={lat:lat,lng:lng,ready:true,address:addr||''};
                 doCheckin(lat,lng,addr||'');
@@ -1377,6 +1538,8 @@ function doQuickCheckoutWithCode(sessionId){
     if(!code){toast('请输入签退码','error');return}
     var resultBox=document.getElementById('quickCheckinResult');
     function doCheckout(lat,lng,addr){
+        showTeacherLocMap(lat,lng,addr);
+        resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#667eea;font-weight:600">📍 已获取位置'+(addr?'：'+esc(addr):'')+'<br><span style="font-size:0.82em;font-weight:400;color:#a0a3bd">正在签退...</span></div>';
         var fd=new FormData();
         fd.append('sessionId',sessionId);
         fd.append('lat',lat);
@@ -1386,7 +1549,10 @@ function doQuickCheckoutWithCode(sessionId){
         fetch(api+'/api/teacher-checkout',{method:'POST',body:fd})
         .then(function(r){return r.json()}).then(function(res){
             if(res.error){resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#e74c3c;font-weight:600">'+esc(res.error)+'</div>';return}
-            resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#667eea;font-weight:600">签退成功！本次指导已记录</div>';
+            var checkoutHtml='<div style="padding:12px;text-align:center;color:#667eea;font-weight:600">签退成功！本次指导已记录';
+            if(addr){checkoutHtml+='<br><span style="font-size:0.78em;font-weight:400;color:#6b6d8a">📍 当前位置：'+esc(addr)+'</span>'}
+            checkoutHtml+='</div>';
+            resultBox.innerHTML=checkoutHtml;
             document.getElementById('quickCheckinCode').value='';
             loadCheckinSessions();
         });
@@ -1398,16 +1564,17 @@ function doQuickCheckoutWithCode(sessionId){
                 cachedLocation={lat:ipLat,lng:ipLng,ready:true,address:ipAddr||''};
                 doCheckout(ipLat,ipLng,ipAddr||'');
             }else{
-                resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#f0ad4e">⚠️ 定位不可用，将以手动签到方式记录</div>';
-                doCheckout(0,0,'');
+                resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#e74c3c">⚠️ 定位不可用，无法签退，请确保开启定位权限后重试</div>';
             }
         });
     }
+    resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#a0a3bd">📍 正在获取位置...</div>';
     if(cachedLocation.ready){
         doCheckout(cachedLocation.lat,cachedLocation.lng,cachedLocation.address||'');
     }else if(isSecureContext&&navigator.geolocation){
         navigator.geolocation.getCurrentPosition(function(pos){
-            var lat=pos.coords.latitude,lng=pos.coords.longitude;
+            var gcj=wgs84ToGcj02(pos.coords.latitude,pos.coords.longitude);
+            var lat=gcj.lat,lng=gcj.lng;
             reverseGeocode(lat,lng,function(addr){
                 cachedLocation={lat:lat,lng:lng,ready:true,address:addr||''};
                 doCheckout(lat,lng,addr||'');
@@ -1513,6 +1680,8 @@ function doTeacherCheckout(sid){
     var hint=document.getElementById('locHint-'+sid);
     if(btn){btn.disabled=true;btn.textContent='定位中...'}
     function doCheckout(lat,lng,addr){
+        showTeacherLocMap(lat,lng,addr);
+        if(hint){hint.innerHTML='<span style="color:#667eea">📍 已获取位置：'+esc(addr||'经纬度:'+lat.toFixed(4)+','+lng.toFixed(4))+'</span>'}
         if(btn){btn.textContent='签退中...'}
         var fd=new FormData();
         fd.append('sessionId',sid);
@@ -1523,7 +1692,10 @@ function doTeacherCheckout(sid){
         fetch(api+'/api/teacher-checkout',{method:'POST',body:fd})
         .then(function(r){return r.json()}).then(function(res){
             if(res.error){toast(res.error,'error');if(btn){btn.disabled=false;btn.textContent='签退'}return}
-            toast('签退成功！本次指导已记录','success');
+            var checkoutMsg='签退成功！本次指导已记录';
+            if(addr){checkoutMsg+=' 当前位置：'+addr}
+            toast(checkoutMsg,'success');
+            if(hint){hint.innerHTML='<span style="color:#667eea">✅ 已签退 | 位置：'+esc(addr||'未知')+'</span>'}
             toggleCheckinSession(sid);
             setTimeout(function(){toggleCheckinSession(sid)},100);
         }).catch(function(){toast('签退失败','error');if(btn){btn.disabled=false;btn.textContent='签退'}});
@@ -1537,8 +1709,8 @@ function doTeacherCheckout(sid){
                 cachedLocation={lat:ipLat,lng:ipLng,ready:true,address:ipAddr||''};
                 doCheckout(ipLat,ipLng,ipAddr||'');
             }else{
-                if(hint)hint.innerHTML='<span style="color:#f0ad4e">⚠️ 定位不可用，将以手动签到方式记录</span>';
-                doCheckout(0,0,'');
+                if(hint)hint.innerHTML='<span style="color:#e74c3c">⚠️ 定位不可用，无法签退，请确保开启定位权限后重试</span>';
+                if(btn){btn.disabled=false;btn.textContent='签退'}
             }
         });
     }
@@ -1546,7 +1718,8 @@ function doTeacherCheckout(sid){
         doCheckout(cachedLocation.lat,cachedLocation.lng,cachedLocation.address||'');
     }else if(isSecureContext&&navigator.geolocation){
         navigator.geolocation.getCurrentPosition(function(pos){
-            var lat=pos.coords.latitude,lng=pos.coords.longitude;
+            var gcj=wgs84ToGcj02(pos.coords.latitude,pos.coords.longitude);
+            var lat=gcj.lat,lng=gcj.lng;
             reverseGeocode(lat,lng,function(addr){
                 cachedLocation={lat:lat,lng:lng,ready:true,address:addr||''};
                 doCheckout(lat,lng,addr||'');
@@ -2022,8 +2195,8 @@ fetch(api+'/api/current-user').then(function(r){return r.json()}).then(function(
         buildPages();
         renderClubSwitch();
         var sbUser=document.getElementById('sbUser');
-        var avatarHtml=res2.success&&res2.data.avatarPath?'<img src="'+api+res2.data.avatarPath+'" />':esc(currentUser.username[0]);
-        sbUser.innerHTML='<div class="sb-avatar">'+avatarHtml+'</div><div><div class="sb-uname">'+esc(res2.data.realName||currentUser.username)+'</div><div class="sb-uclub">'+esc(currentClub||'')+'</div></div>';
+        var avatarHtml=res2.success&&res2.data.avatarPath?'<img src="'+api+res2.data.avatarPath+'" />':esc((currentUser.realName||currentUser.username)[0]);
+        sbUser.innerHTML='<div class="sb-avatar">'+avatarHtml+'</div><div><div class="sb-uname">'+esc(res2.data.realName||currentUser.realName||currentUser.username)+'</div><div class="sb-uclub">'+esc(currentClub||'')+'</div></div>';
         loadTeacherHomeData();
     });
     fetch(api+'/api/all-clubs').then(function(r3){return r3.json()}).then(function(res3){
@@ -2039,11 +2212,13 @@ fetch(api+'/api/current-user').then(function(r){return r.json()}).then(function(
 })();
 
 function teacherAdminNotifyPage(){
-    return '<div class="pg-title">📨 管理员通知</div><div class="pg-desc">接收管理员发送的通知</div>'+
-    '<div style="display:flex;gap:8px;margin-bottom:16px">'+
+    return '<div class="pg-title">管理员通知</div><div class="pg-desc">接收管理员发送的通知</div>'+
+    '<div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;align-items:center">'+
     '<button class="btn btn-sm" style="background:rgba(231,76,60,0.08);color:#e74c3c" onclick="clearTeacherReadNotify()">清理已读通知</button>'+
+    '<button class="btn btn-sm" style="background:rgba(231,76,60,0.08);color:#e74c3c" id="tanBatchDeleteBtn" onclick="batchDeleteTeacherAdminNotify()">批量删除</button>'+
+    '<label style="font-size:0.82em;display:flex;align-items:center;gap:4px;cursor:pointer;margin-left:auto"><input type="checkbox" id="tanSelectAll" onchange="toggleTeacherAnSelectAll(this)" style="accent-color:#667eea" /> 全选</label>'+
     '</div>'+
-    '<div class="card"><div class="card-title">📬 通知列表 <span class="badge" id="tanCount">0</span></div>'+
+    '<div class="card"><div class="card-title">通知列表 <span class="badge" id="tanCount">0</span></div>'+
     '<div id="tanList"><div class="empty">加载中...</div></div></div>';
 }
 
@@ -2081,18 +2256,20 @@ function loadTeacherAdminNotify(){
         document.getElementById('tanCount').textContent=unread?''+unread+'条未读':''+res.data.length+'条';
         var h='';
         res.data.forEach(function(n){
-            var bg=n.isRead?'':'background:rgba(0,184,148,0.03);border-left:3px solid #00b894';
-            h+='<div class="session-row" style="'+bg+';cursor:pointer;display:flex;align-items:flex-start;gap:8px" onclick="expandTeacherNotify(this,'+n.id+')">';
-            h+='<div class="session-info" style="flex:1;min-width:0"><div><div class="session-name">';
+            var readCls=n.isRead?'':'background:rgba(102,126,234,0.03);border-left:3px solid #667eea;';
+            h+='<div class="ni" style="cursor:pointer;display:flex;align-items:flex-start;gap:8px;'+readCls+'" onclick="expandTeacherNotify(this,'+n.id+')">';
+            h+='<input type="checkbox" class="tan-cb" data-tanid="'+n.id+'" style="margin-top:4px;accent-color:#667eea;flex-shrink:0" onchange="updateTeacherAnBatchBtn()" onclick="event.stopPropagation()" />';
+            h+='<div class="ni-body" style="flex:1;min-width:0"><div class="ni-title">';
             if(!n.isRead)h+='<span style="background:#e74c3c;color:#fff;padding:1px 5px;border-radius:3px;font-size:0.58em;margin-right:4px">新</span>';
             h+=esc(n.title)+'</div>';
-            if(n.content)h+='<div class="tan-content-preview" style="font-size:0.78em;color:#a0a3bd;margin-top:4px;line-height:1.5" data-tanid="'+n.id+'" data-expanded="0">'+escHtml(n.content.substring(0,80))+(n.content.length>80?'<span style="color:#667eea;font-size:0.72em;margin-left:4px">...</span>':'')+'</div>';
-            h+='<div style="font-size:0.72em;color:#c8cade;margin-top:4px">'+esc(n.time||'')+'</div>';
-            h+='</div></div>';
-            if(n.isRead)h+='<button style="border:none;background:rgba(231,76,60,0.06);color:#e74c3c;width:24px;height:24px;border-radius:50%;cursor:pointer;font-size:0.8em;flex-shrink:0" onclick="event.stopPropagation();deleteTeacherNotify('+n.id+')">✕</button>';
+            if(n.content)h+='<div class="ni-content-preview" style="font-size:0.78em;color:#6b6d8a;line-height:1.5;margin-top:3px" data-tanid="'+n.id+'" data-expanded="0">'+escHtml(n.content.substring(0,80))+(n.content.length>80?'<span style="color:#667eea;font-size:0.72em;margin-left:4px">...</span>':'')+'</div>';
+            h+='<div class="ni-meta" style="margin-top:4px"><span style="font-size:0.72em;color:#c8cade">'+esc(n.time||'')+'</span></div>';
+            h+='</div>';
+            if(n.isRead)h+='<button style="border:none;background:rgba(231,76,60,0.06);color:#e74c3c;padding:2px 8px;border-radius:6px;cursor:pointer;font-size:0.72em;flex-shrink:0;margin-top:4px" onclick="event.stopPropagation();deleteTeacherNotify('+n.id+')">删除</button>';
             h+='</div>';
         });
         box.innerHTML=h;
+        updateTeacherAnBatchBtn();
     });
 }
 
@@ -2100,7 +2277,7 @@ var _tanAllData=[];
 function expandTeacherNotify(el,id){
     var n=_tanAllData.find(function(x){return x.id===id});
     if(!n)return;
-    var preview=el.querySelector('.tan-content-preview[data-tanid="'+id+'"]');
+    var preview=el.querySelector('.ni-content-preview[data-tanid="'+id+'"]');
     if(preview&&preview.getAttribute('data-expanded')==='1'){
         preview.innerHTML=escHtml((n.content||'').substring(0,80))+((n.content||'').length>80?'<span style="color:#667eea;font-size:0.72em;margin-left:4px">...</span>':'');
         preview.setAttribute('data-expanded','0');
@@ -2111,9 +2288,9 @@ function expandTeacherNotify(el,id){
     if(!n.isRead){
         n.isRead=true;
         fetch(api+'/api/admin-notifications/'+id+'/read',{method:'POST'});
-        el.style.background='';el.style.borderLeft='';
-        var badge=el.querySelector('span[style*="background:#e74c3c"]');
-        if(badge)badge.remove();
+        var card=el.closest('.ni');
+        if(card){card.style.background='';card.style.borderLeft='';var badge=card.querySelector('span[style*="background:#e74c3c"]');if(badge)badge.remove()}
+        pollTeacherAdminNotifyBadge();
     }
 }
 
@@ -2130,6 +2307,34 @@ function deleteTeacherNotify(id){
         if(res.error){toast(res.error,'error');return}
         loadTeacherAdminNotify();
     });
+}
+
+function updateTeacherAnBatchBtn(){
+    var cbs=document.querySelectorAll('.tan-cb');
+    var checked=document.querySelectorAll('.tan-cb:checked');
+    var selectAll=document.getElementById('tanSelectAll');
+    if(selectAll)selectAll.checked=cbs.length>0&&checked.length===cbs.length;
+}
+
+function toggleTeacherAnSelectAll(el){
+    var cbs=document.querySelectorAll('.tan-cb');
+    cbs.forEach(function(cb){cb.checked=el.checked});
+    updateTeacherAnBatchBtn();
+}
+
+function batchDeleteTeacherAdminNotify(){
+    var checked=document.querySelectorAll('.tan-cb:checked');
+    if(!checked.length){toast('请先选择要删除的通知','error');return}
+    var ids=[];
+    checked.forEach(function(cb){ids.push(parseInt(cb.getAttribute('data-tanid')))});
+    if(!confirm('确定删除选中的 '+ids.length+' 条通知？'))return;
+    fetch(api+'/api/notifications/batch-delete-admin-read',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:ids})})
+    .then(function(r){return r.json()}).then(function(res){
+        if(res.error){toast(res.error,'error');return}
+        toast('已删除 '+res.deleted+' 条通知','success');
+        loadTeacherAdminNotify();
+        pollTeacherAdminNotifyBadge();
+    }).catch(function(){toast('批量删除失败','error')});
 }
 
 function scoringReviewPage(){

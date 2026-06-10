@@ -7,9 +7,11 @@ __pycache__/
 data/club_stats.db
 data/club.db
 club_stats.db
+club_data.db
 
 # Uploaded files (user-generated content)
 data/uploads/
+data/club_uploads/
 data/activity_photos/
 data/activity_plans/
 data/activity_summaries/

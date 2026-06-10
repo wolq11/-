@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -28,7 +28,12 @@ a{text-decoration:none;color:inherit}
 .panel{display:none}
 .panel.active{display:block}
 
-.card{background:#fff;border:1px solid #f0f0f8;border-radius:14px;padding:20px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,0.02)}
+.card{background:#fff;border:1px solid #f0f0f8;border-radius:14px;padding:20px;margin-bottom:16px;box-shadow:0 2px 8px rgba(0,0,0,0.02);overflow:hidden}
+.EasyMDEContainer,.EasyMDEContainer .editor-toolbar,.EasyMDEContainer .CodeMirror,.EasyMDEContainer .editor-preview{max-width:100%!important;box-sizing:border-box!important}
+.EasyMDEContainer .CodeMirror{height:auto!important;min-height:60px!important}
+.EasyMDEContainer .CodeMirror-scroll{min-height:60px!important;overflow-y:hidden!important}
+.wl-row{display:flex;gap:16px;overflow-x:auto;-webkit-overflow-scrolling:touch}
+.wl-row>.card{flex-shrink:0;min-width:max-content;overflow-x:auto}
 .card-title{font-size:0.92em;font-weight:700;color:#1a1a2e;margin-bottom:14px;display:flex;align-items:center;gap:8px;padding-bottom:8px;border-bottom:1px solid #f5f5ff}
 .card-title .badge{background:linear-gradient(135deg,rgba(102,126,234,0.08),rgba(118,75,162,0.08));color:#667eea;padding:2px 8px;border-radius:6px;font-size:0.68em;font-weight:700}
 
@@ -120,9 +125,9 @@ a{text-decoration:none;color:inherit}
 <div class="header">
     <div class="logo" onclick="history.back()">
         <div class="logo-icon">🎓</div>
-        <div class="logo-text">济幼社团</div>
+        <div class="logo-text">云智社联</div>
     </div>
-    <button class="back-btn" onclick="history.back()">← 返回</button>
+
 </div>
 
 <div class="main">
@@ -132,7 +137,6 @@ a{text-decoration:none;color:inherit}
     <button class="tab-btn" onclick="switchPanel('profileDept',this)">🏢 部门结构</button>
     <button class="tab-btn" onclick="switchPanel('activity',this)">📋 活动开展</button>
     <button class="tab-btn" onclick="switchPanel('recruit',this)">🎯 社团管理</button>
-    <button class="tab-btn" onclick="switchPanel('poster',this)">🎨 AI海报</button>
     <button class="tab-btn" onclick="switchPanel('tools',this)">🛠️ 协助工具</button>
     <button class="tab-btn" onclick="switchPanel('joint',this)">🤝 联合活动</button>
     <button class="tab-btn" onclick="switchPanel('complaints',this)">🗣️ 吐槽管理</button>
@@ -233,7 +237,7 @@ a{text-decoration:none;color:inherit}
 .tv-node{position:relative;margin:0}
 .tv-branch{position:relative;padding-left:28px;margin-left:14px;border-left:2px solid rgba(102,126,234,0.12)}
 .tv-branch .tv-node::before{content:'';position:absolute;left:-28px;top:18px;width:24px;height:2px;background:rgba(102,126,234,0.12)}
-.tv-item{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#fafaff;border:1px solid #f0f0f8;border-radius:10px;transition:all .2s;position:relative;margin:4px 0}
+.tv-item{display:flex;flex-direction:column;gap:6px;padding:10px 14px;background:#fafaff;border:1px solid #f0f0f8;border-radius:10px;transition:all .2s;position:relative;margin:4px 0}
 .tv-item:hover{background:#f5f5ff;border-color:#d5d8f0;box-shadow:0 2px 8px rgba(102,126,234,0.06)}
 .tv-item.root-item{background:linear-gradient(135deg,rgba(102,126,234,0.06),rgba(118,75,162,0.06));border-color:rgba(102,126,234,0.15);font-weight:600}
 .tv-toggle{width:22px;height:22px;border-radius:6px;background:rgba(102,126,234,0.06);display:flex;align-items:center;justify-content:center;font-size:0.7em;color:#667eea;cursor:pointer;flex-shrink:0;transition:all .2s;user-select:none}
@@ -251,8 +255,8 @@ a{text-decoration:none;color:inherit}
 .tv-btn-img{color:#00b894;cursor:pointer}
 .tv-btn-add{color:#667eea}
 .tv-btn-del{color:#e74c3c}
-.tv-dept-img{width:36px;height:36px;border-radius:8px;object-fit:cover;flex-shrink:0;cursor:pointer;transition:transform .2s}
-.tv-dept-img:hover{transform:scale(1.1)}
+.tv-dept-img{width:33%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;flex-shrink:0;cursor:pointer;transition:transform .2s;margin:4px 0}
+.tv-dept-img:hover{transform:scale(1.02)}
 .session-row{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:10px;border:1px solid #f0f0f8;cursor:pointer;transition:all .2s;margin-bottom:6px;background:#fafaff}
 .session-row:hover{background:#f5f5ff;border-color:#d5d8f0;box-shadow:0 2px 8px rgba(102,126,234,0.06)}
 .session-row.active{background:rgba(102,126,234,0.04);border-color:rgba(102,126,234,0.2)}
@@ -266,8 +270,8 @@ a{text-decoration:none;color:inherit}
 .session-detail{display:none;margin-top:8px;padding:14px;background:#fff;border:1px solid #f0f0f8;border-radius:10px;animation:fadeSlide .2s ease}
 .session-detail.show{display:block}
 @keyframes fadeSlide{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
-.checkin-method-select{display:flex;gap:8px;margin-bottom:14px}
-.cm-option{flex:1;padding:14px;border-radius:10px;border:2px solid #f0f0f8;background:#fafaff;cursor:pointer;text-align:center;transition:all .2s}
+.checkin-method-select{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap}
+.cm-option{flex:1;min-width:120px;padding:14px;border-radius:10px;border:2px solid #f0f0f8;background:#fafaff;cursor:pointer;text-align:center;transition:all .2s}
 .cm-option:hover{border-color:#d5d8f0}
 .cm-option.selected{border-color:#667eea;background:rgba(102,126,234,0.04);box-shadow:0 2px 8px rgba(102,126,234,0.1)}
 
@@ -277,34 +281,58 @@ a{text-decoration:none;color:inherit}
 .mobile-menu-btn{display:none}
 @media(max-width:768px){
   .header{padding:0 16px}
-  .main{padding:16px 12px}
+  .main{padding:16px 12px;width:100%;max-width:none}
   .form-row .field{min-width:100%}
   .tool-grid{grid-template-columns:repeat(auto-fill,minmax(200px,1fr))}
   .viz-grid{grid-template-columns:repeat(auto-fill,minmax(120px,1fr))}
   .tabs{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;gap:2px;padding-bottom:8px;scrollbar-width:none}
   .tabs::-webkit-scrollbar{display:none}
   .tab-btn{white-space:nowrap;flex-shrink:0}
-  .card{padding:14px;overflow-x:auto}
+  .card{padding:14px;overflow:hidden}
+  .EasyMDEContainer,.EasyMDEContainer .editor-toolbar,.EasyMDEContainer .CodeMirror,.EasyMDEContainer .editor-preview{max-width:100%!important;box-sizing:border-box!important}
+.EasyMDEContainer .CodeMirror{height:auto!important;min-height:60px!important}
+.EasyMDEContainer .CodeMirror-scroll{min-height:60px!important;overflow-y:hidden!important}
+  .form-row .field{overflow-x:hidden}
   .btn{min-height:36px}
   .btn-sm{padding:8px 14px;min-height:36px}
   .tab-btn{padding:10px 14px;min-height:36px}
   .tv-actions{opacity:1 !important}
   .form-row .field input:not([type="checkbox"]):not([type="radio"]),.form-row .field textarea,.form-row .field select{font-size:16px}
+  .form-row .field label{font-size:0.86em}
+  .checkin-method-select{flex-wrap:wrap}
+  .cm-option{min-width:calc(50% - 8px);padding:10px}
+  .cm-option .cm-icon{font-size:1.4em;margin-bottom:4px}
+  .cm-option .cm-title{font-size:0.78em}
+  .cm-option .cm-desc{font-size:0.62em}
   .toast{left:16px;right:16px;text-align:center}
   table{font-size:0.72em}
-  table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
-  th[style*="white-space:nowrap"],td[style*="white-space:nowrap"]{white-space:normal!important}
   .finance-table th,.finance-table td{white-space:nowrap!important}
   .scoring-table th,.scoring-table td{white-space:nowrap!important}
   .wl-stats-table th,.wl-stats-table td{white-space:nowrap!important}
+  .wl-stats-table{display:table!important}
+  .wl-stats-table thead{display:table-header-group!important}
+  .wl-stats-table tbody{display:table-row-group!important}
+  .wl-stats-table tr{display:table-row!important}
+  .wl-stats-table th,.wl-stats-table td{display:table-cell!important}
+  .wl-stats-card{overflow-x:auto!important;min-width:0!important}
   .tv-desc{white-space:normal!important;word-break:break-word!important}
-  .tv-branch{padding-left:14px!important;margin-left:4px!important}
+  .tv-branch{padding-left:10px!important;margin-left:2px!important}
+  .tv-branch .tv-node::before{left:-10px!important;width:8px!important}
+  .tv-item{padding:8px 10px!important;margin:3px 0!important;gap:6px!important}
+  .tree-visual{padding:0 8px!important}
+  .tv-name{font-size:0.82em!important}
+  .tv-desc{font-size:0.68em!important}
+  .tv-toggle{width:18px!important;height:18px!important;font-size:0.6em!important}
+  .tv-actions{justify-content:flex-end!important;margin-top:4px!important}
   [style*="min-width"]{min-width:0!important}
+  .wl-row>.card{min-width:max-content!important}
   [style*="display:flex"][style*="justify-content:space-between"]{flex-wrap:wrap!important}
   [style*="grid-template-columns:repeat(3"]{grid-template-columns:1fr!important}
   .btn{white-space:normal;word-break:break-word}
-  .card,.panel{overflow-x:hidden}
+  .card,.panel{overflow-x:auto}
+  .wl-stats-table{min-width:100%!important;width:max-content!important}
   #codeDisplay,#checkoutCodeDisplay{font-size:1.6em!important;letter-spacing:4px!important;padding:12px 16px!important}
+  #memberList th,#memberList td{white-space:nowrap!important}
 }
 @media(max-width:480px){
   .header{padding:0 12px;height:48px}
@@ -316,25 +344,46 @@ a{text-decoration:none;color:inherit}
   .session-row{flex-direction:column;align-items:flex-start}
   .tv-branch{padding-left:10px!important;margin-left:2px!important}
   .tv-desc{white-space:normal!important;word-break:break-word!important}
+  .tv-item{padding:10px 12px!important}
+  .tree-visual{padding:0 12px!important}
   .checkin-method-select{flex-direction:column}
   .form-row .field input[type="date"],.form-row .field input[type="time"],.form-row .field select,.form-row .field textarea{font-size:16px}
-  table{display:block;overflow-x:auto;-webkit-overflow-scrolling:touch}
-  th[style*="white-space:nowrap"],td[style*="white-space:nowrap"]{white-space:normal!important}
+  .form-row .field label{font-size:0.9em}
+  .EasyMDEContainer,.EasyMDEContainer .editor-toolbar,.EasyMDEContainer .CodeMirror,.EasyMDEContainer .editor-preview{max-width:100%!important;box-sizing:border-box!important}
+.EasyMDEContainer .CodeMirror{height:auto!important;min-height:60px!important}
+.EasyMDEContainer .CodeMirror-scroll{min-height:60px!important;overflow-y:hidden!important}
   .finance-table th,.finance-table td{white-space:nowrap!important}
   .scoring-table th,.scoring-table td{white-space:nowrap!important}
   .wl-stats-table th,.wl-stats-table td{white-space:nowrap!important}
+  .wl-stats-table{display:table!important}
+  .wl-stats-table thead{display:table-header-group!important}
+  .wl-stats-table tbody{display:table-row-group!important}
+  .wl-stats-table tr{display:table-row!important}
+  .wl-stats-table th,.wl-stats-table td{display:table-cell!important}
+  .wl-stats-card{overflow-x:auto!important;min-width:0!important}
+  .tv-desc{white-space:normal!important;word-break:break-word!important}
+  .tv-branch{padding-left:8px!important;margin-left:1px!important}
+  .tv-branch .tv-node::before{left:-8px!important;width:6px!important}
+  .tv-item{padding:6px 8px!important;margin:2px 0!important;gap:4px!important}
+  .tree-visual{padding:0 6px!important}
+  .tv-name{font-size:0.78em!important}
+  .tv-desc{font-size:0.65em!important}
+  .tv-toggle{width:16px!important;height:16px!important;font-size:0.55em!important}
+
   [style*="min-width"]{min-width:0!important}
+  .wl-row>.card{min-width:max-content!important}
   [style*="display:flex"][style*="justify-content:space-between"]{flex-wrap:wrap!important}
   [style*="grid-template-columns:repeat(3"]{grid-template-columns:1fr!important}
   .btn{white-space:normal;word-break:break-word}
-  .card,.panel{overflow-x:hidden}
+  .card,.panel{overflow-x:auto}
+  .wl-stats-table{min-width:100%!important;width:max-content!important}
   #codeDisplay,#checkoutCodeDisplay{font-size:1.4em!important;letter-spacing:3px!important;padding:10px 12px!important}
   #quickCheckoutCode{width:100%!important;max-width:200px}
 }
 </style>
 
 <div class="panel" id="panel-activity">
-    <div class="card">
+    <div class="card" style="margin-bottom:0;border-bottom:none;border-bottom-left-radius:0;border-bottom-right-radius:0;overflow:visible">
         <div class="card-title">📋 开展活动 <span class="badge">填写活动信息后发起签到</span></div>
         <div class="form-row">
             <div class="field"><label>活动日期 *</label><input type="date" id="activityDate" min="" style="padding:8px 10px;border-radius:8px;border:1px solid #eee;background:#fafaff;color:#1a1a2e;font-size:0.86em;outline:none;width:100%" onchange="validateActivityTime()" /></div>
@@ -348,13 +397,16 @@ a{text-decoration:none;color:inherit}
             <div class="field" style="flex:1 1 100%;min-width:100%"><label>活动地点 *</label><input type="text" id="activityLocation" placeholder="如：教学楼A201" /></div>
         </div>
         <div class="form-row">
-            <div class="field" style="flex:1 1 100%;min-width:100%"><label>活动内容</label><textarea id="activityContent"></textarea></div>
+            <div class="field" style="flex:1 1 100%;min-width:100%"><label>活动内容</label><textarea id="activityContent" style="min-height:50px;max-height:100px"></textarea></div>
+        </div>
+    </div>
+    <div class="card" style="margin-top:0;border-top:none;border-top-left-radius:0;border-top-right-radius:0">
+        <div class="card-title">📄 活动计划</div>
+        <div class="form-row" style="position:relative;z-index:1">
+            <div class="field" style="flex:1 1 100%;min-width:100%"><label>上传活动计划（Word/PDF）*</label><input type="file" id="activityPlanFile" accept=".doc,.docx,.pdf" style="font-size:0.82em;margin-top:4px" onchange="uploadActivityPlan()" /><div id="planUploadStatus" style="font-size:0.76em;margin-top:4px;color:#a0a3bd"></div></div>
         </div>
         <div class="form-row">
             <div class="field" style="flex:1 1 100%;min-width:100%"><label>参加指导老师</label><div id="teacherCheckboxes" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px"><span style="font-size:0.76em;color:#c8cade">加载中...</span></div></div>
-        </div>
-        <div class="form-row">
-            <div class="field" style="flex:1 1 100%;min-width:100%"><label>上传活动计划（Word/PDF）*</label><input type="file" id="activityPlanFile" accept=".doc,.docx,.pdf" style="font-size:0.82em;margin-top:4px" onchange="uploadActivityPlan()" /><div id="planUploadStatus" style="font-size:0.76em;margin-top:4px;color:#a0a3bd"></div></div>
         </div>
         <div style="margin-bottom:14px">
             <label style="display:block;color:#6b6d8a;font-size:0.76em;margin-bottom:6px;font-weight:600">签到方式 *</label>
@@ -378,9 +430,9 @@ a{text-decoration:none;color:inherit}
         <div style="text-align:center;padding:16px 0">
             <div id="qrDisplay" style="font-size:0.84em;color:#6b6d8a;margin-bottom:8px"></div>
             <div id="qrcodeContainer" style="display:inline-block;padding:16px;background:#fff;border-radius:12px;border:2px solid #f0f0f8;margin-bottom:12px"></div>
-            <div id="codeDisplay" style="font-size:2.4em;font-weight:900;letter-spacing:8px;color:#667eea;background:rgba(102,126,234,0.06);padding:16px 32px;border-radius:12px;display:inline-block;border:2px dashed rgba(102,126,234,0.2)"></div>
+            <div id="codeDisplay" style="font-size:2.4em;font-weight:900;letter-spacing:8px;color:#667eea;background:rgba(102,126,234,0.06);padding:16px 32px;border-radius:12px;display:none;border:2px dashed rgba(102,126,234,0.2)"></div>
             <div id="timeRangeDisplay" style="margin-top:10px;font-size:0.78em;color:#6b6d8a"></div>
-            <div style="margin-top:10px;font-size:0.76em;color:#c0c3d8">签到链接：<span id="checkinLink" style="color:#667eea;cursor:pointer" onclick="copyLink()"></span></div>
+            <div id="checkinLinkRow" style="display:none;margin-top:10px;font-size:0.76em;color:#c0c3d8">签到链接：<span id="checkinLink" style="color:#667eea;cursor:pointer" onclick="copyLink()"></span></div>
         </div>
         <div id="checkoutCodeSection" style="display:none;text-align:center;padding:16px 0;border-top:1px solid #f0f0f8;margin-top:8px">
             <div style="font-size:0.92em;color:#1a1a2e;font-weight:700;margin-bottom:4px">🔓 签退码</div>
@@ -439,33 +491,6 @@ a{text-decoration:none;color:inherit}
         <button class="btn btn-danger btn-sm" id="ctBatchRemoveBtn" style="display:none" onclick="ctBatchRemoveGrade()">批量移除选中年级</button>
         </div>
         <div id="ctMemberList" style="max-height:400px;overflow-y:auto"><div class="empty">加载中...</div></div>
-    </div>
-</div>
-
-<div class="panel" id="panel-poster">
-    <div class="card">
-        <div class="card-title">🎨 AI海报生成 <span class="badge">智能生成招募海报</span></div>
-        <div class="form-row">
-            <div class="field"><label>社团名称</label><input type="text" id="posterClubName" placeholder="自动填入当前社团" /></div>
-        </div>
-        <div class="form-row">
-            <div class="field"><label>海报风格</label>
-                <select id="posterStyle" style="width:100%;padding:9px 12px;border-radius:8px;border:1.5px solid #eee;background:#fafaff;color:#1a1a2e;font-size:0.84em">
-                    <option value="vibrant">🌈 活力 - 色彩鲜艳、充满活力</option>
-                    <option value="minimal">✨ 简约 - 现代留白设计</option>
-                    <option value="traditional">🏮 国风 - 中国传统文化风格</option>
-                    <option value="modern">🚀 科技 - 未来科技感</option>
-                </select>
-            </div>
-        </div>
-        <div class="form-row">
-            <div class="field"><label>主题（可选）</label><input type="text" id="posterTheme" placeholder="如：秋季纳新、社团文化节" /></div>
-        </div>
-        <div style="display:flex;gap:8px;margin-top:4px">
-            <button class="btn btn-primary" id="genPosterBtn" onclick="generatePoster()">🎨 生成海报</button>
-            <button class="btn btn-success" id="genPosterPromptBtn" onclick="generatePosterPrompt()">✏️ 生成提示词</button>
-        </div>
-        <div id="posterResult" style="margin-top:14px"></div>
     </div>
 </div>
 
@@ -599,7 +624,7 @@ a{text-decoration:none;color:inherit}
     <div class="card">
         <div class="card-title">👥 财务管理员 <span class="badge">管理权限</span></div>
         <div id="finManagersList" style="margin-bottom:12px"><div class="empty">加载中...</div></div>
-        <div class="card-title" style="margin-top:12px">权限申请 <span class="badge">待审批</span></div>
+        <div class="card-title" style="margin-top:12px">权限申请 <span class="badge" id="finPermBadge">待审批</span></div>
         <div id="finAgentBar" style="display:none;margin-bottom:10px;padding:10px 14px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:10px;color:#fff;font-size:0.8em"></div>
         <div id="finPermRequests"><div class="empty">加载中...</div></div>
     </div>
@@ -615,13 +640,15 @@ a{text-decoration:none;color:inherit}
         <button class="btn btn-sm btn-primary" onclick="wlLoadPending();wlLoadClubStats()">筛选</button>
         <button class="btn btn-sm" style="background:rgba(102,126,234,0.08);color:#667eea;font-size:0.8em" onclick="document.getElementById('wlStartDate').value='';document.getElementById('wlEndDate').value='';wlLoadPending();wlLoadClubStats()">重置</button>
     </div>
-    <div class="card">
-        <div class="card-title">📊 工作量审核 <span class="badge">审核学生提交的其他工作量</span></div>
-        <div id="wlPendingList" style="max-height:600px;overflow-y:auto"><div class="empty">加载中...</div></div>
-    </div>
-    <div class="card">
-        <div class="card-title">👥 社团工作量统计 <span class="badge">点击数值查看详情</span></div>
-        <div id="wlClubStats"><div class="empty">加载中...</div></div>
+    <div class="wl-row">
+        <div class="card" style="margin-bottom:0">
+            <div class="card-title">📊 工作量审核 <span class="badge">审核学生提交的其他工作量</span></div>
+            <div id="wlPendingList" style="max-height:600px;overflow-y:auto"><div class="empty">加载中...</div></div>
+        </div>
+        <div class="card wl-stats-card" style="margin-bottom:0">
+            <div class="card-title">👥 社团工作量统计 <span class="badge">点击数值查看详情</span></div>
+            <div id="wlClubStats"><div class="empty">加载中...</div></div>
+        </div>
     </div>
 </div>
 
@@ -704,7 +731,7 @@ function collegeOptions(selected){
 function escHtml(s){return esc(s).replace(/\n/g,'<br>')}
 function toast(msg,type){var d=document.createElement('div');d.className='toast '+type;d.textContent=msg;document.body.appendChild(d);setTimeout(function(){d.remove()},3000)}
 function showImageModal(src){document.getElementById('imageModalSrc').src=src;document.getElementById('imageModal').classList.add('show')}
-function switchPanel(id,btn){document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('active')});var panel=document.getElementById('panel-'+id);if(panel)panel.classList.add('active');document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active')});if(btn)btn.classList.add('active');if(id==='profileTeacher')loadTeachers();if(id==='profileDept')loadDepartments();if(id==='finance'){loadFinanceRecords();loadFinPermRequests();loadFinManagers()}if(id==='activity'){setTimeout(function(){initActivityContentEditor()},100)}if(id==='workload'){wlLoadPending();wlLoadClubStats()}if(id==='scoring'){loadScoringInfo();try{if(window.parent&&window.parent.dismissBadge)window.parent.dismissBadge('scoring');else{fetch(api+'/api/feature-read/scoring',{method:'POST'});var _sb=window.parent.document.getElementById('navBadge-scoring');if(_sb)_sb.classList.remove('show')}}catch(e){fetch(api+'/api/feature-read/scoring',{method:'POST'})}}if(id==='notif')loadClubNotifs();if(id==='recruit')ctLoadMembers();if(id==='poster'){var pn=document.getElementById('posterClubName');if(pn&&currentUser&&currentUser.clubName)pn.value=currentUser.clubName}if(id==='tools')loadTools();if(id==='joint'){try{if(window.parent&&window.parent.dismissBadge)window.parent.dismissBadge('joint');else{fetch(api+'/api/feature-read/joint',{method:'POST'});var _b=window.parent.document.getElementById('navBadge-joint');if(_b)_b.classList.remove('show')}}catch(e){fetch(api+'/api/feature-read/joint',{method:'POST'})}}}
+function switchPanel(id,btn){document.querySelectorAll('.panel').forEach(function(p){p.classList.remove('active')});var panel=document.getElementById('panel-'+id);if(panel)panel.classList.add('active');document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active')});if(btn)btn.classList.add('active');if(id==='profileTeacher')loadTeachers();if(id==='profileDept')loadDepartments();if(id==='finance'){loadFinanceRecords();loadFinPermRequests();loadFinManagers()}if(id==='activity'){setTimeout(function(){initActivityContentEditor()},100)}if(id==='workload'){wlLoadPending();wlLoadClubStats()}if(id==='scoring'){loadScoringInfo();try{if(window.parent&&window.parent.dismissBadge)window.parent.dismissBadge('scoring');else{fetch(api+'/api/feature-read/scoring',{method:'POST'});var _sb=window.parent.document.getElementById('navBadge-scoring');if(_sb)_sb.classList.remove('show')}}catch(e){fetch(api+'/api/feature-read/scoring',{method:'POST'})}}if(id==='notif')loadClubNotifs();if(id==='recruit'){ctLoadMembers();setTimeout(notifyParentHeight,300)}if(id==='tools')loadTools();if(id==='joint'){try{if(window.parent&&window.parent.dismissBadge)window.parent.dismissBadge('joint');else{fetch(api+'/api/feature-read/joint',{method:'POST'});var _b=window.parent.document.getElementById('navBadge-joint');if(_b)_b.classList.remove('show')}}catch(e){fetch(api+'/api/feature-read/joint',{method:'POST'})}setTimeout(notifyParentHeight,300)}}
 
 var ctAllMembers=[];
 function ctLoadMembers(){
@@ -756,7 +783,7 @@ function ctRenderMembers(data){
         h+='</div></div>';
         h+='<button class="btn btn-danger btn-sm" onclick="ctRemoveMember('+m.id+')">移除</button>';
         h+='</div>';
-    });box.innerHTML=h;
+    });box.innerHTML=h;notifyParentHeight();
 }
 
 function ctExtractGrade(m){
@@ -796,7 +823,7 @@ function ctBatchRemoveGrade(){
     if(!toRemove.length){toast('该年级无成员','error');return}
     if(!confirm('确定移除 '+toRemove.length+' 名'+grade+'成员？'))return;
     var ids=toRemove.map(function(m){return m.id});
-    fetch(api+'/api/club-members/batch-remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:ids})})
+    fetch(api+'/api/club-members/batch-remove',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:JSON.stringify({ids:ids})})
     .then(function(r){return r.json()}).then(function(res){
         if(res.error){toast(res.error,'error');return}
         toast('已移除 '+toRemove.length+' 名成员','success');
@@ -806,7 +833,7 @@ function ctBatchRemoveGrade(){
 
 function ctRemoveMember(mid){
     if(!confirm('确定移除该成员？'))return;
-    fetch(api+'/api/club-members/'+mid,{method:'DELETE'}).then(function(r){return r.json()}).then(function(res){
+    fetch(api+'/api/club-members/'+mid,{method:'DELETE',credentials:'include'}).then(function(r){return r.json()}).then(function(res){
         if(res.error){toast(res.error,'error');return}
         toast('已移除','success');
         ctLoadMembers();
@@ -822,7 +849,7 @@ function initActivityContentEditor(){
         spellChecker:false,
         status:false,
         toolbar:['bold','italic','heading','|','quote','unordered-list','ordered-list','|','link','preview','side-by-side','fullscreen'],
-        minHeight:'120px'
+        minHeight:'60px'
     });
 }
 
@@ -843,6 +870,8 @@ var initPanel=urlParams.get('panel')||'';
 var overrideClub=urlParams.get('club')||'';
 var inIframe=window.self!==window.top;
 if(inIframe){document.querySelector('.header').style.display='none';document.querySelector('.tabs').style.display='none';document.querySelector('.main').style.padding='16px 20px'}
+function notifyParentHeight(){if(!inIframe)return;try{var h=document.documentElement.scrollHeight;window.parent.postMessage({type:'resize-iframe',height:h},'*')}catch(e){}}
+window.addEventListener('resize',function(){setTimeout(notifyParentHeight,100)});
 
 (function(){
     var today=new Date();
@@ -1095,22 +1124,26 @@ function renderTreeDeptNode(dept,idx,childrenMap,deptIcons){
     var hasKids=kids.length>0;
     var h='<div class="tv-node">';
     h+='<div class="tv-item">';
+    // 第一行：部门名 + 操作按钮
+    h+='<div style="display:flex;align-items:center;gap:8px;width:100%">';
     if(hasKids){
         h+='<div class="tv-toggle" onclick="this.textContent=this.textContent===\'▾\'?\'▸\':\'▾\';var b=this.closest(\'.tv-item\').nextElementSibling;if(b)b.classList.toggle(\'dt-collapsed\')">▾</div>';
     }else{
         h+='<div class="tv-toggle leaf">●</div>';
     }
-    if(dept.imagePath)h+='<img class="tv-dept-img" src="'+api+dept.imagePath+'" onclick="showImageModal(this.src)" />';
-    else h+='<div class="tv-icon">'+icon+'</div>';
-    h+='<div class="tv-info"><div class="tv-name">'+esc(dept.name)+'</div>';
-    if(dept.description)h+='<div class="tv-desc">'+escHtml(dept.description)+'</div>';
+    h+='<div class="tv-info" style="flex:1"><div class="tv-name">'+esc(dept.name)+'</div>';
+    if(hasKids)h+='<span class="tv-count" style="font-size:0.7em;color:#667eea;margin-top:2px;display:inline-block">'+kids.length+'个子部门</span>';
     h+='</div>';
-    if(hasKids)h+='<div class="tv-count">'+kids.length+'个子部门</div>';
     h+='<div class="tv-actions">';
     h+='<label class="tv-btn tv-btn-img" title="上传图片">📷<input type="file" accept="image/*" style="display:none" onchange="uploadDeptImage('+dept.id+',this)" /></label>';
     h+='<button class="tv-btn tv-btn-add" onclick="addChildDept('+dept.id+',\''+esc(dept.name).replace(/'/g,"\\'")+'\')" title="添加子部门">➕</button>';
     h+='<button class="tv-btn tv-btn-del" onclick="deleteDepartment('+dept.id+')" title="删除">🗑️</button>';
     h+='</div></div>';
+    // 第二行：图片（如果有）
+    if(dept.imagePath)h+='<img class="tv-dept-img" src="'+api+dept.imagePath+'" onclick="showImageModal(this.src)" />';
+    // 第三行：部门简介（如果有）
+    if(dept.description)h+='<div class="tv-desc" style="margin-top:2px">'+escHtml(dept.description)+'</div>';
+    h+='</div>';
     if(hasKids){
         h+='<div class="tv-branch">';
         kids.forEach(function(kid,ki){
@@ -1343,7 +1376,7 @@ function loadJointActivities(){
             if(isOwner)h+='<button class="btn btn-danger btn-sm" onclick="deleteJoint('+a.id+')" style="margin-top:8px">删除</button>';
             h+='</div>';
         });
-        c.innerHTML=h;
+        c.innerHTML=h;notifyParentHeight();
     });
 }
 function replyJoint(aid){fetch(api+'/api/joint-activities/'+aid+'/reply',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:'cooperate',clubName:currentUser?currentUser.clubName:''})}).then(function(r){return r.json()}).then(function(res){if(res.error){toast(res.error,'error');return}toast('已表达合作意向','success');loadJointActivities()})}
@@ -1504,6 +1537,7 @@ function createCheckin(){
             qrBox.innerHTML='';
             qrBox.style.display='inline-block';
             codeDisplay.style.display='none';
+            document.getElementById('checkinLinkRow').style.display='none';
             if(isWithinActivityTime(startDateTime,endDateTime)){
                 if(typeof QRCode==='function'){
                     new QRCode(qrBox,{text:link,width:180,height:180,colorDark:'#1a1a2e',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel?QRCode.CorrectLevel.M:undefined});
@@ -1517,6 +1551,7 @@ function createCheckin(){
             badge.textContent='签到码签到';
             qrBox.style.display='none';
             codeDisplay.textContent=currentCheckinCode;
+            document.getElementById('checkinLinkRow').style.display='none';
             if(isWithinActivityTime(startDateTime,endDateTime)){
                 codeDisplay.style.display='inline-block';
                 document.getElementById('qrDisplay').textContent=(name||'活动')+' · 签到码';
@@ -1528,22 +1563,16 @@ function createCheckin(){
         }
         document.getElementById('checkinQrCard').style.display='block';
         document.getElementById('activityDate').value='';document.getElementById('activityStartTime').value='';document.getElementById('activityEndTime').value='';document.getElementById('activityName').value='';document.getElementById('activityLocation').value='';if(activityContentMDE)activityContentMDE.value('');
-        toast('签到已发起，签到码：'+currentCheckinCode,'success');
+        if(selectedCheckinMethod==='qrcode'){
+            toast('二维码签到已发起','success');
+        }else{
+            toast('签到已发起，签到码：'+currentCheckinCode,'success');
+        }
         loadCheckinSessions();
         checkCheckoutCodeVisibility();
     }).catch(function(){toast('发起失败','error')});
     }
-    if(navigator.geolocation){
-        navigator.geolocation.getCurrentPosition(function(pos){
-            checkinPayload.locationLat=pos.coords.latitude;
-            checkinPayload.locationLng=pos.coords.longitude;
-            doCreateCheckin();
-        },function(){
-            doCreateCheckin();
-        },{enableHighAccuracy:true,timeout:8000});
-    }else{
-        doCreateCheckin();
-    }
+    doCreateCheckin();
 }
 function closeCheckin(){
     if(!currentCheckinId)return;
@@ -1815,7 +1844,7 @@ function loadCheckinSessions(){
                 if(!s.completionPhoto)nonCompliant+='缺活动照片 ';
                 if(!s.summaryText&&!s.summaryPath)nonCompliant+='缺活动总结 ';
             }
-            var methodTag=s.checkinMethod==='code'?'🔢 签到码':'📱 二维码';
+            var methodTag=s.checkinMethod==='code'?'🔢 签到码':s.checkinMethod==='location'?'📍 定位':'📱 二维码';
             h+='<div class="session-row" id="sessionRow-'+s.id+'" onclick="toggleSessionDetail('+s.id+')">';
             h+='<div class="session-info">';
             h+='<div class="session-name">'+esc(s.activityName||'未命名活动')+'</div>';
@@ -1858,18 +1887,17 @@ function toggleSessionDetail(sid){
 function loadSessionDetail(sid){
     var detail=document.getElementById('sessionDetail-'+sid);
     if(!detail)return;
-    fetch(api+'/api/checkin-sessions').then(function(r){return r.json()}).then(function(res){
-        if(!res.success||!res.data)return;
-        var session=res.data.find(function(s){return String(s.id)===String(sid)});
-        if(!session){detail.innerHTML='<div class="empty">会话不存在</div>';return}
+    fetch(api+'/api/checkin-sessions/'+sid).then(function(r){return r.json()}).then(function(res){
+        if(!res.success||!res.data){detail.innerHTML='<div class="empty">无法加载详情</div>';return}
+        var session=res.data;
         var h='<div style="margin-bottom:12px">';
         h+='<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:10px">';
         h+='<div style="font-size:0.82em;color:#1a1a2e"><b>活动名称：</b>'+esc(session.activityName||'未命名')+'</div>';
-        h+='<div style="font-size:0.82em;color:#6b6d8a"><b>签到方式：</b>'+(session.checkinMethod==='code'?'🔢 签到码':'📱 二维码')+'</div>';
+        h+='<div style="font-size:0.82em;color:#6b6d8a"><b>签到方式：</b>'+(session.checkinMethod==='code'?'🔢 签到码':session.checkinMethod==='location'?'📍 定位签到':'📱 二维码')+'</div>';
         if(session.locationName)h+='<div style="font-size:0.82em;color:#6b6d8a"><b>地点：</b>'+esc(session.locationName)+'</div>';
         if(session.activityTime)h+='<div style="font-size:0.82em;color:#6b6d8a"><b>活动时间：</b>'+esc(session.activityTime)+'</div>';
         else if(session.startTime&&session.endTime)h+='<div style="font-size:0.82em;color:#6b6d8a"><b>活动时间：</b>'+formatTimeRange(session.startTime,session.endTime)+'</div>';
-        h+='<div style="font-size:0.82em;color:#6b6d8a"><b>签到码：</b><span style="color:#667eea;font-weight:700">'+session.checkinCode+'</span></div>';
+        if(session.checkinMethod!=='qrcode')h+='<div style="font-size:0.82em;color:#6b6d8a"><b>签到码：</b><span style="color:#667eea;font-weight:700">'+session.checkinCode+'</span></div>';
         h+='<div style="font-size:0.82em;color:#6b6d8a"><b>签退方式：</b>'+(session.checkoutMethod==='code'?'🔢 签退码签退':session.checkoutMethod==='qrcode'?'📱 签退二维码签退':'签退码签退')+'</div>';
         h+='<div style="font-size:0.82em;color:#6b6d8a"><b>创建时间：</b>'+session.time+'</div>';
         h+='</div>';
@@ -1888,12 +1916,6 @@ function loadSessionDetail(sid){
         h+='<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">';
         if(session.status==='open'&&!isExpired){
             h+='<button class="btn btn-primary btn-sm" onclick="showCheckinFromHistory('+sid+')">📱 查看签到信息</button>';
-            var cm=session.checkinMethod||'qrcode';
-            if(cm==='qrcode'){
-                h+='<button class="btn btn-sm" style="background:#fafaff;color:#667eea;border:1px solid #eee" onclick="viewSessionQR('+sid+',\''+session.checkinCode+'\',\'qrcode\')">📱 查看二维码</button>';
-            }else{
-                h+='<button class="btn btn-sm" style="background:#fafaff;color:#667eea;border:1px solid #eee" onclick="viewSessionQR('+sid+',\''+session.checkinCode+'\',\'code\')">🔢 查看签到码</button>';
-            }
         }
         if((isExpired||session.status==='closed')&&(!session.completionPhoto||!session.summaryText&&!session.summaryPath)){
             h+='<button class="btn btn-danger btn-sm" onclick="openCloseModal('+sid+')">📝 上传活动总结</button>';
@@ -2012,11 +2034,11 @@ function showCheckinFromHistory(sid){
         var linkEl=document.getElementById('checkinLink');
         if(linkEl)linkEl.textContent=window.location.origin+'/checkin.html?session='+sid;
         var badge=document.getElementById('checkinMethodBadge');
-        if(badge)badge.textContent=res.data.checkinMethod==='code'?'签到码':'二维码';
+        if(badge)badge.textContent=res.data.checkinMethod==='code'?'签到码':res.data.checkinMethod==='location'?'定位签到':'二维码';
         var qrEl=document.getElementById('qrcodeContainer');
         if(qrEl){
             qrEl.innerHTML='';
-            if(res.data.checkinMethod!=='code'){
+            if(res.data.checkinMethod!=='code'&&res.data.checkinMethod!=='location'){
                 try{new QRCode(qrEl,{text:window.location.origin+'/checkin.html?session='+sid,width:180,height:180})}catch(e){}
             }
         }
@@ -2057,6 +2079,7 @@ function viewSessionQR(sid,code,method){
             qrBox.innerHTML='';
             qrBox.style.display='inline-block';
             codeDisplay.style.display='none';
+            document.getElementById('checkinLinkRow').style.display='none';
             if(isWithinActivityTime(startTime,endTime)){
                 if(typeof QRCode==='function'){
                     new QRCode(qrBox,{text:link,width:180,height:180,colorDark:'#1a1a2e',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel?QRCode.CorrectLevel.M:undefined});
@@ -2070,6 +2093,7 @@ function viewSessionQR(sid,code,method){
             badge.textContent='签到码签到';
             qrBox.style.display='none';
             codeDisplay.textContent=code;
+            document.getElementById('checkinLinkRow').style.display='none';
             if(isWithinActivityTime(startTime,endTime)){
                 codeDisplay.style.display='inline-block';
                 document.getElementById('qrDisplay').textContent=(session?session.activityName:'活动')+' · 签到码';
@@ -2239,22 +2263,24 @@ function loadFinPermRequests(){
     fetch(api+'/api/finance-permission-requests/'+encodeURIComponent(currentUser.clubName)).then(function(r){return r.json()}).then(function(res){
         var c=document.getElementById('finPermRequests');
         if(!c)return;
-        if(!res.success||!res.data||!res.data.length){c.innerHTML='<div style="font-size:0.78em;color:#a0a3bd;padding:8px 0">暂无权限申请</div>';return}
+        var badge=document.getElementById('finPermBadge');
+        if(!res.success||!res.data||!res.data.length){c.innerHTML='<div style="font-size:0.78em;color:#a0a3bd;padding:8px 0">暂无权限申请</div>';if(badge)badge.textContent='无待审批';return}
+        var pending=res.data.filter(function(r){return r.status==='pending'});
+        if(badge)badge.textContent=pending.length>0?'待审批 '+pending.length:'无待审批';
+        if(!pending.length){c.innerHTML='<div style="font-size:0.78em;color:#a0a3bd;padding:8px 0">暂无待审批申请</div>';return}
         var h='';
-        res.data.forEach(function(r){
-            var st=r.status==='pending'?'<span style="color:#f39c12;font-weight:600">待审批</span>':r.status==='approved'?'<span style="color:#00b894;font-weight:600">已通过</span>':'<span style="color:#e74c3c;font-weight:600">已拒绝</span>';
+        pending.forEach(function(r){
+            var st='<span style="color:#f39c12;font-weight:600">待审批</span>';
             h+='<div style="padding:10px 0;border-bottom:1px solid #f5f5ff">';
             h+='<div style="display:flex;justify-content:space-between;align-items:center">';
             h+='<div><span style="font-weight:600;color:#1a1a2e">'+esc(r.realName||r.username)+'</span> <span style="font-size:0.72em;color:#a0a3bd">('+esc(r.username)+')</span>';
             h+='<span id="fin-agent-'+r.id+'"></span></div>';
             h+=st+'</div>';
             if(r.reason)h+='<div style="font-size:0.78em;color:#6b6d8a;margin-top:4px">理由：'+escHtml(r.reason)+'</div>';
-            if(r.status==='pending'){
-                h+='<div style="margin-top:6px;display:flex;gap:6px">';
-                h+='<button class="btn btn-sm btn-success" onclick="reviewFinPerm('+r.id+',\'approve\')">通过</button>';
-                h+='<button class="btn btn-sm btn-danger" onclick="reviewFinPerm('+r.id+',\'reject\')">拒绝</button>';
-                h+='</div>';
-            }
+            h+='<div style="margin-top:6px;display:flex;gap:6px">';
+            h+='<button class="btn btn-sm btn-success" onclick="reviewFinPerm('+r.id+',\'approve\')">通过</button>';
+            h+='<button class="btn btn-sm btn-danger" onclick="reviewFinPerm('+r.id+',\'reject\')">拒绝</button>';
+            h+='</div>';
             h+='</div>';
         });
         c.innerHTML=h;
@@ -2381,7 +2407,7 @@ function wlLoadClubStats(){
         var data=res.data;
         var c=document.getElementById('wlClubStats');
         if(!data.length){c.innerHTML='<div class="empty">暂无成员数据</div>';return}
-        var h='<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="wl-stats-table" style="width:100%;border-collapse:collapse;font-size:0.84em"><thead><tr><th style="background:#fafaff;color:#6b6d8a;font-weight:600;text-align:left;padding:10px 12px;border-bottom:2px solid #f0f0f8;font-size:0.78em;white-space:nowrap">姓名</th><th style="background:#fafaff;color:#6b6d8a;font-weight:600;text-align:left;padding:10px 12px;border-bottom:2px solid #f0f0f8;font-size:0.78em;white-space:nowrap">学号</th><th style="background:#fafaff;color:#6b6d8a;font-weight:600;text-align:left;padding:10px 12px;border-bottom:2px solid #f0f0f8;font-size:0.78em;white-space:nowrap">班级</th><th style="background:#fafaff;color:#6b6d8a;font-weight:600;text-align:left;padding:10px 12px;border-bottom:2px solid #f0f0f8;font-size:0.78em;white-space:nowrap">活动次数</th><th style="background:#fafaff;color:#6b6d8a;font-weight:600;text-align:left;padding:10px 12px;border-bottom:2px solid #f0f0f8;font-size:0.78em;white-space:nowrap">其他工作量</th><th style="background:#fafaff;color:#6b6d8a;font-weight:600;text-align:left;padding:10px 12px;border-bottom:2px solid #f0f0f8;font-size:0.78em;white-space:nowrap">总分</th></tr></thead><tbody>';
+        var h='<div style="overflow-x:auto;-webkit-overflow-scrolling:touch"><table class="wl-stats-table" style="width:max-content;min-width:100%;border-collapse:collapse;font-size:0.84em"><thead><tr><th style="background:#fafaff;color:#6b6d8a;font-weight:600;text-align:left;padding:10px 12px;border-bottom:2px solid #f0f0f8;font-size:0.78em;white-space:nowrap">姓名</th><th style="background:#fafaff;color:#6b6d8a;font-weight:600;text-align:left;padding:10px 12px;border-bottom:2px solid #f0f0f8;font-size:0.78em;white-space:nowrap">学号</th><th style="background:#fafaff;color:#6b6d8a;font-weight:600;text-align:left;padding:10px 12px;border-bottom:2px solid #f0f0f8;font-size:0.78em;white-space:nowrap">班级</th><th style="background:#fafaff;color:#6b6d8a;font-weight:600;text-align:left;padding:10px 12px;border-bottom:2px solid #f0f0f8;font-size:0.78em;white-space:nowrap">活动次数</th><th style="background:#fafaff;color:#6b6d8a;font-weight:600;text-align:left;padding:10px 12px;border-bottom:2px solid #f0f0f8;font-size:0.78em;white-space:nowrap">其他工作量</th><th style="background:#fafaff;color:#6b6d8a;font-weight:600;text-align:left;padding:10px 12px;border-bottom:2px solid #f0f0f8;font-size:0.78em;white-space:nowrap">总分</th></tr></thead><tbody>';
         data.forEach(function(d){
             var canClick=d.user_id&&d.user_id>0;
             var clickAttr=canClick?'onclick="wlShowDetail('+d.user_id+')"':'';
@@ -2757,59 +2783,6 @@ function pollClubNotifBadge(){
 setInterval(pollClubNotifBadge,15000);
 setTimeout(pollClubNotifBadge,2000);
 
-function generatePoster(){
-    var clubName=document.getElementById('posterClubName').value.trim();
-    var style=document.getElementById('posterStyle').value;
-    var theme=document.getElementById('posterTheme').value.trim();
-    var btn=document.getElementById('genPosterBtn');
-    if(!clubName){toast('请输入社团名称','error');return}
-    btn.disabled=true;btn.textContent='生成中...';
-    fetch(api+'/api/ai-generate-poster',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({club_name:clubName,style:style,theme:theme})
-    }).then(function(r){return r.json()}).then(function(d){
-        btn.disabled=false;btn.textContent='🎨 生成海报';
-        if(d.success){
-            var resultDiv=document.getElementById('posterResult');
-            if(d.image_url){
-                resultDiv.innerHTML='<img src="'+d.image_url+'" style="max-width:100%;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.1)" onclick="showImageModal(this.src)" />';
-            }else{
-                resultDiv.innerHTML='<div style="padding:16px;background:#f8f8fc;border-radius:12px"><p style="color:#a0a3bd;font-size:0.85em">'+(d.message||'海报生成需要配置API Key')+'</p><p style="margin-top:8px;font-size:0.8em;color:#667eea"><strong>提示词：</strong>'+escHtml(d.prompt||'')+'</p></div>';
-            }
-        }else{
-            toast(d.error||'生成失败','error');
-        }
-    }).catch(function(){
-        btn.disabled=false;btn.textContent='🎨 生成海报';
-        toast('网络错误','error');
-    });
-}
-
-function generatePosterPrompt(){
-    var clubName=document.getElementById('posterClubName').value.trim();
-    var style=document.getElementById('posterStyle').value;
-    var theme=document.getElementById('posterTheme').value.trim();
-    var btn=document.getElementById('genPosterPromptBtn');
-    if(!clubName){toast('请输入社团名称','error');return}
-    btn.disabled=true;btn.textContent='生成中...';
-    fetch(api+'/api/ai-generate-poster-prompt',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({club_name:clubName,style:style,theme:theme})
-    }).then(function(r){return r.json()}).then(function(d){
-        btn.disabled=false;btn.textContent='✏️ 生成提示词';
-        if(d.success){
-            var resultDiv=document.getElementById('posterResult');
-            resultDiv.innerHTML='<div class="ai-output">'+escHtml(d.prompt||'')+(d.fallback?'<br><span style="color:#f39c12;font-size:0.8em">（备用提示词，LLM未可用）</span>':'')+'</div>';
-        }else{
-            toast(d.error||'生成失败','error');
-        }
-    }).catch(function(){
-        btn.disabled=false;btn.textContent='✏️ 生成提示词';
-        toast('网络错误','error');
-    });
-}
 </script>
 <div id="closeSessionModal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(2px)">
     <div style="background:#fff;border-radius:16px;padding:24px;width:420px;max-width:90vw;max-height:85vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,0.12)">

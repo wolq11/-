@@ -106,7 +106,7 @@ a{text-decoration:none;color:inherit}
             </div>
         </div>
     </div>
-    <div class="back-link"><a href="javascript:history.back()">←</a></div>
+
 </div>
 <div class="code-modal-overlay" id="codeModal">
     <div class="code-modal">
@@ -250,7 +250,8 @@ function submitCheckin(data){
         document.getElementById('checkinSuccess').style.display='block';
         var info='社团：'+esc(res.clubName||'');
         if(res.activityName)info+='<br/>活动：'+esc(res.activityName);
-        info+='<br/>签到方式：'+(data.method==='qrcode'?'📷 扫码签到':'🔢 签到码');
+        var methodText=data.method==='qrcode'?'📷 扫码签到':data.method==='location'?'📍 定位签到':'🔢 签到码';
+        info+='<br/>签到方式：'+methodText;
         document.getElementById('successInfo').innerHTML=info;
     }).catch(function(){showError('签到失败，请重试')});
 }
