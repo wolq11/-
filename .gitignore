@@ -3,28 +3,6 @@ __pycache__/
 *.py[cod]
 *.pyo
 
-# Database files (contain user data, should not be uploaded)
-data/club_stats.db
-data/club.db
-club_stats.db
-
-# Uploaded files (user-generated content)
-data/uploads/
-data/activity_photos/
-data/activity_plans/
-data/activity_summaries/
-data/dept_images/
-data/enroll_attachments/
-data/feedback_files/
-data/notices/
-data/offcampus/
-data/showcase/
-data/teacher_photos/
-data/templates/
-
-# Club logos (may contain uploaded images)
-public/uploads/logos/
-
 # IDE
 .trae/
 .vscode/
