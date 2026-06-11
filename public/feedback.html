@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>问题反馈</title>
+    <link rel="icon" href="images/1.png" type="image/png">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:'Microsoft YaHei','PingFang SC',sans-serif;background:#f4f5fb;min-height:100vh;color:#1a1a2e;padding:0}
@@ -84,6 +85,20 @@ body{font-family:'Microsoft YaHei','PingFang SC',sans-serif;background:#f4f5fb;m
   .toast{max-width:90vw;right:10px;left:10px}
   .form-group select,.form-group input[type="text"],.form-group input[type="datetime-local"],.form-group textarea{font-size:16px}
 }
+/* 多文件上传样式 */
+.fb-upload-area{border:2px dashed #d0d3e8;border-radius:12px;padding:20px 16px;text-align:center;cursor:pointer;transition:all .2s;background:#fafaff;position:relative}
+.fb-upload-area:hover,.fb-upload-area:active{border-color:#667eea;background:rgba(102,126,234,0.04)}
+.fb-upload-area input[type="file"]{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer}
+.fb-upload-icon{font-size:2em;color:#667eea;margin-bottom:6px}
+.fb-upload-text{font-size:0.85em;color:#6b6d8a}
+.fb-upload-hint{font-size:0.72em;color:#a0a3bd;margin-top:4px}
+.fb-preview-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+.fb-preview-item{position:relative;width:72px;height:72px;border-radius:8px;overflow:hidden;border:1px solid #f0f0f8;background:#fafaff}
+.fb-preview-item img{width:100%;height:100%;object-fit:cover}
+.fb-preview-item .fb-file-icon{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:0.6em;color:#667eea;word-break:break-all;padding:4px;text-align:center;line-height:1.2}
+.fb-preview-item .fb-remove-btn{position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;background:rgba(255,71,87,0.85);color:#fff;border:none;font-size:0.7em;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;padding:0}
+.fb-preview-item .fb-remove-btn:hover{background:#ff4757}
+@media(max-width:480px){.fb-upload-area{padding:16px 12px}.fb-preview-item{width:64px;height:64px}}
 </style>
 </head>
 <body>
@@ -135,6 +150,7 @@ fetch(api+'/api/current-user').then(function(r){return r.json()}).then(function(
 function onTypeChange(){
     var type=document.getElementById('typeSelect').value;
     var area=document.getElementById('dynamicFields');
+    fbSelectedFiles=[];
     var h='';
     if(type==='teacher_checkin'){
         h+='<div class="form-group"><label>活动名称 <span class="req">*</span></label><input type="text" id="fbActName" placeholder="请填写本次活动名称" oninput="checkForm()" /></div>';
@@ -147,12 +163,12 @@ function onTypeChange(){
         h+='<div class="form-group"><label>活动名称 <span class="req">*</span></label><input type="text" id="fbActName" placeholder="请填写本次活动名称" oninput="checkForm()" /></div>';
         h+='<div class="form-group"><label>活动时间 <span class="req">*</span></label><input type="datetime-local" id="fbActTime" onchange="checkForm()" /></div>';
         h+='<div class="form-group"><label>问题阐述 <span class="req">*</span></label><textarea id="fbBody" placeholder="请详细阐述遇到的问题" oninput="checkForm()"></textarea></div>';
-        h+='<div class="form-group"><label>提交材料或照片</label><input type="file" id="fbFile" accept="image/*,.pdf,.doc,.docx" /></div>';
+        h+='<div class="form-group"><label>提交材料或照片</label><div class="fb-upload-area" id="fbUploadArea"><input type="file" id="fbFileInput" multiple accept=".jpg,.jpeg,.png,.gif,.bmp,.webp,.pdf,.doc,.docx" onchange="fbHandleFiles(this.files)" /><div class="fb-upload-icon">📎</div><div class="fb-upload-text">点击选择文件或拍照上传</div><div class="fb-upload-hint">支持图片、PDF、Word，最多5个文件</div></div><div class="fb-preview-list" id="fbPreviewList"></div></div>';
         h+='<div style="text-align:center"><button class="btn btn-primary" id="btnSubmit" disabled onclick="submitFeedback()">提交反馈</button></div>';
     }else if(type==='other'){
         h+='<div class="form-group"><label>问题概括 <span class="req">*</span></label><input type="text" id="fbTitle" placeholder="简要概括问题" oninput="checkForm()" /></div>';
         h+='<div class="form-group"><label>问题阐述 <span class="req">*</span></label><textarea id="fbBody" placeholder="请详细阐述问题" oninput="checkForm()"></textarea></div>';
-        h+='<div class="form-group"><label>上传材料或照片</label><input type="file" id="fbFile" accept="image/*,.pdf,.doc,.docx" /></div>';
+        h+='<div class="form-group"><label>上传材料或照片</label><div class="fb-upload-area" id="fbUploadArea"><input type="file" id="fbFileInput" multiple accept=".jpg,.jpeg,.png,.gif,.bmp,.webp,.pdf,.doc,.docx" onchange="fbHandleFiles(this.files)" /><div class="fb-upload-icon">📎</div><div class="fb-upload-text">点击选择文件或拍照上传</div><div class="fb-upload-hint">支持图片、PDF、Word，最多5个文件</div></div><div class="fb-preview-list" id="fbPreviewList"></div></div>';
         h+='<div style="text-align:center"><button class="btn btn-primary" id="btnSubmit" disabled onclick="submitFeedback()">提交反馈</button></div>';
     }
     area.innerHTML=h;
@@ -210,11 +226,86 @@ function submitFeedback(){
     fd.append('activityName',actName.trim());
     fd.append('activityTime',actTime);
     if(fileInput&&fileInput.files&&fileInput.files[0])fd.append('file',fileInput.files[0]);
+    if(fbSelectedFiles.length>0){
+        fbSelectedFiles.forEach(function(f){fd.append('files',f)});
+    }
     var btn=document.getElementById('btnSubmit');if(btn)btn.disabled=true;
     fetch(api+'/api/submit-feedback',{method:'POST',body:fd}).then(function(r){return r.json()}).then(function(res){
-        if(res.success){toast('反馈提交成功','success');document.getElementById('typeSelect').value='';document.getElementById('dynamicFields').innerHTML='';loadFeedbacks()}
+        if(res.success){toast('反馈提交成功','success');document.getElementById('typeSelect').value='';document.getElementById('dynamicFields').innerHTML='';fbSelectedFiles=[];loadFeedbacks()}
         else{toast(res.error||'提交失败','error');if(btn)btn.disabled=false}
     }).catch(function(){toast('提交失败','error');if(btn)btn.disabled=false});
+}
+
+var fbSelectedFiles=[];
+function fbHandleFiles(fileList){
+    var list=Array.prototype.slice.call(fileList);
+    var remain=5-fbSelectedFiles.length;
+    if(remain<=0){toast('最多上传5个文件','error');return}
+    var add=list.slice(0,remain);
+    if(list.length>remain)toast('已选'+list.length+'个文件，仅添加前'+remain+'个','error');
+    add.forEach(function(f){
+        if(f.size>20*1024*1024){toast(f.name+' 超过20MB限制','error');return}
+        fbSelectedFiles.push(f);
+    });
+    fbRenderPreviews();
+}
+function fbRenderPreviews(){
+    var box=document.getElementById('fbPreviewList');if(!box)return;
+    var h='';
+    fbSelectedFiles.forEach(function(f,i){
+        var ext=(f.name||'').split('.').pop().toLowerCase();
+        var isImg=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(ext)>=0;
+        h+='<div class="fb-preview-item" id="fbPrev'+i+'">';
+        if(isImg){
+            var url=URL.createObjectURL(f);
+            h+='<img src="'+url+'" onload="URL.revokeObjectURL(this.src)" />';
+        }else{
+            var icon='📄';if(ext==='pdf')icon='📕';else if(['doc','docx'].indexOf(ext)>=0)icon='📘';
+            h+='<div class="fb-file-icon">'+icon+'<br>'+esc(f.name)+'</div>';
+        }
+        h+='<button class="fb-remove-btn" onclick="fbRemoveFile('+i+')" title="移除">×</button>';
+        h+='</div>';
+    });
+    box.innerHTML=h;
+    var area=document.getElementById('fbUploadArea');
+    if(area){
+        var txt=area.querySelector('.fb-upload-text');
+        if(txt)txt.textContent=fbSelectedFiles.length>=5?'已选满5个文件':'点击选择文件或拍照上传（已选'+fbSelectedFiles.length+'/5）';
+    }
+}
+function fbRemoveFile(idx){
+    fbSelectedFiles.splice(idx,1);
+    fbRenderPreviews();
+}
+function fbRenderFiles(fb){
+    var files=[];
+    var hasMultiFiles=false;
+    if(fb.filesJson){try{files=JSON.parse(fb.filesJson);if(files.length)hasMultiFiles=true}catch(e){}}
+    if(!hasMultiFiles&&fb.fileName){
+        var fbExt=(fb.fileName||'').split('.').pop().toLowerCase();
+        var fbIsImg=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(fbExt)>=0;
+        var h='';
+        if(fbIsImg){
+            h+='<div style="margin-top:8px"><img src="'+api+'/api/feedback-file/'+fb.id+'" style="max-width:120px;max-height:90px;border-radius:8px;cursor:pointer;border:1px solid #f0f0f8;display:block" onclick="showFbImageModal(this.src)" /><div style="font-size:0.66em;color:#999;margin-top:1px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(fb.fileName)+'</div></div>';
+        }else{
+            h+='<div style="margin-top:8px"><a href="'+api+'/api/feedback-file/'+fb.id+'" target="_blank" style="font-size:0.78em;color:#667eea;display:inline-flex;align-items:center;gap:3px;padding:4px 8px;background:rgba(102,126,234,0.06);border-radius:6px;text-decoration:none">📎 '+esc(fb.fileName)+'</a></div>';
+        }
+        return h;
+    }
+    if(!files.length)return '';
+    var h='<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">';
+    files.forEach(function(f){
+        var ext=(f.name||'').split('.').pop().toLowerCase();
+        var isImg=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(ext)>=0;
+        var fileUrl=api+'/api/feedback-file-by-key/'+encodeURIComponent(f.path.replace(/^feedback_files\//,''));
+        if(isImg){
+            h+='<div style="position:relative"><img src="'+fileUrl+'" style="max-width:120px;max-height:90px;border-radius:8px;cursor:pointer;border:1px solid #f0f0f8;display:block" onclick="showFbImageModal(this.src)" /><div style="font-size:0.66em;color:#999;margin-top:1px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(f.name)+'</div></div>';
+        }else{
+            h+='<a href="'+fileUrl+'" target="_blank" style="font-size:0.78em;color:#667eea;display:inline-flex;align-items:center;gap:3px;padding:4px 8px;background:rgba(102,126,234,0.06);border-radius:6px;text-decoration:none">📎 '+esc(f.name)+'</a>';
+        }
+    });
+    h+='</div>';
+    return h;
 }
 
 function loadFeedbacks(){
@@ -244,15 +335,7 @@ function renderFeedbacks(feedbacks){
             if(fb.activityTime)h+='<div class="fb-activity">时间：'+esc(fb.activityTime)+'</div>';
             h+='<div class="fb-title">'+esc(fb.title)+'</div>';
             if(fb.body)h+='<div class="fb-body">'+escHtml(fb.body)+'</div>';
-            if(fb.fileName){
-                var fbExt=(fb.fileName||'').split('.').pop().toLowerCase();
-                var fbIsImg=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(fbExt)>=0;
-                if(fbIsImg){
-                    h+='<div class="fb-file" style="margin-top:6px"><img src="'+api+'/api/feedback-file/'+fb.id+'" style="max-width:200px;max-height:120px;border-radius:8px;cursor:pointer;border:1px solid #f0f0f8" onclick="showFbImageModal(this.src)" /><div style="font-size:0.72em;color:#999;margin-top:2px">'+esc(fb.fileName)+'</div></div>';
-                }else{
-                    h+='<div class="fb-file">附件：<a href="'+api+'/api/feedback-file/'+fb.id+'" target="_blank" style="color:#667eea">'+esc(fb.fileName)+'</a></div>';
-                }
-            }
+            h+=fbRenderFiles(fb);
             if(fb.status==='resolved'&&fb.result)h+='<div class="result-box"><div class="label">处理结果：</div>'+escHtml(fb.result)+'</div>';
             h+='<div class="fb-meta"><span>'+fb.time+'</span>';
             if(currentUser&&currentUser.role==='admin'&&fb.status!=='resolved'){

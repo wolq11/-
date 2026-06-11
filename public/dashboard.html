@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>云智社联 - 管理系统</title>
+    <link rel="icon" href="images/1.png" type="image/png">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde@2.18.0/dist/easymde.min.css">
 <script src="https://cdn.jsdelivr.net/npm/easymde@2.18.0/dist/easymde.min.js"></script>
 <style>
@@ -388,6 +389,21 @@ body.role-teacher .nav-item:hover{background:#fffdf5}
   .doc-filter-select{flex:1 1 calc(50% - 12px)!important;min-width:0!important}
   .doc-rebuild-btn{flex:1 1 100%!important}
 
+  /* 多文件上传样式 */
+  .fb-upload-area{border:2px dashed #d0d3e8;border-radius:12px;padding:20px 16px;text-align:center;cursor:pointer;transition:all .2s;background:#fafaff;position:relative}
+  .fb-upload-area:hover,.fb-upload-area:active{border-color:#667eea;background:rgba(102,126,234,0.04)}
+  .fb-upload-area input[type="file"]{position:absolute;top:0;left:0;width:100%;height:100%;opacity:0;cursor:pointer}
+  .fb-upload-icon{font-size:2em;color:#667eea;margin-bottom:6px}
+  .fb-upload-text{font-size:0.85em;color:#6b6d8a}
+  .fb-upload-hint{font-size:0.72em;color:#a0a3bd;margin-top:4px}
+  .fb-preview-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .fb-preview-item{position:relative;width:72px;height:72px;border-radius:8px;overflow:hidden;border:1px solid #f0f0f8;background:#fafaff}
+  .fb-preview-item img{width:100%;height:100%;object-fit:cover}
+  .fb-preview-item .fb-file-icon{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:0.6em;color:#667eea;word-break:break-all;padding:4px;text-align:center;line-height:1.2}
+  .fb-preview-item .fb-remove-btn{position:absolute;top:2px;right:2px;width:20px;height:20px;border-radius:50%;background:rgba(255,71,87,0.85);color:#fff;border:none;font-size:0.7em;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;padding:0}
+  .fb-preview-item .fb-remove-btn:hover{background:#ff4757}
+  @media(max-width:480px){.fb-upload-area{padding:16px 12px}.fb-preview-item{width:64px;height:64px}}
+
 </style>
 </head>
 <body>
@@ -498,8 +514,8 @@ function gotoPage(containerId,page){
 
 function searchToolbar(id,placeholder,onSearch){
     var h='<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">';
-    h+='<input type="text" id="'+id+'Search" placeholder="'+placeholder+'" style="flex:1;min-width:180px;padding:8px 12px;border:1px solid #e0e0e8;border-radius:8px;font-size:0.85em;outline:none" oninput="'+onSearch+'()" />';
-    h+='<span id="'+id+'Count" style="font-size:0.78em;color:#a0a3bd"></span>';
+    h+='<input type="text" id="'+id+'Search" placeholder="'+placeholder+'" style="flex:1;min-width:140px;padding:8px 12px;border:1px solid #e0e0e8;border-radius:8px;font-size:0.85em;outline:none" />';
+    h+='<button class="btn btn-primary" onclick="'+onSearch+'()" style="padding:8px 16px;white-space:nowrap">搜索</button>';
     h+='</div>';
     return h;
 }
@@ -869,6 +885,18 @@ function adminHome(){
     '<button class="btn btn-sm btn-primary" onclick="applyOverviewFilter()">筛选</button>'+
     '<button class="btn btn-sm" style="background:rgba(102,126,234,0.08);color:#667eea;font-size:0.8em" onclick="resetOverviewFilter()">重置</button>'+
     '<span style="font-size:0.76em;color:#a0a3bd" id="ovFilterHint"></span>'+
+    '</div>'+
+    '<div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid rgba(102,126,234,0.1)">'+
+    '<span style="font-size:0.82em;color:#6b6d8a">📊 数据筛选选项：</span>'+
+    '<label style="display:flex;align-items:center;gap:4px;font-size:0.82em;color:#6b6d8a">'+
+    '<input type="checkbox" id="filterMemberDist" checked style="width:14px;height:14px" />'+
+    '<span>社团人数分布参与时间筛选</span>'+
+    '</label>'+
+    '<label style="display:flex;align-items:center;gap:4px;font-size:0.82em;color:#6b6d8a">'+
+    '<input type="checkbox" id="filterClassDist" checked style="width:14px;height:14px" />'+
+    '<span>学院分布参与时间筛选</span>'+
+    '</label>'+
+    '<span style="font-size:0.74em;color:#a0a3bd">（社团成员总数始终显示当前最新数据）</span>'+
     '</div></div>'+
     '<div class="stat-grid">'+
     '<div class="stat-card"><div class="sc-num" id="sClubs">0</div><div class="sc-label">社团总数</div></div>'+
@@ -1730,7 +1758,7 @@ function clubStructPage(){
     h+='<button class="btn btn-primary" onclick="exportAllStructures()">导出全部社团结构</button>';
     h+='</div>';
     h+=searchToolbar('cs','搜索社团名称','filterClubStruct');
-    h+='<div class="card"><div class="card-title">社团列表 <span class="badge" id="csCount">0</span></div><div id="csList"><div class="empty">加载中...</div></div></div>';
+    h+='<div class="card"><div class="card-title">社团列表 <span class="badge" id="csTotalCount">0</span></div><div id="csList"><div class="empty">加载中...</div></div></div>';
     h+='<div id="csDetail" style="display:none"></div>';
     return h;
 }
@@ -1739,6 +1767,8 @@ function loadClubStructures(){
     fetch(api+'/api/club-structures').then(function(r){return r.json()}).then(function(res){
         if(!res.success||!res.data||!res.data.length){document.getElementById('csList').innerHTML='<div class="empty">暂无社团数据</div>';return}
         window._csData=res.data;
+        var totalCountEl=document.getElementById('csTotalCount');
+        if(totalCountEl)totalCountEl.textContent=res.data.length;
         filterClubStruct();
     });
 }
@@ -1748,8 +1778,8 @@ function filterClubStruct(){
     q=q.trim().toLowerCase();
     var filtered=window._csData||[];
     if(q)filtered=filtered.filter(function(c){return (c.clubName||'').toLowerCase().indexOf(q)>=0||(c.category||'').toLowerCase().indexOf(q)>=0});
-    var countEl=document.getElementById('csCount');
-    if(countEl)countEl.textContent=filtered.length;
+    var totalCountEl=document.getElementById('csTotalCount');
+    if(totalCountEl)totalCountEl.textContent=filtered.length;
     renderPagination('csList',filtered,function(list){
         if(!list.length)return '<div class="empty">无匹配结果</div>';
         var h='';
@@ -2668,47 +2698,57 @@ function loadAllData(){
     fetch(api+'/api/all-club-details',{credentials:'same-origin'}).then(function(r){return r.json()}).then(function(res){if(res.success&&res.data)res.data.forEach(function(d){clubDetailsMap[d.clubName]=d})});
 
     if(currentUser.role==='admin'){
-        fetch(api+'/api/all-members-distribution?'+dateParams,{credentials:'same-origin'}).then(function(r){return r.json()}).then(function(res){
+        fetch(api+'/api/all-members-distribution',{credentials:'same-origin'}).then(function(r){return r.json()}).then(function(res){
             if(!res.success)return;var d=res.data;
             var el=document.getElementById('sMembers');if(el)el.textContent=d.totalMembers||0;
             var elU=document.getElementById('sUsers');if(elU)elU.textContent=d.totalUsers||0;
             var elC=document.getElementById('sClubs');if(elC)elC.textContent=d.totalClubs||0;
-            var distBox=document.getElementById('homeMemberDist');
-            if(distBox&&d.clubCounts){
-                var sorted=Object.entries(d.clubCounts).sort(function(a,b){return b[1]-a[1]});
-                var maxVal=1;sorted.forEach(function(e){if(e[1]>maxVal)maxVal=e[1]});
-                var h='';sorted.forEach(function(e,i){
-                    var pct=Math.round(e[1]/maxVal*100);
-                    var ratio=maxVal>0?e[1]/maxVal:0;
-                    h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
-                    h+='<span style="width:80px;font-size:0.76em;color:#4a4d6a;text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(e[0])+'</span>';
-                    if(e[1]>0){
-                        h+='<div style="flex:1;height:20px;background:#f0f0f8;border-radius:4px;overflow:hidden"><div style="width:'+pct+'%;height:100%;border-radius:4px;background:'+BAR_COLORS_MEMBER[i]+';display:flex;align-items:center;padding-left:8px;font-size:0.68em;font-weight:600;color:#fff;white-space:nowrap;min-width:fit-content">'+e[1]+'人</div></div>';
-                    }else{
-                        h+='<div style="flex:1;height:20px;background:#f0f0f8;border-radius:4px;display:flex;align-items:center;padding-left:8px;font-size:0.68em;font-weight:600;color:#a0a3bd;white-space:nowrap">0人</div>';
-                    }
-                    h+='</div>';
-                });
-                distBox.innerHTML=h||'<div class="empty">暂无成员数据</div>';
-            }
-            var classBox=document.getElementById('homeClassDist');
-            if(classBox&&d.collegeStats){
-                var sorted2=Object.entries(d.collegeStats).sort(function(a,b){return b[1]-a[1]});
-                var maxVal2=1;sorted2.forEach(function(e){if(e[1]>maxVal2)maxVal2=e[1]});
-                var ch='';sorted2.forEach(function(e,i){
-                    var pct=Math.round(e[1]/maxVal2*100);
-                    var ratio2=maxVal2>0?e[1]/maxVal2:0;
-                    ch+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
-                    ch+='<span style="width:110px;font-size:0.72em;color:#4a4d6a;text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(e[0])+'</span>';
-                    if(e[1]>0){
-                        ch+='<div style="flex:1;height:20px;background:#f0f0f8;border-radius:4px;overflow:hidden"><div style="width:'+pct+'%;height:100%;border-radius:4px;background:'+BAR_COLORS_COLLEGE[i]+';display:flex;align-items:center;padding-left:8px;font-size:0.68em;font-weight:600;color:#fff;white-space:nowrap;min-width:fit-content">'+e[1]+'人</div></div>';
-                    }else{
-                        ch+='<div style="flex:1;height:20px;background:#f0f0f8;border-radius:4px;display:flex;align-items:center;padding-left:8px;font-size:0.68em;font-weight:600;color:#a0a3bd;white-space:nowrap">0人</div>';
-                    }
-                    ch+='</div>';
-                });
-                classBox.innerHTML=ch||'<div class="empty">暂无数据</div>';
-            }
+            var memberDistFilter=(document.getElementById('filterMemberDist')||{}).checked;
+            var classDistFilter=(document.getElementById('filterClassDist')||{}).checked;
+            var memberDistUrl=api+'/api/all-members-distribution'+(memberDistFilter&&dateParams?('?'+dateParams.substring(1)):'');
+            var classDistUrl=api+'/api/all-members-distribution'+(classDistFilter&&dateParams?('?'+dateParams.substring(1)):'');
+            fetch(memberDistUrl,{credentials:'same-origin'}).then(function(r){return r.json()}).then(function(res){
+                if(!res.success)return;var d=res.data;
+                var distBox=document.getElementById('homeMemberDist');
+                if(distBox&&d.clubCounts){
+                    var sorted=Object.entries(d.clubCounts).sort(function(a,b){return b[1]-a[1]});
+                    var maxVal=1;sorted.forEach(function(e){if(e[1]>maxVal)maxVal=e[1]});
+                    var h='';sorted.forEach(function(e,i){
+                        var pct=Math.round(e[1]/maxVal*100);
+                        var ratio=maxVal>0?e[1]/maxVal:0;
+                        h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
+                        h+='<span style="width:80px;font-size:0.76em;color:#4a4d6a;text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(e[0])+'</span>';
+                        if(e[1]>0){
+                            h+='<div style="flex:1;height:20px;background:#f0f0f8;border-radius:4px;overflow:hidden"><div style="width:'+pct+'%;height:100%;border-radius:4px;background:'+BAR_COLORS_MEMBER[i]+';display:flex;align-items:center;padding-left:8px;font-size:0.68em;font-weight:600;color:#fff;white-space:nowrap;min-width:fit-content">'+e[1]+'人</div></div>';
+                        }else{
+                            h+='<div style="flex:1;height:20px;background:#f0f0f8;border-radius:4px;display:flex;align-items:center;padding-left:8px;font-size:0.68em;font-weight:600;color:#a0a3bd;white-space:nowrap">0人</div>';
+                        }
+                        h+='</div>';
+                    });
+                    distBox.innerHTML=h||'<div class="empty">暂无成员数据</div>';
+                }
+            });
+            fetch(classDistUrl,{credentials:'same-origin'}).then(function(r){return r.json()}).then(function(res){
+                if(!res.success)return;var d=res.data;
+                var classBox=document.getElementById('homeClassDist');
+                if(classBox&&d.collegeStats){
+                    var sorted2=Object.entries(d.collegeStats).sort(function(a,b){return b[1]-a[1]});
+                    var maxVal2=1;sorted2.forEach(function(e){if(e[1]>maxVal2)maxVal2=e[1]});
+                    var ch='';sorted2.forEach(function(e,i){
+                        var pct=Math.round(e[1]/maxVal2*100);
+                        var ratio2=maxVal2>0?e[1]/maxVal2:0;
+                        ch+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">';
+                        ch+='<span style="width:110px;font-size:0.72em;color:#4a4d6a;text-align:right;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(e[0])+'</span>';
+                        if(e[1]>0){
+                            ch+='<div style="flex:1;height:20px;background:#f0f0f8;border-radius:4px;overflow:hidden"><div style="width:'+pct+'%;height:100%;border-radius:4px;background:'+BAR_COLORS_COLLEGE[i]+';display:flex;align-items:center;padding-left:8px;font-size:0.68em;font-weight:600;color:#fff;white-space:nowrap;min-width:fit-content">'+e[1]+'人</div></div>';
+                        }else{
+                            ch+='<div style="flex:1;height:20px;background:#f0f0f8;border-radius:4px;display:flex;align-items:center;padding-left:8px;font-size:0.68em;font-weight:600;color:#a0a3bd;white-space:nowrap">0人</div>';
+                        }
+                        ch+='</div>';
+                    });
+                    classBox.innerHTML=ch||'<div class="empty">暂无数据</div>';
+                }
+            });
         });
     }
 
@@ -5267,6 +5307,7 @@ function userFeedbackPage(){
 function onFbTypeChange(){
     var type=(document.getElementById('fbType')||{}).value||'';
     var area=document.getElementById('fbFormArea');if(!area)return;
+    fbSelectedFiles=[];
     var h='';
     if(type==='teacher_checkin'){
         h+='<div class="form-row"><div class="field"><label>活动名称 *</label><input type="text" id="fbActName" placeholder="请填写本次活动名称" /></div></div>';
@@ -5279,15 +5320,87 @@ function onFbTypeChange(){
         h+='<div class="form-row"><div class="field"><label>活动名称 *</label><input type="text" id="fbActName" placeholder="请填写本次活动名称" /></div></div>';
         h+='<div class="form-row"><div class="field"><label>活动时间 *</label><input type="datetime-local" id="fbActTime" /></div></div>';
         h+='<div class="form-row"><div class="field"><label>问题阐述 *</label><textarea id="fbBody" placeholder="请详细阐述遇到的问题" style="min-height:80px"></textarea></div></div>';
-        h+='<div class="form-row"><div class="field"><label>提交材料或照片</label><input type="file" id="fbFile" accept="image/*,.pdf,.doc,.docx" /></div></div>';
+        h+='<div class="form-row"><div class="field"><label>提交材料或照片</label><div class="fb-upload-area" id="fbUploadArea"><input type="file" id="fbFileInput" multiple accept=".jpg,.jpeg,.png,.gif,.bmp,.webp,.pdf,.doc,.docx" onchange="fbHandleFiles(this.files)" /><div class="fb-upload-icon">📎</div><div class="fb-upload-text">点击选择文件或拍照上传</div><div class="fb-upload-hint">支持图片、PDF、Word，最多5个文件</div></div><div class="fb-preview-list" id="fbPreviewList"></div></div></div>';
         h+='<button class="btn btn-primary" onclick="submitFeedback()">提交反馈</button>';
     }else if(type==='other'){
         h+='<div class="form-row"><div class="field"><label>问题概括 *</label><input type="text" id="fbTitle" placeholder="简要概括问题" /></div></div>';
         h+='<div class="form-row"><div class="field"><label>问题阐述 *</label><textarea id="fbBody" placeholder="请详细阐述问题" style="min-height:80px"></textarea></div></div>';
-        h+='<div class="form-row"><div class="field"><label>上传材料或照片</label><input type="file" id="fbFile" accept="image/*,.pdf,.doc,.docx" /></div></div>';
+        h+='<div class="form-row"><div class="field"><label>上传材料或照片</label><div class="fb-upload-area" id="fbUploadArea"><input type="file" id="fbFileInput" multiple accept=".jpg,.jpeg,.png,.gif,.bmp,.webp,.pdf,.doc,.docx" onchange="fbHandleFiles(this.files)" /><div class="fb-upload-icon">📎</div><div class="fb-upload-text">点击选择文件或拍照上传</div><div class="fb-upload-hint">支持图片、PDF、Word，最多5个文件</div></div><div class="fb-preview-list" id="fbPreviewList"></div></div></div>';
         h+='<button class="btn btn-primary" onclick="submitFeedback()">提交反馈</button>';
     }
     area.innerHTML=h;
+}
+
+var fbSelectedFiles=[];
+function fbHandleFiles(fileList){
+    var list=Array.prototype.slice.call(fileList);
+    var remain=5-fbSelectedFiles.length;
+    if(remain<=0){toast('最多上传5个文件','error');return}
+    var add=list.slice(0,remain);
+    if(list.length>remain)toast('已选'+list.length+'个文件，仅添加前'+remain+'个','error');
+    add.forEach(function(f){
+        if(f.size>20*1024*1024){toast(f.name+' 超过20MB限制','error');return}
+        fbSelectedFiles.push(f);
+    });
+    fbRenderPreviews();
+}
+function fbRenderPreviews(){
+    var box=document.getElementById('fbPreviewList');if(!box)return;
+    var h='';
+    fbSelectedFiles.forEach(function(f,i){
+        var ext=(f.name||'').split('.').pop().toLowerCase();
+        var isImg=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(ext)>=0;
+        h+='<div class="fb-preview-item" id="fbPrev'+i+'">';
+        if(isImg){
+            var url=URL.createObjectURL(f);
+            h+='<img src="'+url+'" onload="URL.revokeObjectURL(this.src)" />';
+        }else{
+            var icon='📄';if(ext==='pdf')icon='📕';else if(['doc','docx'].indexOf(ext)>=0)icon='📘';
+            h+='<div class="fb-file-icon">'+icon+'<br>'+esc(f.name)+'</div>';
+        }
+        h+='<button class="fb-remove-btn" onclick="fbRemoveFile('+i+')" title="移除">×</button>';
+        h+='</div>';
+    });
+    box.innerHTML=h;
+    var area=document.getElementById('fbUploadArea');
+    if(area){
+        var txt=area.querySelector('.fb-upload-text');
+        if(txt)txt.textContent=fbSelectedFiles.length>=5?'已选满5个文件':'点击选择文件或拍照上传（已选'+fbSelectedFiles.length+'/5）';
+    }
+}
+function fbRemoveFile(idx){
+    fbSelectedFiles.splice(idx,1);
+    fbRenderPreviews();
+}
+function fbRenderFiles(fb){
+    var files=[];
+    var hasMultiFiles=false;
+    if(fb.filesJson){try{files=JSON.parse(fb.filesJson);if(files.length)hasMultiFiles=true}catch(e){}}
+    if(!hasMultiFiles&&fb.fileName){
+        var fbExt=(fb.fileName||'').split('.').pop().toLowerCase();
+        var fbIsImg=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(fbExt)>=0;
+        var h='';
+        if(fbIsImg){
+            h+='<div style="margin-top:8px"><img src="'+api+'/api/feedback-file/'+fb.id+'" style="max-width:120px;max-height:90px;border-radius:8px;cursor:pointer;border:1px solid #f0f0f8;display:block" onclick="showDashImageModal(this.src)" /><div style="font-size:0.66em;color:#999;margin-top:1px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(fb.fileName)+'</div></div>';
+        }else{
+            h+='<div style="margin-top:8px"><a href="'+api+'/api/feedback-file/'+fb.id+'" target="_blank" style="font-size:0.78em;color:#667eea;display:inline-flex;align-items:center;gap:3px;padding:4px 8px;background:rgba(102,126,234,0.06);border-radius:6px;text-decoration:none">📎 '+esc(fb.fileName)+'</a></div>';
+        }
+        return h;
+    }
+    if(!files.length)return '';
+    var h='<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">';
+    files.forEach(function(f){
+        var ext=(f.name||'').split('.').pop().toLowerCase();
+        var isImg=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(ext)>=0;
+        var fileUrl=api+'/api/feedback-file-by-key/'+encodeURIComponent(f.path.replace(/^feedback_files\//,''));
+        if(isImg){
+            h+='<div style="position:relative"><img src="'+fileUrl+'" style="max-width:120px;max-height:90px;border-radius:8px;cursor:pointer;border:1px solid #f0f0f8;display:block" onclick="showDashImageModal(this.src)" /><div style="font-size:0.66em;color:#999;margin-top:1px;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">'+esc(f.name)+'</div></div>';
+        }else{
+            h+='<a href="'+fileUrl+'" target="_blank" style="font-size:0.78em;color:#667eea;display:inline-flex;align-items:center;gap:3px;padding:4px 8px;background:rgba(102,126,234,0.06);border-radius:6px;text-decoration:none">📎 '+esc(f.name)+'</a>';
+        }
+    });
+    h+='</div>';
+    return h;
 }
 
 function onlineStatsPage(){
@@ -5365,9 +5478,12 @@ function submitFeedback(){
     fd.append('activityName',actName.trim());
     fd.append('activityTime',actTime);
     if(fileInput&&fileInput.files&&fileInput.files[0])fd.append('file',fileInput.files[0]);
+    if(fbSelectedFiles.length>0){
+        fbSelectedFiles.forEach(function(f){fd.append('files',f)});
+    }
     fetch(api+'/api/submit-feedback',{method:'POST',body:fd})
     .then(function(r){return r.json()}).then(function(res){
-        if(res.success){toast('反馈提交成功','success');document.getElementById('fbType').value='';document.getElementById('fbFormArea').innerHTML='';loadMyFeedbacks()}
+        if(res.success){toast('反馈提交成功','success');document.getElementById('fbType').value='';document.getElementById('fbFormArea').innerHTML='';fbSelectedFiles=[];loadMyFeedbacks()}
         else{toast(res.error||'提交失败','error')}
     }).catch(function(){toast('提交失败','error')});
 }
@@ -5389,15 +5505,7 @@ function loadMyFeedbacks(){
             if(fb.activityTime)h+='<div style="font-size:0.82em;color:#4a4d6a;margin-bottom:2px">时间：'+esc(fb.activityTime)+'</div>';
             h+='<div style="font-size:0.9em;font-weight:600;color:#1a1a2e;margin-bottom:4px">'+esc(fb.title)+'</div>';
             if(fb.body)h+='<div style="font-size:0.82em;color:#6b6d8a;line-height:1.5">'+escHtml(fb.body)+'</div>';
-            if(fb.fileName){
-                var fbExt2=(fb.fileName||'').split('.').pop().toLowerCase();
-                var fbIsImg2=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(fbExt2)>=0;
-                if(fbIsImg2){
-                    h+='<div style="margin-top:6px"><img src="'+api+'/api/feedback-file/'+fb.id+'" style="max-width:200px;max-height:120px;border-radius:8px;cursor:pointer;border:1px solid #f0f0f8" onclick="showDashImageModal(this.src)" /><div style="font-size:0.72em;color:#999;margin-top:2px">'+esc(fb.fileName)+'</div></div>';
-                }else{
-                    h+='<div style="font-size:0.78em;color:#667eea;margin-top:6px">附件：<a href="'+api+'/api/feedback-file/'+fb.id+'" target="_blank" style="color:#667eea">'+esc(fb.fileName)+'</a></div>';
-                }
-            }
+            h+=fbRenderFiles(fb);
             if(fb.status==='resolved'&&fb.result)h+='<div style="background:rgba(0,184,148,0.06);border:1px solid rgba(0,184,148,0.12);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:0.82em;color:#00b894"><div style="font-weight:600;margin-bottom:2px">处理结果：</div>'+escHtml(fb.result)+'</div>';
             h+='<div style="font-size:0.66em;color:#c8cade;margin-top:6px">'+esc(fb.time||'')+'</div>';
             h+='</div>';
@@ -5454,15 +5562,7 @@ function filterAdminFeedbacks(){
                 if(fb.activityTime)h+='<div style="font-size:0.82em;color:#4a4d6a;margin-bottom:2px">时间：'+esc(fb.activityTime)+'</div>';
                 h+='<div style="font-size:0.9em;font-weight:600;color:#1a1a2e;margin-bottom:4px">'+esc(fb.title)+'</div>';
                 if(fb.body)h+='<div style="font-size:0.82em;color:#6b6d8a;line-height:1.5">'+escHtml(fb.body)+'</div>';
-                if(fb.fileName){
-                    var fbExt=(fb.fileName||'').split('.').pop().toLowerCase();
-                    var fbIsImg=['jpg','jpeg','png','gif','bmp','webp','svg'].indexOf(fbExt)>=0;
-                    if(fbIsImg){
-                        h+='<div style="margin-top:6px"><img src="'+api+'/api/feedback-file/'+fb.id+'" style="max-width:200px;max-height:120px;border-radius:8px;cursor:pointer;border:1px solid #f0f0f8" onclick="showDashImageModal(this.src)" /><div style="font-size:0.72em;color:#999;margin-top:2px">'+esc(fb.fileName)+'</div></div>';
-                    }else{
-                        h+='<div style="font-size:0.78em;color:#667eea;margin-top:6px">附件：<a href="'+api+'/api/feedback-file/'+fb.id+'" target="_blank" style="color:#667eea">'+esc(fb.fileName)+'</a></div>';
-                    }
-                }
+                h+=fbRenderFiles(fb);
                 if(fb.status==='resolved'&&fb.result)h+='<div style="background:rgba(0,184,148,0.06);border:1px solid rgba(0,184,148,0.12);border-radius:8px;padding:8px 10px;margin-top:8px;font-size:0.82em;color:#00b894"><div style="font-weight:600;margin-bottom:2px">处理结果：</div>'+escHtml(fb.result)+'</div>';
                 if(fb.status!=='resolved'){
                     h+='<div style="margin-top:8px" id="handleArea_'+fb.id+'">';
@@ -5856,19 +5956,31 @@ function pollAdminNotifyBadge(){
             var matBadge=document.getElementById('navBadge-materials');
             if(matBadge){
                 var mc=badges['materials']||0;
-                if(mc>0){matBadge.textContent=mc>99?'99+':mc;matBadge.classList.add('show')}
+                var mcPrev=_dismissedCounts['materials']||0;
+                var mcDismissed=_dismissedBadges['materials'];
+                if(mc>0&&!mcDismissed&&mc>mcPrev){matBadge.textContent=mc>99?'99+':mc;matBadge.classList.add('show');delete _dismissedCounts['materials'];_saveDismissed()}
+                else if(mc>0&&!mcDismissed&&mc<=mcPrev){matBadge.classList.remove('show')}
+                else if(mc<=0){matBadge.classList.remove('show');if(_dismissedCounts['materials']){delete _dismissedCounts['materials'];_saveDismissed()}}
                 else{matBadge.classList.remove('show')}
             }
             var ocBadge=document.getElementById('navBadge-offcampus');
             if(ocBadge){
                 var oc=badges['offcampus']||0;
-                if(oc>0){ocBadge.textContent=oc>99?'99+':oc;ocBadge.classList.add('show')}
+                var ocPrev=_dismissedCounts['offcampus']||0;
+                var ocDismissed=_dismissedBadges['offcampus'];
+                if(oc>0&&!ocDismissed&&oc>ocPrev){ocBadge.textContent=oc>99?'99+':oc;ocBadge.classList.add('show');delete _dismissedCounts['offcampus'];_saveDismissed()}
+                else if(oc>0&&!ocDismissed&&oc<=ocPrev){ocBadge.classList.remove('show')}
+                else if(oc<=0){ocBadge.classList.remove('show');if(_dismissedCounts['offcampus']){delete _dismissedCounts['offcampus'];_saveDismissed()}}
                 else{ocBadge.classList.remove('show')}
             }
             var fbBadge=document.getElementById('navBadge-feedback');
             if(fbBadge){
                 var fc=badges['feedback']||0;
-                if(fc>0){fbBadge.textContent=fc>99?'99+':fc;fbBadge.classList.add('show')}
+                var fcPrev=_dismissedCounts['feedback']||0;
+                var fcDismissed=_dismissedBadges['feedback'];
+                if(fc>0&&!fcDismissed&&fc>fcPrev){fbBadge.textContent=fc>99?'99+':fc;fbBadge.classList.add('show');delete _dismissedCounts['feedback'];_saveDismissed()}
+                else if(fc>0&&!fcDismissed&&fc<=fcPrev){fbBadge.classList.remove('show')}
+                else if(fc<=0){fbBadge.classList.remove('show');if(_dismissedCounts['feedback']){delete _dismissedCounts['feedback'];_saveDismissed()}}
                 else{fbBadge.classList.remove('show')}
             }
             var rcBadge=document.getElementById('navBadge-recruit');

@@ -29,6 +29,9 @@ def local_time(utc_str):
     except:
         return utc_str
 
+def cn_now():
+    return datetime.utcnow() + timedelta(hours=8)
+
 
 class DataCleaner:
     @staticmethod
@@ -684,6 +687,7 @@ class Database:
             'ALTER TABLE feedbacks ADD COLUMN activity_time TEXT DEFAULT ""',
             'ALTER TABLE feedbacks ADD COLUMN file_path TEXT DEFAULT ""',
             'ALTER TABLE feedbacks ADD COLUMN file_name TEXT DEFAULT ""',
+            'ALTER TABLE feedbacks ADD COLUMN files_json TEXT DEFAULT ""',
             "UPDATE feedbacks SET status='resolved' WHERE status='handled'",
             'ALTER TABLE scoring_rules ADD COLUMN date_start TEXT DEFAULT ""',
             'ALTER TABLE scoring_rules ADD COLUMN date_end TEXT DEFAULT ""',
@@ -3982,6 +3986,7 @@ def submit_feedback():
         return jsonify({'error': '未关联社团'}), 400
     file_path = ''
     file_name = ''
+    files_list = []
     file = request.files.get('file')
     if file and file.filename:
         import hashlib
@@ -3993,10 +3998,26 @@ def submit_feedback():
         storage.save(file, key)
         file_path = key
         file_name = file.filename
+        files_list.append({'path': key, 'name': file.filename})
+    multi_files = request.files.getlist('files')
+    for f in multi_files:
+        if f and f.filename:
+            import hashlib
+            ext = os.path.splitext(f.filename)[1] or '.png'
+            md5 = hashlib.md5(f.read()).hexdigest()
+            f.seek(0)
+            save_name = md5 + ext
+            key = 'feedback_files/' + save_name
+            storage.save(f, key)
+            files_list.append({'path': key, 'name': f.filename})
+    files_json_str = json.dumps(files_list, ensure_ascii=False) if files_list else ''
+    if not file_path and files_list:
+        file_path = files_list[0]['path']
+        file_name = files_list[0]['name']
     conn = db.get_conn()
     try:
-        conn.execute('INSERT INTO feedbacks (club_name, user_id, type, title, body, activity_name, activity_time, file_path, file_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                     (club_name, user['id'], fb_type, title, body, activity_name, activity_time, file_path, file_name))
+        conn.execute('INSERT INTO feedbacks (club_name, user_id, type, title, body, activity_name, activity_time, file_path, file_name, files_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                     (club_name, user['id'], fb_type, title, body, activity_name, activity_time, file_path, file_name, files_json_str))
         conn.commit()
     finally:
         conn.close()
@@ -4036,6 +4057,26 @@ def get_feedback_file(fbid):
     return send_file(path, as_attachment=True, download_name=row['file_name'])
 
 
+@app.route('/api/feedback-file-by-key/<path:file_key>')
+def get_feedback_file_by_key(file_key):
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': '请先登录'}), 401
+    full_key = 'feedback_files/' + file_key
+    path = storage.get_path(full_key)
+    if not path:
+        url = storage.get_url(full_key)
+        if url:
+            return redirect(url)
+        return jsonify({'error': '文件不存在'}), 404
+    name = os.path.basename(file_key)
+    ext = os.path.splitext(name)[1].lower()
+    img_exts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp', '.svg']
+    if ext in img_exts:
+        return send_file(path, as_attachment=False)
+    return send_file(path, as_attachment=True, download_name=name)
+
+
 @app.route('/api/my-feedbacks')
 def my_feedbacks():
     user = get_current_user()
@@ -4043,7 +4084,7 @@ def my_feedbacks():
         return jsonify({'error': '请先登录'}), 401
     conn = db.get_conn()
     try:
-        rows = conn.execute('SELECT id, type, title, body, status, result, created_at, activity_name, activity_time, file_path, file_name FROM feedbacks WHERE user_id=? ORDER BY created_at DESC', (user['id'],)).fetchall()
+        rows = conn.execute('SELECT id, type, title, body, status, result, created_at, activity_name, activity_time, file_path, file_name, files_json FROM feedbacks WHERE user_id=? ORDER BY created_at DESC', (user['id'],)).fetchall()
     finally:
         conn.close()
     return jsonify({'success': True, 'data': [{'id': r['id'], 'type': r['type'], 'title': r['title'],
@@ -4051,7 +4092,8 @@ def my_feedbacks():
         'activityName': r['activity_name'] if 'activity_name' in r.keys() else '',
         'activityTime': r['activity_time'] if 'activity_time' in r.keys() else '',
         'filePath': r['file_path'] if 'file_path' in r.keys() else '',
-        'fileName': r['file_name'] if 'file_name' in r.keys() else ''} for r in rows]})
+        'fileName': r['file_name'] if 'file_name' in r.keys() else '',
+        'filesJson': r['files_json'] if 'files_json' in r.keys() else ''} for r in rows]})
 
 
 @app.route('/api/all-feedbacks')
@@ -4062,9 +4104,9 @@ def all_feedbacks():
     conn = db.get_conn()
     try:
         if user['role'] == 'admin':
-            rows = conn.execute('SELECT f.id, f.club_name, f.type, f.title, f.body, f.status, f.result, f.created_at, f.activity_name, f.activity_time, f.file_path, f.file_name FROM feedbacks f ORDER BY f.club_name, f.created_at DESC').fetchall()
+            rows = conn.execute('SELECT f.id, f.club_name, f.type, f.title, f.body, f.status, f.result, f.created_at, f.activity_name, f.activity_time, f.file_path, f.file_name, f.files_json FROM feedbacks f ORDER BY f.club_name, f.created_at DESC').fetchall()
         else:
-            rows = conn.execute('SELECT f.id, f.club_name, f.type, f.title, f.body, f.status, f.result, f.created_at, f.activity_name, f.activity_time, f.file_path, f.file_name FROM feedbacks f WHERE f.user_id=? ORDER BY f.created_at DESC', (user['id'],)).fetchall()
+            rows = conn.execute('SELECT f.id, f.club_name, f.type, f.title, f.body, f.status, f.result, f.created_at, f.activity_name, f.activity_time, f.file_path, f.file_name, f.files_json FROM feedbacks f WHERE f.user_id=? ORDER BY f.created_at DESC', (user['id'],)).fetchall()
     finally:
         conn.close()
     result = []
@@ -4081,7 +4123,8 @@ def all_feedbacks():
             'activityName': r['activity_name'] if 'activity_name' in r.keys() else '',
             'activityTime': r['activity_time'] if 'activity_time' in r.keys() else '',
             'filePath': r['file_path'] if 'file_path' in r.keys() else '',
-            'fileName': r['file_name'] if 'file_name' in r.keys() else ''
+            'fileName': r['file_name'] if 'file_name' in r.keys() else '',
+            'filesJson': r['files_json'] if 'files_json' in r.keys() else ''
         })
     return jsonify({'success': True, 'data': result})
 
@@ -12309,8 +12352,7 @@ def handle_checkin_sessions():
             date_params.append(end_date)
         conn = db.get_conn()
         try:
-            from datetime import datetime as _dt
-            _now = _dt.now()
+            _now = cn_now()
             expired = conn.execute("SELECT id FROM checkin_sessions WHERE club_name=? AND status='open' AND end_time IS NOT NULL AND end_time!='' AND datetime(end_time)<?", (club, _now.strftime('%Y-%m-%d %H:%M'))).fetchall()
             for e in expired:
                 conn.execute("UPDATE checkin_sessions SET status='closed', closed_at=CURRENT_TIMESTAMP WHERE id=?", (e['id'],))
@@ -12412,13 +12454,12 @@ def manage_checkin_session(sid):
             else:
                 return jsonify({'error': '无权限'}), 403
         if request.method == 'GET':
-            from datetime import datetime as _dt
             if sess_row['status'] == 'open':
                 end_time = sess_row['end_time'] if 'end_time' in sess_row.keys() else ''
                 if end_time:
                     try:
-                        et = _dt.strptime(end_time.replace('T', ' ')[:16], '%Y-%m-%d %H:%M')
-                        if _dt.now() > et:
+                        et = datetime.strptime(end_time.replace('T', ' ')[:16], '%Y-%m-%d %H:%M')
+                        if cn_now() > et:
                             conn.execute("UPDATE checkin_sessions SET status='closed', closed_at=CURRENT_TIMESTAMP WHERE id=?", (sid,))
                             conn.commit()
                             sess_row = conn.execute('SELECT * FROM checkin_sessions WHERE id=?', (sid,)).fetchone()
@@ -12745,13 +12786,12 @@ def student_checkin():
         sess_row = conn.execute('SELECT * FROM checkin_sessions WHERE checkin_code=?', (code,)).fetchone()
         if not sess_row:
             return jsonify({'error': '签到码无效'}), 404
-        from datetime import datetime as _dt
         if sess_row['status'] == 'open':
             end_time = sess_row['end_time'] if 'end_time' in sess_row.keys() else ''
             if end_time:
                 try:
-                    et = _dt.strptime(end_time.replace('T', ' ')[:16], '%Y-%m-%d %H:%M')
-                    if _dt.now() > et:
+                    et = datetime.strptime(end_time.replace('T', ' ')[:16], '%Y-%m-%d %H:%M')
+                    if cn_now() > et:
                         conn.execute("UPDATE checkin_sessions SET status='closed', closed_at=CURRENT_TIMESTAMP WHERE id=?", (sess_row['id'],))
                         conn.commit()
                         sess_row = conn.execute('SELECT * FROM checkin_sessions WHERE id=?', (sess_row['id'],)).fetchone()
@@ -12762,11 +12802,10 @@ def student_checkin():
         start_time = sess_row['start_time'] if 'start_time' in sess_row.keys() else ''
         end_time = sess_row['end_time'] if 'end_time' in sess_row.keys() else ''
         if start_time and end_time:
-            from datetime import datetime as dt
-            now = dt.now()
+            now = cn_now()
             try:
-                st = dt.strptime(start_time, '%Y-%m-%dT%H:%M')
-                et = dt.strptime(end_time, '%Y-%m-%dT%H:%M')
+                st = datetime.strptime(start_time, '%Y-%m-%dT%H:%M')
+                et = datetime.strptime(end_time, '%Y-%m-%dT%H:%M')
                 if now < st or now > et:
                     return jsonify({'error': '当前不在活动时间内，无法签到'}), 400
             except:
@@ -13123,11 +13162,10 @@ def location_checkin():
         start_time = sess_row['start_time'] if 'start_time' in sess_row.keys() else ''
         end_time = sess_row['end_time'] if 'end_time' in sess_row.keys() else ''
         if start_time and end_time:
-            from datetime import datetime as _dt
-            now = _dt.now()
+            now = cn_now()
             try:
-                st = _dt.strptime(start_time, '%Y-%m-%dT%H:%M')
-                et = _dt.strptime(end_time, '%Y-%m-%dT%H:%M')
+                st = datetime.strptime(start_time, '%Y-%m-%dT%H:%M')
+                et = datetime.strptime(end_time, '%Y-%m-%dT%H:%M')
                 if now < st or now > et:
                     conn.close()
                     return jsonify({'error': '当前不在活动时间内，无法签到'}), 400

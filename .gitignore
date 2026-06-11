@@ -21,3 +21,9 @@ test_results.txt
 
 # Session/secret keys
 secret_key.txt
+
+# Virtual environment
+venv/
+
+# Data files (contains uploaded files and database)
+data/
