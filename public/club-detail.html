@@ -191,7 +191,7 @@ a{text-decoration:none;color:inherit}
         </form>
         <form id="registerForm">
             <div class="form-group"><label>姓名</label><input type="text" id="regUser" placeholder="请输入真实姓名" autocomplete="username" /></div>
-            <div class="form-group"><label>密码</label><input type="password" id="regPass" placeholder="至少4个字符" autocomplete="new-password" /></div>
+            <div class="form-group"><label>密码</label><input type="password" id="regPass" placeholder="至少4位，需同时包含字母和数字" autocomplete="new-password" /></div>
             <div class="form-group"><label>确认密码</label><input type="password" id="regPass2" placeholder="再次输入密码" autocomplete="new-password" /></div>
             <div class="form-group"><label>学号 *</label><input type="text" id="regStudentId" placeholder="请输入学号" /></div>
             <div class="form-group club-field" id="clubField"><label>所属社团</label><select id="regClub"><option value="">— 选择社团 —</option></select></div>
@@ -254,6 +254,7 @@ document.getElementById('registerForm').addEventListener('submit',function(e){
     var u=document.getElementById('regUser').value.trim(),p=document.getElementById('regPass').value.trim(),p2=document.getElementById('regPass2').value.trim(),c=document.getElementById('regClub').value;
     if(!u||!p){showError('请输入姓名和密码');return}
     if(p!==p2){showError('两次密码不一致');return}
+    if(p.length<4 || !/[a-zA-Z]/.test(p) || !/[0-9]/.test(p)){showError('密码至少4位，需同时包含字母和数字');return}
     var sid=document.getElementById('regStudentId').value.trim();
     if(!sid){showError('请输入学号');return}
     fetch(api+'/api/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:u,password:p,clubName:c,studentId:sid})})

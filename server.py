@@ -1106,11 +1106,21 @@ def get_current_user():
             up = conn.execute('SELECT real_name FROM user_profiles WHERE user_id=?', (user_id,)).fetchone()
             if up and up['real_name']:
                 result['real_name'] = up['real_name']
-        if 'real_name' not in result:
-            result['real_name'] = ''
+        if 'real_name' not in result or not result['real_name']:
+            result['real_name'] = user['username']
         # 社团负责人如果 club_name 为空，尝试从 club_cadres/club_members 查找
         if user['role'] == 'user' and not result['club_name']:
             cr = conn.execute('SELECT DISTINCT club_name FROM club_cadres WHERE user_id=? UNION SELECT DISTINCT club_name FROM club_members WHERE user_id=?', (user_id, user_id)).fetchall()
+            if cr:
+                result['club_name'] = cr[0]['club_name']
+        # 指导老师如果 club_name 为空，尝试从 club_teachers 查找
+        if user['role'] == 'teacher' and not result['club_name']:
+            cr = conn.execute('SELECT DISTINCT club_name FROM club_teachers WHERE user_id=?', (user_id,)).fetchall()
+            if cr:
+                result['club_name'] = cr[0]['club_name']
+        # 如果仍为空，尝试从 teacher_clubs 查找
+        if user['role'] == 'teacher' and not result['club_name']:
+            cr = conn.execute('SELECT DISTINCT club_name FROM teacher_clubs WHERE user_id=?', (user_id,)).fetchall()
             if cr:
                 result['club_name'] = cr[0]['club_name']
     finally:
@@ -1148,8 +1158,8 @@ def register():
     club_names = data.get('clubNames', [])
     if not username or not password:
         return jsonify({'error': '请输入姓名和密码'}), 400
-    if len(username) < 2 or len(password) < 4:
-        return jsonify({'error': '用户名至少2位，密码至少4位'}), 400
+    if len(username) < 2 or len(password) < 4 or not re.search(r'[a-zA-Z]', password) or not re.search(r'[0-9]', password):
+        return jsonify({'error': '用户名至少2位，密码至少4位且需同时包含字母和数字'}), 400
     if role not in ('user', 'student', 'teacher'):
         role = 'user'
     if role == 'teacher':
@@ -1185,7 +1195,7 @@ def register():
                 send_notification(a['id'], '🏫 新社团注册', f'社团「{club_name}」已由 {username} 注册，已自动创建上传通道', 'info', '/dashboard.html', conn=conn)
             conn.commit()
         if student_id and role in ('user', 'student'):
-            real_name_reg = data.get('realName', '').strip()
+            real_name_reg = data.get('realName', '').strip() or username
             class_name_reg = data.get('className', '').strip()
             college_reg = data.get('college', '').strip()
             phone_reg = data.get('phone', '').strip()
@@ -1203,11 +1213,11 @@ def register():
                     pass
                 conn.execute('''INSERT INTO club_members (club_name, user_id, username, real_name, student_id_num, class_name, phone, department, specialty, college, source)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'registration')''',
-                    (first_club, user['id'], username, profile_data.get('real_name', ''), profile_data.get('student_id', student_id),
+                    (first_club, user['id'], username, profile_data.get('real_name', '') or username, profile_data.get('student_id', student_id),
                      profile_data.get('class_name', ''), profile_data.get('phone', ''), '', '', profile_data.get('college', '')))
             conn.commit()
         if role == 'teacher':
-            conn.execute('INSERT OR IGNORE INTO teacher_profiles (user_id, work_id) VALUES (?, ?)', (user['id'], work_id))
+            conn.execute('INSERT OR IGNORE INTO teacher_profiles (user_id, work_id, real_name) VALUES (?, ?, ?)', (user['id'], work_id, username))
             for cn in club_names:
                 cn = cn.strip()
                 if not cn:
@@ -1273,8 +1283,8 @@ def reset_password():
     new_password = data.get('newPassword', '').strip()
     if not email or not code or not new_password:
         return jsonify({'error': '请填写完整信息'}), 400
-    if len(new_password) < 4:
-        return jsonify({'error': '新密码至少4个字符'}), 400
+    if len(new_password) < 4 or not re.search(r'[a-zA-Z]', new_password) or not re.search(r'[0-9]', new_password):
+        return jsonify({'error': '新密码至少4位且需同时包含字母和数字'}), 400
     conn = db.get_conn()
     try:
         # 验证码已在verify步骤标记为已使用，此处检查已使用则说明未走验证流程
@@ -1357,6 +1367,11 @@ def update_department(did):
     description = data.get('description', '').strip()
     conn = db.get_conn()
     try:
+        dept = conn.execute('SELECT club_name FROM club_departments WHERE id=?', (did,)).fetchone()
+        if not dept:
+            return jsonify({'error': '部门不存在'}), 404
+        if user['role'] == 'user' and dept['club_name'] != user.get('club_name', ''):
+            return jsonify({'error': '无权操作该社团的部门'}), 403
         conn.execute('UPDATE club_departments SET dept_name=?, description=? WHERE id=?', (dept_name, description, did))
         conn.commit()
     finally:
@@ -1371,6 +1386,11 @@ def delete_department(did):
         return jsonify({'error': '请先登录'}), 401
     conn = db.get_conn()
     try:
+        dept = conn.execute('SELECT club_name FROM club_departments WHERE id=?', (did,)).fetchone()
+        if not dept:
+            return jsonify({'error': '部门不存在'}), 404
+        if user['role'] == 'user' and dept['club_name'] != user.get('club_name', ''):
+            return jsonify({'error': '无权操作该社团的部门'}), 403
         conn.execute('DELETE FROM club_departments WHERE id=?', (did,))
         conn.execute('UPDATE club_departments SET parent_id=0 WHERE parent_id=?', (did,))
         conn.commit()
@@ -1504,7 +1524,7 @@ def approve_registrations():
                 if reg['user_id'] and reg['user_id'] != 0:
                     member_count = conn.execute('SELECT COUNT(*) as c FROM club_members WHERE user_id=?', (reg['user_id'],)).fetchone()
                     if member_count and member_count['c'] >= 2:
-                        conn.execute('DELETE FROM club_registrations WHERE id=?', (rid,))
+                        conn.execute('UPDATE club_registrations SET status="rejected", reviewed_at=CURRENT_TIMESTAMP WHERE id=?', (rid,))
                         continue
                 existing = conn.execute('SELECT id FROM club_members WHERE club_name=? AND user_id=? AND user_id!=0', (reg['club_name'], reg['user_id'])).fetchone()
                 if not existing:
@@ -1512,9 +1532,9 @@ def approve_registrations():
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'registration')''',
                         (reg['club_name'], reg['user_id'], '', reg['student_name'], reg['student_id_num'],
                          reg['student_class'], reg['student_phone'], department or reg['department'] or '', reg['specialty'], reg['college'] if 'college' in reg.keys() else ''))
-                conn.execute('DELETE FROM club_registrations WHERE id=?', (rid,))
+                conn.execute('UPDATE club_registrations SET status="approved", reviewed_at=CURRENT_TIMESTAMP WHERE id=?', (rid,))
             else:
-                conn.execute('DELETE FROM club_registrations WHERE id=?', (rid,))
+                conn.execute('UPDATE club_registrations SET status="rejected", reviewed_at=CURRENT_TIMESTAMP WHERE id=?', (rid,))
         conn.commit()
     finally:
         conn.close()
@@ -1810,9 +1830,11 @@ def batch_replace_leaders():
 @app.route('/api/club-cadres', methods=['GET'])
 def get_club_cadres():
     user = get_current_user()
-    if not user or user['role'] != 'user':
-        return jsonify({'error': '仅社团负责人可操作'}), 403
+    if not user or user['role'] not in ('user', 'teacher'):
+        return jsonify({'error': '仅社团负责人或指导老师可操作'}), 403
     club_name = user.get('club_name') or ''
+    if user['role'] == 'teacher' and request.args.get('club'):
+        club_name = request.args.get('club')
     if not club_name:
         return jsonify({'error': '未关联社团'}), 400
     conn = db.get_conn()
@@ -1827,9 +1849,11 @@ def get_club_cadres():
 @app.route('/api/club-cadres', methods=['POST'])
 def add_club_cadre():
     user = get_current_user()
-    if not user or user['role'] != 'user':
-        return jsonify({'error': '仅社团负责人可操作'}), 403
+    if not user or user['role'] not in ('user', 'teacher'):
+        return jsonify({'error': '仅社团负责人或指导老师可操作'}), 403
     club_name = user.get('club_name') or ''
+    if user['role'] == 'teacher' and (request.get_json() or {}).get('clubName'):
+        club_name = (request.get_json() or {}).get('clubName')
     if not club_name:
         return jsonify({'error': '未关联社团'}), 400
     data = request.get_json() or {}
@@ -1873,16 +1897,13 @@ def add_club_cadre():
 @app.route('/api/club-cadres/<int:cadre_id>', methods=['DELETE'])
 def delete_club_cadre(cadre_id):
     user = get_current_user()
-    if not user or user['role'] != 'user':
-        return jsonify({'error': '仅社团负责人可操作'}), 403
-    club_name = user.get('club_name') or ''
+    if not user or user['role'] not in ('user', 'teacher'):
+        return jsonify({'error': '仅社团负责人或指导老师可操作'}), 403
     conn = db.get_conn()
     try:
         row = conn.execute('SELECT club_name FROM club_cadres WHERE id=?', (cadre_id,)).fetchone()
         if not row:
             return jsonify({'error': '记录不存在'}), 404
-        if row['club_name'] != club_name:
-            return jsonify({'error': '无权操作'}), 403
         conn.execute('DELETE FROM club_cadres WHERE id=?', (cadre_id,))
         conn.commit()
     finally:
@@ -2169,8 +2190,8 @@ def change_password():
     new_pass = data.get('newPassword', '').strip()
     if not old_pass or not new_pass:
         return jsonify({'error': '请输入当前密码和新密码'}), 400
-    if len(new_pass) < 4:
-        return jsonify({'error': '新密码至少4位'}), 400
+    if len(new_pass) < 4 or not re.search(r'[a-zA-Z]', new_pass) or not re.search(r'[0-9]', new_pass):
+        return jsonify({'error': '新密码至少4位且需同时包含字母和数字'}), 400
     conn = db.get_conn()
     try:
         row = conn.execute('SELECT password FROM users WHERE id=?', (user['id'],)).fetchone()
@@ -2439,6 +2460,11 @@ def delete_club_notice(nid):
         return jsonify({'error': '请先登录'}), 401
     conn = db.get_conn()
     try:
+        notice = conn.execute('SELECT club_name FROM club_notices WHERE id=?', (nid,)).fetchone()
+        if not notice:
+            return jsonify({'error': '通知不存在'}), 404
+        if user['role'] == 'user' and notice['club_name'] != user.get('club_name', ''):
+            return jsonify({'error': '无权删除该社团的通知'}), 403
         conn.execute('DELETE FROM club_notices WHERE id=?', (nid,))
         conn.commit()
     finally:
@@ -2457,6 +2483,10 @@ def batch_delete_club_notices():
         return jsonify({'error': '请选择要删除的通知'}), 400
     conn = db.get_conn()
     try:
+        for nid in ids:
+            notice = conn.execute('SELECT club_name FROM club_notices WHERE id=?', (nid,)).fetchone()
+            if notice and user['role'] == 'user' and notice['club_name'] != user.get('club_name', ''):
+                return jsonify({'error': '无权删除该社团的通知'}), 403
         placeholders = ','.join(['?' for _ in ids])
         conn.execute(f'DELETE FROM club_notices WHERE id IN ({placeholders})', ids)
         conn.commit()
@@ -2740,14 +2770,35 @@ def nav_badges():
             badges['checkin'] = checkin_count
         elif user['role'] == 'teacher':
             teacher_name = user.get('username') or ''
+            # 获取指导老师关联的社团列表
+            teacher_club_list = []
+            try:
+                teacher_club_list = [r['club_name'] for r in conn.execute('SELECT club_name FROM teacher_clubs WHERE user_id=?', (user['id'],)).fetchall()]
+                if not teacher_club_list:
+                    teacher_club_list = [r['club_name'] for r in conn.execute('SELECT club_name FROM club_teachers WHERE user_id=?', (user['id'],)).fetchall()]
+                if user.get('club_name') and user['club_name'] not in teacher_club_list:
+                    teacher_club_list.append(user['club_name'])
+                teacher_club_list = [c for c in teacher_club_list if c]
+            except:
+                pass
             admin_notify_read_at = feature_reads.get('adminNotify')
-            if admin_notify_read_at:
-                total_admin_notifs = conn.execute("SELECT COUNT(*) as c FROM admin_notifications WHERE created_at>? AND (target_type=? OR (target_type=? AND (target_club=? OR ','||target_club||',' LIKE '%,'||?||',%')))", (admin_notify_read_at, 'all_teachers', 'specific_teacher', teacher_name, teacher_name)).fetchone()['c']
-                badges['adminNotify'] = max(0, total_admin_notifs)
+            if teacher_club_list:
+                placeholders_tc = ','.join(['?'] * len(teacher_club_list))
+                if admin_notify_read_at:
+                    total_admin_notifs = conn.execute(f"SELECT COUNT(*) as c FROM admin_notifications WHERE created_at>? AND (target_type=? OR (target_type=? AND (target_club=? OR ','||target_club||',' LIKE '%,'||?||',%')) OR (target_type=? AND target_club IN ({placeholders_tc})))", [admin_notify_read_at, 'all_teachers', 'specific_teacher', teacher_name, teacher_name, 'specific_teacher'] + teacher_club_list).fetchone()['c']
+                    badges['adminNotify'] = max(0, total_admin_notifs)
+                else:
+                    total_admin_notifs = conn.execute(f"SELECT COUNT(*) as c FROM admin_notifications WHERE target_type=? OR (target_type=? AND (target_club=? OR ','||target_club||',' LIKE '%,'||?||',%')) OR (target_type=? AND target_club IN ({placeholders_tc}))", ['all_teachers', 'specific_teacher', teacher_name, teacher_name, 'specific_teacher'] + teacher_club_list).fetchone()['c']
+                    read_admin_notifs = conn.execute(f"SELECT COUNT(DISTINCT r.notification_id) as c FROM admin_notification_reads r JOIN admin_notifications n ON r.notification_id=n.id WHERE r.user_id=? AND (n.target_type=? OR (n.target_type=? AND (n.target_club=? OR ','||n.target_club||',' LIKE '%,'||?||',%')) OR (n.target_type=? AND n.target_club IN ({placeholders_tc})))", [user['id'], 'all_teachers', 'specific_teacher', teacher_name, teacher_name, 'specific_teacher'] + teacher_club_list).fetchone()['c']
+                    badges['adminNotify'] = max(0, total_admin_notifs - read_admin_notifs)
             else:
-                total_admin_notifs = conn.execute("SELECT COUNT(*) as c FROM admin_notifications WHERE target_type=? OR (target_type=? AND (target_club=? OR ','||target_club||',' LIKE '%,'||?||',%'))", ('all_teachers', 'specific_teacher', teacher_name, teacher_name)).fetchone()['c']
-                read_admin_notifs = conn.execute("SELECT COUNT(DISTINCT r.notification_id) as c FROM admin_notification_reads r JOIN admin_notifications n ON r.notification_id=n.id WHERE r.user_id=? AND (n.target_type=? OR (n.target_type=? AND (n.target_club=? OR ','||n.target_club||',' LIKE '%,'||?||',%')))", (user['id'], 'all_teachers', 'specific_teacher', teacher_name, teacher_name)).fetchone()['c']
-                badges['adminNotify'] = max(0, total_admin_notifs - read_admin_notifs)
+                if admin_notify_read_at:
+                    total_admin_notifs = conn.execute("SELECT COUNT(*) as c FROM admin_notifications WHERE created_at>? AND (target_type=? OR (target_type=? AND (target_club=? OR ','||target_club||',' LIKE '%,'||?||',%')))", (admin_notify_read_at, 'all_teachers', 'specific_teacher', teacher_name, teacher_name)).fetchone()['c']
+                    badges['adminNotify'] = max(0, total_admin_notifs)
+                else:
+                    total_admin_notifs = conn.execute("SELECT COUNT(*) as c FROM admin_notifications WHERE target_type=? OR (target_type=? AND (target_club=? OR ','||target_club||',' LIKE '%,'||?||',%'))", ('all_teachers', 'specific_teacher', teacher_name, teacher_name)).fetchone()['c']
+                    read_admin_notifs = conn.execute("SELECT COUNT(DISTINCT r.notification_id) as c FROM admin_notification_reads r JOIN admin_notifications n ON r.notification_id=n.id WHERE r.user_id=? AND (n.target_type=? OR (n.target_type=? AND (n.target_club=? OR ','||n.target_club||',' LIKE '%,'||?||',%')))", (user['id'], 'all_teachers', 'specific_teacher', teacher_name, teacher_name)).fetchone()['c']
+                    badges['adminNotify'] = max(0, total_admin_notifs - read_admin_notifs)
             try:
                 teacher_club_list = [r['club_name'] for r in conn.execute('SELECT club_name FROM teacher_clubs WHERE user_id=?', (user['id'],)).fetchall()]
                 if not teacher_club_list:
@@ -4016,7 +4067,7 @@ def submit_feedback():
         file_name = files_list[0]['name']
     conn = db.get_conn()
     try:
-        conn.execute('INSERT INTO feedbacks (club_name, user_id, type, title, body, activity_name, activity_time, file_path, file_name, files_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        conn.execute('INSERT INTO feedbacks (club_name, user_id, type, title, body, activity_name, activity_time, file_path, file_name, files_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                      (club_name, user['id'], fb_type, title, body, activity_name, activity_time, file_path, file_name, files_json_str))
         conn.commit()
     finally:
@@ -5360,7 +5411,7 @@ def get_low_activity_clubs():
 @app.route('/api/export-low-activity-clubs')
 def export_low_activity_clubs():
     user = get_current_user()
-    if not user or user['role'] != 'admin':
+    if not user or user['role'] not in ('admin', 'user'):
         return jsonify({'error': '无权限'}), 403
     try:
         from openpyxl import Workbook
@@ -6770,7 +6821,7 @@ AI_TOOLS = [
         'type': 'function',
         'function': {
             'name': 'create_entity',
-            'description': '创建实体。支持创建：活动、招募、投票、问卷、报名表、通知、联合活动申请、材料审批单、校外活动审批单。需要提供实体类型和属性。创建前会检查用户权限。',
+            'description': '创建实体。支持创建：活动、招募、投票、问卷、报名表、通知、联合活动申请、材料审批单、校外活动审批单。需要提供实体类型和属性。创建前会检查用户权限。创建投票/问卷/报名表时必须提供deadline截止时间，否则会报错。',
             'parameters': {
                 'type': 'object',
                 'properties': {
@@ -6781,15 +6832,17 @@ AI_TOOLS = [
                     },
                     'attributes': {
                         'type': 'object',
-                        'description': '实体属性，如活动名称、时间、地点等',
+                        'description': '实体属性。创建招募(recruitment)时必须包含：name(招募标题)、club_name(社团名)、description(招募描述)、start_time(招募开始时间)、end_time(招募截止时间)、max_count(招募人数)。创建投票(vote)/问卷(survey)/报名表(registration_form)时必须包含deadline(截止时间)。',
                         'properties': {
                             'name': {'type': 'string', 'description': '名称'},
                             'club_name': {'type': 'string', 'description': '社团名称'},
                             'description': {'type': 'string', 'description': '描述'},
-                            'start_time': {'type': 'string', 'description': '开始时间'},
-                            'end_time': {'type': 'string', 'description': '结束时间'},
+                            'start_time': {'type': 'string', 'description': '开始时间（如：2025-06-15）'},
+                            'end_time': {'type': 'string', 'description': '结束/截止时间（如：2025-06-30）'},
+                            'deadline': {'type': 'string', 'description': '截止时间（投票/问卷/报名表必填，如：2025-06-30 23:59）'},
                             'location': {'type': 'string', 'description': '地点'},
                             'content': {'type': 'string', 'description': '内容'},
+                            'max_count': {'type': 'integer', 'description': '招募人数（创建招募时必填）'},
                             'options': {'type': 'array', 'items': {'type': 'string'}, 'description': '选项列表（投票/问卷）'},
                             'max_participants': {'type': 'integer', 'description': '最大参与人数'},
                             'checkin_method': {'type': 'string', 'enum': ['code', 'qrcode', 'gps'], 'description': '签到方式'}
@@ -6804,14 +6857,14 @@ AI_TOOLS = [
         'type': 'function',
         'function': {
             'name': 'update_entity',
-            'description': '更新实体状态或属性。支持：修改活动时间、审批报名、赋分审核、签到/签退、成员加入/退社、审批材料等。涉及资源变更的操作会先确认。',
+            'description': '更新实体状态或属性。支持：修改活动时间、审批报名、赋分审核、签到/签退、成员加入/退社、审批材料、截止投票/问卷/报名表/招募等。截止投票/问卷/报名表时使用entity_type=vote或tool，action=close；截止招募时使用entity_type=recruitment，action=close。涉及资源变更的操作会先确认。',
             'parameters': {
                 'type': 'object',
                 'properties': {
                     'entity_type': {
                         'type': 'string',
-                        'enum': ['activity', 'registration', 'scoring', 'checkin', 'member', 'material', 'workload', 'offcampus', 'finance_permission'],
-                        'description': '实体类型'
+                        'enum': ['activity', 'registration', 'scoring', 'checkin', 'member', 'material', 'workload', 'offcampus', 'finance_permission', 'vote', 'tool', 'recruitment'],
+                        'description': '实体类型。vote/tool/recruitment支持close操作来截止/结束'
                     },
                     'entity_id': {
                         'type': 'integer',
@@ -6837,17 +6890,17 @@ AI_TOOLS = [
         'type': 'function',
         'function': {
             'name': 'send_notification',
-            'description': '发送通知给特定角色或用户。支持发送给：特定成员、全体成员、社团负责人群、指导老师、管理员。',
+            'description': '发送通知给特定角色或用户。当指定club_name时，只发送给该社团的对应角色用户；不指定club_name时发送给全校该角色用户。',
             'parameters': {
                 'type': 'object',
                 'properties': {
                     'target': {
                         'type': 'string',
-                        'description': '接收方：角色名(admin/user/teacher/student)、用户ID、或"all_members"全体成员'
+                        'description': '接收方角色：admin(管理员)、user(社团负责人)、teacher(指导老师)、student(学生)、all_members(社团全体成员)'
                     },
                     'club_name': {
                         'type': 'string',
-                        'description': '社团名称，发送社团通知时需要'
+                        'description': '社团名称。发送给某社团的特定角色时必须指定，例如给书法协会的指导老师发通知时需传club_name=书法协会+target=teacher'
                     },
                     'content': {
                         'type': 'string',
@@ -7481,13 +7534,20 @@ def execute_tool_call(function_name, arguments, current_user=None):
                 cn = attrs.get('club_name', '')
                 title = attrs.get('name', '招募')
                 desc = attrs.get('description', '')
+                start_time = attrs.get('start_time', '')
+                deadline = attrs.get('end_time', '') or attrs.get('deadline', '')
+                max_count = attrs.get('max_count', 0) or attrs.get('recruit_count', 0) or 0
                 if not cn:
                     return json.dumps({'error': '创建招募需要指定社团名称'}, ensure_ascii=False)
+                if not max_count:
+                    return json.dumps({'error': '创建招募需要指定招募人数，请询问用户招募多少人'}, ensure_ascii=False)
+                if not deadline:
+                    return json.dumps({'error': '创建招募需要指定截止时间，请询问用户招募截止时间'}, ensure_ascii=False)
                 try:
-                    conn.execute('INSERT INTO recruitments (club_name, title, description, status, created_at) VALUES (?, ?, ?, "pending", CURRENT_TIMESTAMP)', (cn, title, desc))
+                    conn.execute('INSERT INTO recruitments (club_name, title, description, max_count, deadline, status, created_by, created_at) VALUES (?, ?, ?, ?, ?, "pending", ?, CURRENT_TIMESTAMP)', (cn, title, desc, max_count, deadline, user_id))
                     conn.commit()
                     rid = conn.execute('SELECT last_insert_rowid() as id').fetchone()['id']
-                    result_data = {'success': True, 'id': rid, 'message': f'招募"{title}"已创建，等待审批'}
+                    result_data = {'success': True, 'id': rid, 'message': f'招募"{title}"已创建，招募{max_count}人，截止{deadline}，等待审批'}
                 except Exception as e:
                     result_data = {'error': f'创建招募失败：{str(e)}'}
             elif entity_type == 'notification':
@@ -7507,26 +7567,32 @@ def execute_tool_call(function_name, arguments, current_user=None):
                 cn = attrs.get('club_name', '')
                 title = attrs.get('name', '投票')
                 options = attrs.get('options', [])
+                deadline = attrs.get('deadline', attrs.get('end_time', ''))
                 if not cn:
                     return json.dumps({'error': '创建投票需要指定社团名称'}, ensure_ascii=False)
+                if not deadline:
+                    return json.dumps({'error': '创建投票需要指定截止时间，请向用户询问截止时间'}, ensure_ascii=False)
                 try:
-                    conn.execute('INSERT INTO club_tools (club_name, tool_type, title, options, status, created_at) VALUES (?, "vote", ?, ?, "active", CURRENT_TIMESTAMP)', (cn, title, json.dumps(options, ensure_ascii=False)))
+                    conn.execute('INSERT INTO club_tools (club_name, tool_type, title, options, deadline, status, created_at) VALUES (?, "vote", ?, ?, ?, "active", CURRENT_TIMESTAMP)', (cn, title, json.dumps(options, ensure_ascii=False), deadline))
                     conn.commit()
                     vid = conn.execute('SELECT last_insert_rowid() as id').fetchone()['id']
-                    result_data = {'success': True, 'id': vid, 'message': f'投票"{title}"已创建'}
+                    result_data = {'success': True, 'id': vid, 'message': f'投票"{title}"已创建，截止时间：{deadline}'}
                 except Exception as e:
                     result_data = {'error': f'创建投票失败：{str(e)}'}
             elif entity_type == 'survey':
                 cn = attrs.get('club_name', '')
                 title = attrs.get('name', '问卷')
                 options = attrs.get('options', [])
+                deadline = attrs.get('deadline', attrs.get('end_time', ''))
                 if not cn:
                     return json.dumps({'error': '创建问卷需要指定社团名称'}, ensure_ascii=False)
+                if not deadline:
+                    return json.dumps({'error': '创建问卷需要指定截止时间，请向用户询问截止时间'}, ensure_ascii=False)
                 try:
-                    conn.execute('INSERT INTO club_tools (club_name, tool_type, title, options, status, created_at) VALUES (?, "survey", ?, ?, "active", CURRENT_TIMESTAMP)', (cn, title, json.dumps(options, ensure_ascii=False)))
+                    conn.execute('INSERT INTO club_tools (club_name, tool_type, title, options, deadline, status, created_at) VALUES (?, "survey", ?, ?, ?, "active", CURRENT_TIMESTAMP)', (cn, title, json.dumps(options, ensure_ascii=False), deadline))
                     conn.commit()
                     sid = conn.execute('SELECT last_insert_rowid() as id').fetchone()['id']
-                    result_data = {'success': True, 'id': sid, 'message': f'问卷"{title}"已创建'}
+                    result_data = {'success': True, 'id': sid, 'message': f'问卷"{title}"已创建，截止时间：{deadline}'}
                 except Exception as e:
                     result_data = {'error': f'创建问卷失败：{str(e)}'}
             elif entity_type == 'joint_activity':
@@ -7546,13 +7612,16 @@ def execute_tool_call(function_name, arguments, current_user=None):
             elif entity_type == 'registration_form':
                 cn = attrs.get('club_name', '')
                 title = attrs.get('name', '报名表')
+                deadline = attrs.get('deadline', attrs.get('end_time', ''))
                 if not cn:
                     return json.dumps({'error': '创建报名表需要指定社团名称'}, ensure_ascii=False)
+                if not deadline:
+                    return json.dumps({'error': '创建报名表需要指定截止时间，请向用户询问截止时间'}, ensure_ascii=False)
                 try:
-                    conn.execute('INSERT INTO club_tools (club_name, tool_type, title, status, created_at) VALUES (?, "registration", ?, "active", CURRENT_TIMESTAMP)', (cn, title))
+                    conn.execute('INSERT INTO club_tools (club_name, tool_type, title, deadline, status, created_at) VALUES (?, "registration", ?, ?, "active", CURRENT_TIMESTAMP)', (cn, title, deadline))
                     conn.commit()
                     rid = conn.execute('SELECT last_insert_rowid() as id').fetchone()['id']
-                    result_data = {'success': True, 'id': rid, 'message': f'报名表"{title}"已创建'}
+                    result_data = {'success': True, 'id': rid, 'message': f'报名表"{title}"已创建，截止时间：{deadline}'}
                 except Exception as e:
                     result_data = {'error': f'创建报名表失败：{str(e)}'}
             else:
@@ -7562,6 +7631,10 @@ def execute_tool_call(function_name, arguments, current_user=None):
         elif function_name == 'update_entity':
             entity_type = arguments.get('entity_type', '')
             entity_id = arguments.get('entity_id', 0)
+            try:
+                entity_id = int(entity_id)
+            except (ValueError, TypeError):
+                pass
             updates = arguments.get('updates', {}) or {}
             result_data = {}
             # 权限校验
@@ -7737,8 +7810,44 @@ def execute_tool_call(function_name, arguments, current_user=None):
                         result_data = {'error': str(e)}
                 else:
                     result_data = {'error': '成员操作请使用 join 或 leave'}
+            elif entity_type in ('vote', 'tool'):
+                action = updates.get('action', updates.get('status', ''))
+                if action in ('close', 'closed', 'end', 'ended'):
+                    try:
+                        tool_row = conn.execute('SELECT id, title, club_name, tool_type, status FROM club_tools WHERE id=?', (entity_id,)).fetchone()
+                        if not tool_row:
+                            result_data = {'error': '该工具不存在'}
+                        elif tool_row['status'] == 'closed':
+                            result_data = {'error': '该工具已截止'}
+                        else:
+                            conn.execute('UPDATE club_tools SET status="closed" WHERE id=?', (entity_id,))
+                            conn.commit()
+                            type_names = {'vote': '投票', 'survey': '问卷', 'signup': '报名', 'chain': '接龙', 'registration': '报名表'}
+                            tn = type_names.get(tool_row['tool_type'] if tool_row else '', '工具')
+                            result_data = {'success': True, 'message': f'{tn}"{tool_row["title"]}"已截止'}
+                    except Exception as e:
+                        result_data = {'error': str(e)}
+                else:
+                    result_data = {'error': '投票/工具操作请使用 close 来截止'}
+            elif entity_type == 'recruitment':
+                action = updates.get('action', updates.get('status', ''))
+                if action in ('close', 'closed', 'end', 'ended'):
+                    try:
+                        rec = conn.execute('SELECT id, title, club_name, status FROM recruitments WHERE id=?', (entity_id,)).fetchone()
+                        if not rec:
+                            result_data = {'error': '该招募不存在'}
+                        elif rec['status'] in ('closed', 'ended'):
+                            result_data = {'error': '该招募已截止'}
+                        else:
+                            conn.execute('UPDATE recruitments SET status="closed" WHERE id=?', (entity_id,))
+                            conn.commit()
+                            result_data = {'success': True, 'message': f'招募"{rec["title"]}"已截止'}
+                    except Exception as e:
+                        result_data = {'error': str(e)}
+                else:
+                    result_data = {'error': '招募操作请使用 close 来截止'}
             else:
-                result_data = {'error': f'暂不支持更新类型：{entity_type}', 'hint': '当前支持：activity, registration, workload, scoring, material, offcampus, finance_permission, checkin, member'}
+                result_data = {'error': f'暂不支持更新类型：{entity_type}', 'hint': '当前支持：activity, registration, workload, scoring, material, offcampus, finance_permission, checkin, member, vote, tool, recruitment'}
             return json.dumps(result_data, ensure_ascii=False, default=str)
 
         elif function_name == 'send_notification':
@@ -7762,15 +7871,56 @@ def execute_tool_call(function_name, arguments, current_user=None):
                 if target == 'all_members' and cn:
                     count = conn.execute('SELECT COUNT(*) as c FROM club_members WHERE club_name=?', (cn,)).fetchone()['c']
                     conn.execute('INSERT INTO club_notices (club_name, title, content, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)', (cn, '系统通知', content))
+                    # 同时给社团成员发送个人通知
+                    members = conn.execute('SELECT user_id FROM club_members WHERE club_name=?', (cn,)).fetchall()
+                    for m in members:
+                        send_notification(m['user_id'], '📢 社团通知', f'「{cn}」{content}', 'club_notice', f'club_notice:', conn=conn)
                     conn.commit()
                     result_data = {'success': True, 'message': f'通知已发送给{cn}全体成员（{count}人）'}
-                elif target in ('admin', 'user', 'teacher', 'student'):
-                    count = conn.execute('SELECT COUNT(*) as c FROM users WHERE role=?', (target,)).fetchone()['c']
-                    result_data = {'success': True, 'message': f'通知已发送给{count}位{target}角色用户', 'note': '系统内通知已记录'}
-                elif cn:
-                    conn.execute('INSERT INTO club_notices (club_name, title, content, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)', (cn, '系统通知', content))
+                elif target in ('admin', 'user', 'teacher', 'student') and cn:
+                    # 指定了角色+社团名称，只发给该社团的对应角色用户
+                    if target == 'user':
+                        target_users = conn.execute('SELECT id FROM users WHERE role=? AND club_name=?', (target, cn)).fetchall()
+                    elif target == 'teacher':
+                        target_users = conn.execute('SELECT user_id as id FROM teacher_clubs WHERE club_name=?', (cn,)).fetchall()
+                        if not target_users:
+                            target_users = conn.execute('SELECT user_id as id FROM club_teachers WHERE club_name=?', (cn,)).fetchall()
+                    elif target == 'student':
+                        target_users = conn.execute('SELECT user_id as id FROM club_members WHERE club_name=?', (cn,)).fetchall()
+                    else:
+                        target_users = conn.execute('SELECT id FROM users WHERE role=?', (target,)).fetchall()
+                    target_label = {'admin': '管理员', 'user': '社团负责人', 'teacher': '指导老师', 'student': '学生'}.get(target, target)
+                    # 写入admin_notifications表，让"管理员通知"页面可见
+                    # specific_teacher用target_club存社团名，查询时用社团名匹配指导老师
+                    admin_target_type = {'user': 'specific_leader', 'teacher': 'specific_teacher', 'student': 'all_students'}.get(target, 'all_leaders')
+                    conn.execute('INSERT INTO admin_notifications (title, content, target_type, target_club, sender_id) VALUES (?, ?, ?, ?, ?)',
+                                (f'📢 {cn}通知', content, admin_target_type, cn, user_id))
+                    # 同时写入notifications表，让"消息通知"可见
+                    for u in target_users:
+                        send_notification(u['id'], f'📢 {cn}通知', content, 'system', '', conn=conn)
                     conn.commit()
-                    result_data = {'success': True, 'message': f'通知已发送到{cn}'}
+                    result_data = {'success': True, 'message': f'通知已发送给{cn}的{len(target_users)}位{target_label}'}
+                elif target in ('admin', 'user', 'teacher', 'student'):
+                    # 只指定了角色，没有指定社团，发给所有该角色用户
+                    target_users = conn.execute('SELECT id FROM users WHERE role=?', (target,)).fetchall()
+                    target_label = {'admin': '管理员', 'user': '社团负责人', 'teacher': '指导老师', 'student': '学生'}.get(target, target)
+                    # 写入admin_notifications表
+                    admin_target_type = {'user': 'all_leaders', 'teacher': 'all_teachers', 'student': 'all_students'}.get(target, 'all_leaders')
+                    conn.execute('INSERT INTO admin_notifications (title, content, target_type, target_club, sender_id) VALUES (?, ?, ?, ?, ?)',
+                                ('📢 系统通知', content, admin_target_type, '', user_id))
+                    for u in target_users:
+                        send_notification(u['id'], '📢 系统通知', content, 'system', '', conn=conn)
+                    conn.commit()
+                    result_data = {'success': True, 'message': f'通知已发送给{len(target_users)}位{target_label}'}
+                elif cn:
+                    # 发送给指定社团
+                    conn.execute('INSERT INTO club_notices (club_name, title, content, created_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)', (cn, '系统通知', content))
+                    # 同时给社团成员发送个人通知
+                    members = conn.execute('SELECT user_id FROM club_members WHERE club_name=?', (cn,)).fetchall()
+                    for m in members:
+                        send_notification(m['user_id'], '📢 社团通知', f'「{cn}」{content}', 'club_notice', f'club_notice:', conn=conn)
+                    conn.commit()
+                    result_data = {'success': True, 'message': f'通知已发送到{cn}（{len(members)}人）'}
                 else:
                     result_data = {'error': '请指定通知目标（target）或社团名称（club_name）'}
             except Exception as e:
@@ -7949,7 +8099,11 @@ def execute_tool_call(function_name, arguments, current_user=None):
                 result_data = {'recommendations': [dict(r) for r in other_clubs], 'message': f'适合与{cn}联合活动的社团推荐'}
             elif rec_type == 'recruitment':
                 # 推荐进行中的招募活动，优先推荐用户未报名的
-                recruitments = conn.execute('SELECT r.id, r.club_name, r.title, r.description, r.status, r.created_at, COUNT(rs.id) as signup_count FROM recruitments r LEFT JOIN recruitment_signups rs ON r.id=rs.recruitment_id WHERE r.status="open" OR r.status="active" GROUP BY r.id ORDER BY r.created_at DESC LIMIT 5').fetchall()
+                recruit_type_filter = arguments.get('recruit_type', '')
+                if recruit_type_filter:
+                    recruitments = conn.execute('SELECT r.id, r.club_name, r.title, r.description, r.status, r.recruit_type, r.deadline, r.created_at, COUNT(rs.id) as signup_count FROM recruitments r LEFT JOIN recruitment_signups rs ON r.id=rs.recruitment_id WHERE r.status="approved" AND r.recruit_type=? GROUP BY r.id ORDER BY r.created_at DESC LIMIT 5', (recruit_type_filter,)).fetchall()
+                else:
+                    recruitments = conn.execute('SELECT r.id, r.club_name, r.title, r.description, r.status, r.recruit_type, r.deadline, r.created_at, COUNT(rs.id) as signup_count FROM recruitments r LEFT JOIN recruitment_signups rs ON r.id=rs.recruitment_id WHERE r.status="approved" GROUP BY r.id ORDER BY r.created_at DESC LIMIT 5').fetchall()
                 items = [dict(r) for r in recruitments]
                 # 如果是学生，标记是否已报名
                 if user_role == 'student' and items:
@@ -9406,18 +9560,34 @@ class NotificationAgent:
         conn = self.db.get_conn()
         try:
             sent = 0
-            admin_users = conn.execute("SELECT id FROM users WHERE role='admin'").fetchall()
             for alert in alerts[:10]:
-                for admin in admin_users:
-                    existing = conn.execute('''SELECT id FROM notifications WHERE user_id=? AND title=? AND created_at>=datetime("now","localtime","-24 hours")''',
-                                            (admin['id'], f'[预警] {alert["type"]}')).fetchone()
-                    if not existing:
-                        send_notification(admin['id'], f'[预警] {alert["type"]}', alert['message'], 'warning', '', conn=conn)
-                        sent += 1
+                club_name = alert.get('club_name', '')
+                if club_name:
+                    # 发送给该社团的指导老师
+                    teachers = conn.execute("SELECT user_id FROM teacher_clubs WHERE club_name=?", (club_name,)).fetchall()
+                    if not teachers:
+                        # 没有指导老师则发给社团负责人
+                        leaders = conn.execute("SELECT id FROM users WHERE role='user' AND club_name=?", (club_name,)).fetchall()
+                        teachers = [{'user_id': l['id']} for l in leaders]
+                    for t in teachers:
+                        existing = conn.execute('''SELECT id FROM notifications WHERE user_id=? AND title=? AND created_at>=datetime("now","localtime","-24 hours")''',
+                                                (t['user_id'], f'[预警] {alert["type"]}')).fetchone()
+                        if not existing:
+                            send_notification(t['user_id'], f'[预警] {alert["type"]}', alert['message'], 'warning', '', conn=conn)
+                            sent += 1
+                else:
+                    # 无特定社团的预警，发给所有指导老师
+                    teachers = conn.execute("SELECT DISTINCT user_id FROM teacher_clubs").fetchall()
+                    for t in teachers:
+                        existing = conn.execute('''SELECT id FROM notifications WHERE user_id=? AND title=? AND created_at>=datetime("now","localtime","-24 hours")''',
+                                                (t['user_id'], f'[预警] {alert["type"]}')).fetchone()
+                        if not existing:
+                            send_notification(t['user_id'], f'[预警] {alert["type"]}', alert['message'], 'warning', '', conn=conn)
+                            sent += 1
             conn.commit()
         finally:
             conn.close()
-        return {'sent': sent, 'total_alerts': len(alerts), 'message': f'发现{len(alerts)}条预警，已发送{sent}条通知'}
+        return {'sent': sent, 'total_alerts': len(alerts), 'message': f'发现{len(alerts)}条预警，已发送{sent}条通知给指导老师'}
 
 
 class DataInsightAgent:
@@ -9955,6 +10125,8 @@ def smart_intent_detect(message, user):
         attrs = {'name': original}
         if cn:
             attrs['club_name'] = cn
+        # 提示AI需要收集招募必要信息
+        attrs['_need_info'] = '创建招募需要：1.招募开始时间 2.招募截止时间 3.招募人数，请向用户询问这些信息后再创建'
         intents.append({'tool': 'create_entity', 'args': {'entity_type': 'recruitment', 'attributes': attrs}})
 
     # 发送通知意图
@@ -9967,6 +10139,20 @@ def smart_intent_detect(message, user):
         if cn:
             args['club_name'] = cn
         intents.append({'tool': 'send_notification', 'args': args})
+
+    # 截止投票/问卷/招募意图
+    close_vote_kw = ['截止投票', '结束投票', '关闭投票', '停止投票', '投票截止', '投票结束']
+    close_survey_kw = ['截止问卷', '结束问卷', '关闭问卷', '停止问卷', '问卷截止', '问卷结束']
+    close_recruit_kw = ['截止招募', '结束招募', '关闭招募', '停止招募', '招募截止', '招募结束']
+    close_tool_kw = ['截止报名', '结束报名', '关闭报名', '停止报名', '截止接龙', '结束接龙', '关闭接龙']
+    if match(close_vote_kw):
+        intents.append({'tool': 'update_entity', 'args': {'entity_type': 'vote', 'entity_id': 0, 'updates': {'action': 'close'}}, '_need_query': 'vote'})
+    elif match(close_survey_kw):
+        intents.append({'tool': 'update_entity', 'args': {'entity_type': 'tool', 'entity_id': 0, 'updates': {'action': 'close'}}, '_need_query': 'survey'})
+    elif match(close_recruit_kw):
+        intents.append({'tool': 'update_entity', 'args': {'entity_type': 'recruitment', 'entity_id': 0, 'updates': {'action': 'close'}}, '_need_query': 'recruitment'})
+    elif match(close_tool_kw):
+        intents.append({'tool': 'update_entity', 'args': {'entity_type': 'tool', 'entity_id': 0, 'updates': {'action': 'close'}}, '_need_query': 'tool'})
 
     # 生成文案意图
     copywriting_kw = ['生成文案', '写文案', '写宣传语', '宣传文案', '活动文案', '招募文案',
@@ -9989,7 +10175,11 @@ def smart_intent_detect(message, user):
     if match(recommend_activity_kw):
         intents.append({'tool': 'recommend', 'args': {'recommend_type': 'activity'}})
     if match(recommend_recruitment_kw):
-        intents.append({'tool': 'recommend', 'args': {'recommend_type': 'recruitment'}})
+        rec_args = {'recommend_type': 'recruitment'}
+        # 如果用户提到志愿者，筛选志愿者类型
+        if '志愿者' in original or '志愿' in original:
+            rec_args['recruit_type'] = 'volunteer'
+        intents.append({'tool': 'recommend', 'args': rec_args})
     if match(recommend_partner_kw):
         cn = _extract_club_name(original, club_name)
         args = {'recommend_type': 'joint_partner'}
@@ -10772,8 +10962,8 @@ def ai_chat():
 - 用户问社团数据/成员/活动/签到/财务 → 使用 query_data 工具（比 query_club_data 更全面）
 - 用户问有哪些社团/社团列表 → 使用 list_clubs 或 query_data(dataset="clubs") 工具
 - query_data 支持的数据集：activities(活动)、members(成员)、students(学生，支持has_club过滤)、teachers(指导老师，支持has_club过滤)、workload(工作量)、finance(财务)、recruitments(招募)、scoring(赋分)、credits(学分)、checkins(签到)、treehole(树洞)、feedback(反馈)、excellent_clubs(优秀社团)、excellent_activities(优秀活动)、hot_news(热点资讯)、documents(资料库)、clubs(社团)、notifications(通知)、departments(部门)、votes(投票)、surveys(问卷)、joint_activities(联合活动)、offcampus_requests(校外活动申请)
-- 查询未加入社团的学生：query_data(dataset="students", filters={"has_club":"false"})
-- 查询未指导社团的老师：query_data(dataset="teachers", filters={"has_club":"false"})
+- 查询未加入社团的学生：query_data(dataset="students", filters={{"has_club":"false"}})
+- 查询未指导社团的老师：query_data(dataset="teachers", filters={{"has_club":"false"}})
 - 复杂查询需求（query_data无法满足时）→ 使用 query_database 工具直接执行SQL SELECT查询
 - query_database 示例：query_database(sql="SELECT club_name, COUNT(*) as cnt FROM club_members GROUP BY club_name ORDER BY cnt DESC", description="查询各社团人数")
 
@@ -10789,6 +10979,10 @@ def ai_chat():
 
 ### 通知发送类
 - 用户想通知/提醒某人 → 使用 send_notification 工具
+- 给某社团的指导老师发通知 → send_notification(target="teacher", club_name="社团名", content="内容")
+- 给某社团的负责人发通知 → send_notification(target="user", club_name="社团名", content="内容")
+- 给某社团全体成员发通知 → send_notification(target="all_members", club_name="社团名", content="内容")
+- 给全校某角色发通知 → send_notification(target="角色", content="内容")，不传club_name
 
 ### 报告生成类
 - 用户要活动概览 → generate_report(report_type="activity_overview")
@@ -10845,6 +11039,7 @@ def ai_chat():
 4. **可解释性**：每个推荐或决策附带依据
 5. **不要编造数据**：所有社团相关数据必须通过工具获取
 6. **数据隔离**：严格遵守角色权限，非管理员只能查看自己所属社团的数据，系统会自动过滤
+7. **截止操作**：当用户要求截止投票/问卷/报名/招募时，先用query_data查询对应数据获取ID，再用update_entity执行close操作
 
 ## 消息格式说明
 - 用户消息会自动带上身份标签，格式为 `[身份：角色，社团：xxx，页面：xxx] 实际消息内容`
@@ -10938,6 +11133,65 @@ def ai_chat():
 
     # 用户消息前自动加上身份标签
     tagged_message = f'{identity_tag} {message}'
+
+    # 检测截止操作意图，自动查询数据注入上下文
+    close_context = ''
+    close_vote_kw = ['截止投票', '结束投票', '关闭投票', '停止投票', '投票截止', '投票结束']
+    close_survey_kw = ['截止问卷', '结束问卷', '关闭问卷', '停止问卷', '问卷截止', '问卷结束']
+    close_recruit_kw = ['截止招募', '结束招募', '关闭招募', '停止招募', '招募截止', '招募结束']
+    close_tool_kw = ['截止报名', '结束报名', '关闭报名', '停止报名', '截止接龙', '结束接龙', '关闭接龙']
+    msg_lower = message.lower().strip()
+    query_type = None
+    query_label = ''
+    for kw in close_vote_kw:
+        if kw in msg_lower:
+            query_type = 'vote'; query_label = '投票'; break
+    if not query_type:
+        for kw in close_survey_kw:
+            if kw in msg_lower:
+                query_type = 'survey'; query_label = '问卷'; break
+    if not query_type:
+        for kw in close_recruit_kw:
+            if kw in msg_lower:
+                query_type = 'recruitment'; query_label = '招募'; break
+    if not query_type:
+        for kw in close_tool_kw:
+            if kw in msg_lower:
+                query_type = 'tool'; query_label = '报名/接龙'; break
+    if query_type:
+        try:
+            conn = db.get_conn()
+            if query_type in ('vote', 'survey', 'tool'):
+                cn = club_name or ''
+                if cn:
+                    rows = conn.execute('SELECT id, title, tool_type, status, deadline FROM club_tools WHERE club_name=? AND status="active" ORDER BY created_at DESC', (cn,)).fetchall()
+                else:
+                    rows = conn.execute('SELECT id, title, tool_type, status, deadline FROM club_tools WHERE status="active" ORDER BY created_at DESC LIMIT 20').fetchall()
+                type_names = {'vote': '投票', 'survey': '问卷', 'signup': '报名', 'chain': '接龙'}
+                items = []
+                for r in rows:
+                    tn = type_names.get(r['tool_type'], r['tool_type'])
+                    items.append(f'ID={r["id"]} 类型={tn} 标题="{r["title"]}" 截止时间={r["deadline"] or "未设置"}')
+                if items:
+                    close_context = f'\n\n[系统自动查询] 当前活跃的协助工具：\n' + '\n'.join(items) + f'\n请根据以上数据，选择正确的ID执行截止{query_label}操作。'
+                else:
+                    close_context = f'\n\n[系统自动查询] 当前没有活跃的协助工具。'
+            elif query_type == 'recruitment':
+                cn = club_name or ''
+                if cn:
+                    rows = conn.execute('SELECT id, title, status, deadline FROM recruitments WHERE club_name=? AND status NOT IN ("closed","ended") ORDER BY created_at DESC', (cn,)).fetchall()
+                else:
+                    rows = conn.execute('SELECT id, title, status, deadline FROM recruitments WHERE status NOT IN ("closed","ended") ORDER BY created_at DESC LIMIT 20').fetchall()
+                items = [f'ID={r["id"]} 标题="{r["title"]}" 截止时间={r["deadline"] or "未设置"}' for r in rows]
+                if items:
+                    close_context = f'\n\n[系统自动查询] 当前活跃的招募：\n' + '\n'.join(items) + '\n请根据以上数据，选择正确的ID执行截止招募操作。'
+                else:
+                    close_context = f'\n\n[系统自动查询] 当前没有活跃的招募。'
+            conn.close()
+        except:
+            pass
+
+    tagged_message += close_context
     qwen_messages.append({'role': 'user', 'content': tagged_message})
 
     tool_calls_made = []
@@ -12890,9 +13144,17 @@ def get_checkin_by_club(club_name):
 @app.route('/api/export-checkin/<club_name>')
 def export_checkin(club_name):
     user = get_current_user()
-    if not user or user['role'] not in ('user', 'admin'):
+    if not user or user['role'] not in ('user', 'admin', 'teacher'):
         return jsonify({'error': '请先登录'}), 401
-    if user['role'] != 'admin' and user['club_name'] != club_name:
+    if user['role'] == 'teacher':
+        conn_t = db.get_conn()
+        try:
+            tc = conn_t.execute('SELECT 1 FROM teacher_clubs WHERE user_id=? AND club_name=?', (user['id'], club_name)).fetchone()
+        finally:
+            conn_t.close()
+        if not tc:
+            return jsonify({'error': '无权限'}), 403
+    elif user['role'] != 'admin' and user['club_name'] != club_name:
         return jsonify({'error': '无权限'}), 403
     date = request.args.get('date', '')
     from openpyxl import Workbook
@@ -12953,9 +13215,17 @@ def checkin_stats_detail(club_name, student_name):
 @app.route('/api/export-checkin-stats/<club_name>')
 def export_checkin_stats(club_name):
     user = get_current_user()
-    if not user or user['role'] not in ('user', 'admin'):
+    if not user or user['role'] not in ('user', 'admin', 'teacher'):
         return jsonify({'error': '请先登录'}), 401
-    if user['role'] != 'admin' and user['club_name'] != club_name:
+    if user['role'] == 'teacher':
+        conn_t = db.get_conn()
+        try:
+            tc = conn_t.execute('SELECT 1 FROM teacher_clubs WHERE user_id=? AND club_name=?', (user['id'], club_name)).fetchone()
+        finally:
+            conn_t.close()
+        if not tc:
+            return jsonify({'error': '无权限'}), 403
+    elif user['role'] != 'admin' and user['club_name'] != club_name:
         return jsonify({'error': '无权限'}), 403
     from openpyxl import Workbook
     conn = db.get_conn()
@@ -13044,7 +13314,7 @@ def delete_checkin_record(rid):
 @app.route('/api/export-checkin-session/<int:sid>')
 def export_checkin_session(sid):
     user = get_current_user()
-    if not user or user['role'] not in ('user', 'admin', 'student'):
+    if not user or user['role'] not in ('user', 'admin', 'student', 'teacher'):
         return jsonify({'error': '请先登录'}), 401
     from openpyxl import Workbook
     conn = db.get_conn()
@@ -13055,6 +13325,10 @@ def export_checkin_session(sid):
         if user['role'] != 'admin' and user['club_name'] != sess['club_name']:
             if user['role'] == 'student' and is_cadre_of_club(user['id'], sess['club_name']):
                 pass
+            elif user['role'] == 'teacher':
+                tc = conn.execute('SELECT 1 FROM teacher_clubs WHERE user_id=? AND club_name=?', (user['id'], sess['club_name'])).fetchone()
+                if not tc:
+                    return jsonify({'error': '无权限'}), 403
             else:
                 return jsonify({'error': '无权限'}), 403
         rows = conn.execute("SELECT * FROM checkin_records WHERE session_id=? ORDER BY created_at", (sid,)).fetchall()
@@ -13152,54 +13426,56 @@ def location_checkin():
             sess_row = conn.execute('SELECT * FROM checkin_sessions WHERE id=?', (session_id,)).fetchone()
     except Exception:
         pass
-    if sess_row:
-        session_id = sess_row['id']
-        # 检查签到是否已结束
-        if sess_row['status'] != 'open':
-            conn.close()
-            return jsonify({'error': '签到已结束'}), 400
-        # 检查是否在活动时间内
-        start_time = sess_row['start_time'] if 'start_time' in sess_row.keys() else ''
-        end_time = sess_row['end_time'] if 'end_time' in sess_row.keys() else ''
-        if start_time and end_time:
-            now = cn_now()
-            try:
-                st = datetime.strptime(start_time, '%Y-%m-%dT%H:%M')
-                et = datetime.strptime(end_time, '%Y-%m-%dT%H:%M')
-                if now < st or now > et:
-                    conn.close()
-                    return jsonify({'error': '当前不在活动时间内，无法签到'}), 400
-            except:
-                pass
-        # 距离校验：如果session设置了签到位置，检查距离是否在范围内
-        sess_lat = sess_row['location_lat'] if 'location_lat' in sess_row.keys() else 0
-        sess_lng = sess_row['location_lng'] if 'location_lng' in sess_row.keys() else 0
-        if sess_lat and sess_lng:
-            try:
-                sess_lat_f = float(sess_lat)
-                sess_lng_f = float(sess_lng)
-                # Haversine公式计算距离（米）
-                R = 6371000
-                dlat = math.radians(lat_f - sess_lat_f)
-                dlng = math.radians(lng_f - sess_lng_f)
-                a = math.sin(dlat/2)**2 + math.cos(math.radians(sess_lat_f)) * math.cos(math.radians(lat_f)) * math.sin(dlng/2)**2
-                c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-                distance = R * c
-                print(f'[定位签到] 学生位置: ({lat_f}, {lng_f}), 签到位置: ({sess_lat_f}, {sess_lng_f}), 距离: {distance:.1f}米')
-                if distance > 500:
-                    conn.close()
-                    return jsonify({'error': f'距离活动地点{distance:.0f}米，超出500米签到范围'}), 400
-            except (ValueError, TypeError):
-                pass
-        # 检查是否已签到
-        sname = student_name or (user['username'] if user else '')
-        sclas = student_class or ''
-        ssid = student_id or ''
-        existing = conn.execute('SELECT id FROM checkin_records WHERE session_id=? AND student_name=? AND student_id=? AND student_class=?',
-                               (session_id, sname, ssid, sclas)).fetchone()
-        if existing:
-            conn.close()
-            return jsonify({'error': '您已签到过'}), 400
+    if not sess_row:
+        conn.close()
+        return jsonify({'error': '未找到签到会话'}), 404
+    session_id = sess_row['id']
+    # 检查签到是否已结束
+    if sess_row['status'] != 'open':
+        conn.close()
+        return jsonify({'error': '签到已结束'}), 400
+    # 检查是否在活动时间内
+    start_time = sess_row['start_time'] if 'start_time' in sess_row.keys() else ''
+    end_time = sess_row['end_time'] if 'end_time' in sess_row.keys() else ''
+    if start_time and end_time:
+        now = cn_now()
+        try:
+            st = datetime.strptime(start_time, '%Y-%m-%dT%H:%M')
+            et = datetime.strptime(end_time, '%Y-%m-%dT%H:%M')
+            if now < st or now > et:
+                conn.close()
+                return jsonify({'error': '当前不在活动时间内，无法签到'}), 400
+        except:
+            pass
+    # 距离校验：如果session设置了签到位置，检查距离是否在范围内
+    sess_lat = sess_row['location_lat'] if 'location_lat' in sess_row.keys() else 0
+    sess_lng = sess_row['location_lng'] if 'location_lng' in sess_row.keys() else 0
+    if sess_lat and sess_lng:
+        try:
+            sess_lat_f = float(sess_lat)
+            sess_lng_f = float(sess_lng)
+            # Haversine公式计算距离（米）
+            R = 6371000
+            dlat = math.radians(lat_f - sess_lat_f)
+            dlng = math.radians(lng_f - sess_lng_f)
+            a = math.sin(dlat/2)**2 + math.cos(math.radians(sess_lat_f)) * math.cos(math.radians(lat_f)) * math.sin(dlng/2)**2
+            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+            distance = R * c
+            print(f'[定位签到] 学生位置: ({lat_f}, {lng_f}), 签到位置: ({sess_lat_f}, {sess_lng_f}), 距离: {distance:.1f}米')
+            if distance > 500:
+                conn.close()
+                return jsonify({'error': f'距离活动地点{distance:.0f}米，超出500米签到范围'}), 400
+        except (ValueError, TypeError):
+            pass
+    # 检查是否已签到
+    sname = student_name or (user['username'] if user else '')
+    sclas = student_class or ''
+    ssid = student_id or ''
+    existing = conn.execute('SELECT id FROM checkin_records WHERE session_id=? AND student_name=? AND student_id=? AND student_class=?',
+                           (session_id, sname, ssid, sclas)).fetchone()
+    if existing:
+        conn.close()
+        return jsonify({'error': '您已签到过'}), 400
 
     address = ''
     try:
@@ -13219,13 +13495,12 @@ def location_checkin():
         else:
             conn.execute('INSERT INTO location_checkins (user_id, username, role, club_name, session_id, lat, lng, address) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
                          (0, student_name, 'student', '', session_id, lat_f, lng_f, address))
-        if session_id and sess_row:
-            sname = student_name or (user['username'] if user else '')
-            sclas = student_class or ''
-            ssid = student_id or ''
-            scol = college or ''
-            conn.execute('INSERT INTO checkin_records (session_id, club_name, student_name, student_class, student_id, college, checkin_method) VALUES (?, ?, ?, ?, ?, ?, ?)',
-                        (session_id, sess_row['club_name'], sname, sclas, ssid, scol, 'location'))
+        sname2 = student_name or (user['username'] if user else '')
+        sclas2 = student_class or ''
+        ssid2 = student_id or ''
+        scol = college or ''
+        conn.execute('INSERT INTO checkin_records (session_id, club_name, student_name, student_class, student_id, college, checkin_method) VALUES (?, ?, ?, ?, ?, ?, ?)',
+                    (session_id, sess_row['club_name'], sname2, sclas2, ssid2, scol, 'location'))
         conn.commit()
     finally:
         conn.close()
@@ -13355,15 +13630,24 @@ def teacher_checkout():
     user = get_current_user()
     if not user or user['role'] != 'teacher':
         return jsonify({'error': '请先以指导老师身份登录'}), 401
-    session_id = request.form.get('sessionId', '')
+    # Support both form data and JSON body
+    if request.is_json:
+        data = request.json or {}
+        session_id = data.get('sessionId', '')
+        lat = data.get('lat', 0)
+        lng = data.get('lng', 0)
+        address = data.get('address', '')
+        checkout_code = data.get('checkoutCode', '')
+    else:
+        session_id = request.form.get('sessionId', '')
+        lat = request.form.get('lat', 0)
+        lng = request.form.get('lng', 0)
+        address = request.form.get('address', '')
+        checkout_code = request.form.get('checkoutCode', '')
     try:
         session_id = int(session_id)
     except (ValueError, TypeError):
         return jsonify({'error': '活动会话ID格式错误'}), 400
-    lat = request.form.get('lat', 0)
-    lng = request.form.get('lng', 0)
-    address = request.form.get('address', '')
-    checkout_code = request.form.get('checkoutCode', '')
     if not session_id:
         return jsonify({'error': '缺少活动会话ID'}), 400
     lat_val = float(lat) if lat else 0
@@ -13376,8 +13660,12 @@ def teacher_checkout():
         if not sess:
             return jsonify({'error': '活动会话不存在'}), 404
         if checkout_code:
-            if not sess['checkout_code'] or sess['checkout_code'] != checkout_code:
+            if sess['checkout_code'] and sess['checkout_code'] != checkout_code:
                 return jsonify({'error': '签退码不正确'}), 400
+        else:
+            # 活动设置了签退码但未提供签退码，不允许签退
+            if sess['checkout_code']:
+                return jsonify({'error': '请输入签退码'}), 400
         record = conn.execute('SELECT * FROM teacher_checkin_checkout WHERE session_id=? AND teacher_user_id=?', (session_id, user['id'])).fetchone()
         if not record:
             return jsonify({'error': '您尚未签到，无法签退'}), 400
@@ -14076,7 +14364,7 @@ def teacher_profile():
     try:
         if request.method == 'GET':
             row = conn.execute('SELECT * FROM teacher_profiles WHERE user_id=?', (user['id'],)).fetchone()
-            clubs = conn.execute('SELECT club_name FROM teacher_clubs WHERE user_id=?', (user['id'],)).fetchall()
+            clubs = conn.execute('SELECT club_name FROM teacher_clubs WHERE user_id=? ORDER BY id', (user['id'],)).fetchall()
         else:
             row = None
             clubs = []
@@ -14523,6 +14811,12 @@ def export_finance(club_name):
     if user['role'] in ('student', 'teacher'):
         if user['role'] == 'student' and is_cadre_of_club(user['id'], club_name):
             pass
+        elif user['role'] == 'teacher':
+            conn = db.get_conn()
+            tc = conn.execute('SELECT 1 FROM teacher_clubs WHERE user_id=? AND club_name=?', (user['id'], club_name)).fetchone()
+            conn.close()
+            if not tc:
+                return jsonify({'error': '无权限'}), 403
         else:
             conn = db.get_conn()
             is_manager = conn.execute('SELECT 1 FROM finance_managers WHERE club_name=? AND user_id=?', (club_name, user['id'])).fetchone()
@@ -14891,6 +15185,8 @@ def admin_delete_user(uid):
         if del_name and club_names:
             placeholders = ','.join(['?'] * len(club_names))
             conn.execute('DELETE FROM club_members WHERE user_id=0 AND real_name=? AND club_name IN (' + placeholders + ')', [del_name] + club_names)
+        conn.execute('DELETE FROM club_cadres WHERE user_id=?', (uid,))
+        conn.execute('DELETE FROM quit_applications WHERE user_id=?', (uid,))
         conn.execute('DELETE FROM club_members WHERE user_id=?', (uid,))
         conn.execute('DELETE FROM club_teachers WHERE user_id=?', (uid,))
         conn.execute('DELETE FROM teacher_clubs WHERE user_id=?', (uid,))
@@ -15670,187 +15966,79 @@ def online_stats_all():
         session_rows = conn.execute(f'SELECT club_name, COUNT(*) as cnt FROM checkin_sessions WHERE 1=1{date_where} GROUP BY club_name', date_params).fetchall()
         checkin_rows = conn.execute(f'SELECT cr.club_name, COUNT(*) as cnt FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE 1=1{join_date_where} GROUP BY cr.club_name', date_params).fetchall()
         last_act_rows = conn.execute(f'SELECT club_name, MAX(created_at) as last_time FROM checkin_sessions WHERE 1=1{date_where} GROUP BY club_name', date_params).fetchall()
-        total_sessions = conn.execute(f'SELECT COUNT(*) as c FROM checkin_sessions WHERE 1=1{date_where}', date_params).fetchone()['c']
-        total_checkins = conn.execute(f'SELECT COUNT(*) as c FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE 1=1{join_date_where}', date_params).fetchone()['c']
-        try:
-            warning_rows = conn.execute(f'SELECT club_name, COUNT(*) as cnt FROM checkin_sessions WHERE warning="warned"{date_where} GROUP BY club_name', date_params).fetchall()
-            warning_detail_rows = conn.execute(f'SELECT club_name, activity_name, warning_reason FROM checkin_sessions WHERE warning="warned"{date_where}', date_params).fetchall()
-        except:
-            conn.execute('ALTER TABLE checkin_sessions ADD COLUMN warning TEXT DEFAULT ""')
-            conn.execute('ALTER TABLE checkin_sessions ADD COLUMN warning_reason TEXT DEFAULT ""')
-            conn.commit()
-            warning_rows = []
-            warning_detail_rows = []
-        try:
-            profile_rows = conn.execute('SELECT club_name, guiding_unit, president, category FROM club_profiles').fetchall()
-        except:
-            conn.execute('ALTER TABLE club_profiles ADD COLUMN guiding_unit TEXT DEFAULT ""')
-            conn.commit()
-            profile_rows = conn.execute('SELECT club_name, guiding_unit, president, category FROM club_profiles').fetchall()
-        teacher_rows = conn.execute('SELECT cs.club_name, cs.teacher_ids FROM checkin_sessions cs WHERE cs.teacher_ids IS NOT NULL AND cs.teacher_ids != ""').fetchall()
-        teacher_info_rows = conn.execute('SELECT club_name, teacher_name FROM club_teachers').fetchall()
-    finally:
-        conn.close()
-    session_map = {r['club_name']: r['cnt'] for r in session_rows}
-    checkin_map = {r['club_name']: r['cnt'] for r in checkin_rows}
-    last_map = {r['club_name']: r['last_time'] for r in last_act_rows}
-    warning_map = {r['club_name']: r['cnt'] for r in warning_rows}
-    warning_detail_map = {}
-    for r in warning_detail_rows:
-        warning_detail_map.setdefault(r['club_name'], []).append({'activityName': r['activity_name'] or '', 'reason': r['warning_reason'] or ''})
-    profile_map = {}
-    for r in profile_rows:
-        profile_map[r['club_name']] = {'guidingUnit': r['guiding_unit'] if 'guiding_unit' in r.keys() else '', 'president': r['president'] if 'president' in r.keys() else '', 'category': r['category'] if 'category' in r.keys() else ''}
-    teacher_name_map = {}
-    for r in teacher_info_rows:
-        teacher_name_map.setdefault(r['club_name'], set()).add(r['teacher_name'])
-    session_teacher_map = {}
-    for r in teacher_rows:
-        tids = r['teacher_ids'].split(',') if r['teacher_ids'] else []
-        for tid in tids:
-            tid = tid.strip()
-            if tid:
-                session_teacher_map.setdefault(r['club_name'], set()).add(tid)
-    all_clubs = set(list(session_map.keys()) + list(checkin_map.keys()))
-    clubs = []
-    for cn in all_clubs:
-        p = profile_map.get(cn, {'guidingUnit': '', 'president': '', 'category': ''})
-        tids_set = session_teacher_map.get(cn, set())
-        tnames_set = teacher_name_map.get(cn, set())
-        teacher_names_str = '、'.join(sorted(tnames_set)) if tnames_set else ''
-        warnings = warning_detail_map.get(cn, [])
-        warning_str = '; '.join([w['activityName'] + ': ' + w['reason'] for w in warnings]) if warnings else ''
-        clubs.append({
-            'clubName': cn,
-            'sessionCount': session_map.get(cn, 0),
-            'totalCheckins': checkin_map.get(cn, 0),
-            'lastActivity': last_map.get(cn, ''),
-            'warningCount': warning_map.get(cn, 0),
-            'warningDetail': warning_str,
-            'guidingUnit': p['guidingUnit'],
-            'president': p['president'],
-            'category': p['category'],
-            'teacherNames': teacher_names_str
-        })
-    clubs.sort(key=lambda x: x['sessionCount'], reverse=True)
-    return jsonify({
-        'success': True,
-        'data': {
+        warning_rows = conn.execute(f'SELECT club_name, COUNT(*) as cnt FROM checkin_sessions WHERE warning IS NOT NULL AND warning!=""{date_where} GROUP BY club_name', date_params).fetchall()
+        session_map = {r['club_name']: r['cnt'] for r in session_rows}
+        checkin_map = {r['club_name']: r['cnt'] for r in checkin_rows}
+        last_act_map = {r['club_name']: r['last_time'] for r in last_act_rows}
+        warning_map = {r['club_name']: r['cnt'] for r in warning_rows}
+        all_clubs = set(list(session_map.keys()) + list(checkin_map.keys()))
+        # 获取社团的指导单位和指导老师
+        profile_rows = conn.execute('SELECT club_name, guiding_unit FROM club_profiles').fetchall()
+        guiding_map = {r['club_name']: r['guiding_unit'] or '' for r in profile_rows}
+        teacher_rows = conn.execute('SELECT tc.club_name, COALESCE(up.real_name, u.username) as real_name FROM teacher_clubs tc JOIN users u ON tc.user_id=u.id LEFT JOIN user_profiles up ON u.id=up.user_id').fetchall()
+        teacher_map = {}
+        for r in teacher_rows:
+            teacher_map.setdefault(r['club_name'], []).append(r['real_name'])
+        clubs = []
+        for cn in all_clubs:
+            sc = session_map.get(cn, 0)
+            tc = checkin_map.get(cn, 0)
+            wc = warning_map.get(cn, 0)
+            gu = guiding_map.get(cn, '')
+            tn = '、'.join(teacher_map.get(cn, []))
+            la = last_act_map.get(cn, '')
+            clubs.append({
+                'clubName': cn,
+                'sessionCount': sc,
+                'totalCheckins': tc,
+                'warningCount': wc,
+                'guidingUnit': gu,
+                'teacherNames': tn,
+                'lastActivity': la
+            })
+        total_sessions = sum(session_map.values())
+        total_clubs = len(all_clubs)
+        total_checkins = sum(checkin_map.values())
+        return jsonify({'success': True, 'data': {
             'totalSessions': total_sessions,
-            'totalClubs': len(all_clubs),
+            'totalClubs': total_clubs,
             'totalCheckins': total_checkins,
             'clubs': clubs
-        }
-    })
-
-
-@app.route('/api/export-online-stats')
-def export_online_stats():
-    user = get_current_user()
-    if not user or user['role'] != 'admin':
-        return jsonify({'error': '无权限'}), 403
-    start_date = request.args.get('start_date', '').strip()
-    end_date = request.args.get('end_date', '').strip()
-    try:
-        from openpyxl import Workbook
-        from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
-    except ImportError:
-        return jsonify({'error': '导出功能需要安装 openpyxl 库，请运行: pip install openpyxl'}), 500
-    conn = db.get_conn()
-    try:
-        date_where = ''
-        join_date_where = ''
-        date_params = []
-        if start_date:
-            date_where += ' AND date(created_at)>=?'
-            join_date_where += ' AND date(cs.created_at)>=?'
-            date_params.append(start_date)
-        if end_date:
-            date_where += ' AND date(created_at)<=?'
-            join_date_where += ' AND date(cs.created_at)<=?'
-            date_params.append(end_date)
-        session_rows = conn.execute(f'SELECT club_name, COUNT(*) as cnt FROM checkin_sessions WHERE 1=1{date_where} GROUP BY club_name', date_params).fetchall()
-        checkin_rows = conn.execute(f'SELECT cr.club_name, COUNT(*) as cnt FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE 1=1{join_date_where} GROUP BY cr.club_name', date_params).fetchall()
-        try:
-            warning_rows = conn.execute(f'SELECT club_name, COUNT(*) as cnt FROM checkin_sessions WHERE warning="warned"{date_where} GROUP BY club_name', date_params).fetchall()
-            warning_detail_rows = conn.execute(f'SELECT club_name, activity_name, warning_reason FROM checkin_sessions WHERE warning="warned"{date_where}', date_params).fetchall()
-        except:
-            conn.execute('ALTER TABLE checkin_sessions ADD COLUMN warning TEXT DEFAULT ""')
-            conn.execute('ALTER TABLE checkin_sessions ADD COLUMN warning_reason TEXT DEFAULT ""')
-            conn.commit()
-            warning_rows = []
-            warning_detail_rows = []
-        try:
-            profile_rows = conn.execute('SELECT club_name, guiding_unit, president, category FROM club_profiles').fetchall()
-        except:
-            conn.execute('ALTER TABLE club_profiles ADD COLUMN guiding_unit TEXT DEFAULT ""')
-            conn.commit()
-            profile_rows = conn.execute('SELECT club_name, guiding_unit, president, category FROM club_profiles').fetchall()
-        teacher_info_rows = conn.execute('SELECT club_name, teacher_name FROM club_teachers').fetchall()
+        }})
     finally:
         conn.close()
-    session_map = {r['club_name']: r['cnt'] for r in session_rows}
-    checkin_map = {r['club_name']: r['cnt'] for r in checkin_rows}
-    warning_map = {r['club_name']: r['cnt'] for r in warning_rows}
-    warning_detail_map = {}
-    for r in warning_detail_rows:
-        warning_detail_map.setdefault(r['club_name'], []).append({'activityName': r['activity_name'] or '', 'reason': r['warning_reason'] or ''})
-    profile_map = {}
-    for r in profile_rows:
-        profile_map[r['club_name']] = {'guidingUnit': r['guiding_unit'] if 'guiding_unit' in r.keys() else '', 'president': r['president'] if 'president' in r.keys() else '', 'category': r['category'] if 'category' in r.keys() else ''}
-    teacher_name_map = {}
-    for r in teacher_info_rows:
-        teacher_name_map.setdefault(r['club_name'], set()).add(r['teacher_name'])
-    all_clubs = set(list(session_map.keys()) + list(checkin_map.keys()))
-    clubs = []
-    for cn in all_clubs:
-        p = profile_map.get(cn, {'guidingUnit': '', 'president': '', 'category': ''})
-        tnames_set = teacher_name_map.get(cn, set())
-        teacher_names_str = '、'.join(sorted(tnames_set)) if tnames_set else ''
-        warnings = warning_detail_map.get(cn, [])
-        warning_str = '; '.join([w['activityName'] + ': ' + w['reason'] for w in warnings]) if warnings else ''
-        clubs.append({
-            'clubName': cn,
-            'sessionCount': session_map.get(cn, 0),
-            'totalCheckins': checkin_map.get(cn, 0),
-            'warningCount': warning_map.get(cn, 0),
-            'warningDetail': warning_str,
-            'guidingUnit': p['guidingUnit'],
-            'president': p['president'],
-            'category': p['category'],
-            'teacherNames': teacher_names_str
-        })
-    clubs.sort(key=lambda x: x['sessionCount'], reverse=True)
-    wb = Workbook()
-    ws = wb.active
-    ws.title = '社团活动数据分析'
-    headers = ['社团名称', '活动次数', '业务指导单位', '指导老师', '社长', '社团类型', '签到人次', '平均签到', '警告次数', '警告详情']
-    header_fill = PatternFill(start_color='667eea', end_color='667eea', fill_type='solid')
-    header_font = Font(bold=True, color='FFFFFF', size=11)
-    thin_border = Border(left=Side(style='thin', color='d0d0e8'), right=Side(style='thin', color='d0d0e8'), top=Side(style='thin', color='d0d0e8'), bottom=Side(style='thin', color='d0d0e8'))
-    warn_fill = PatternFill(start_color='FFF3CD', end_color='FFF3CD', fill_type='solid')
-    for col, h in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col, value=h)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.alignment = Alignment(horizontal='center', vertical='center')
-        cell.border = thin_border
-    for i, c in enumerate(clubs, 2):
-        avg = round(c['totalCheckins'] / c['sessionCount'], 1) if c['sessionCount'] > 0 else 0
-        row_data = [c['clubName'], c['sessionCount'], c['guidingUnit'] or '-', c['teacherNames'] or '-', c['president'] or '-', c['category'] or '-', c['totalCheckins'], avg, c['warningCount'], c['warningDetail'] or '-']
-        for col, val in enumerate(row_data, 1):
-            cell = ws.cell(row=i, column=col, value=val)
-            cell.border = thin_border
-            cell.alignment = Alignment(vertical='center', wrap_text=True)
-            if c['warningCount'] > 0:
-                cell.fill = warn_fill
-    for col in ws.columns:
-        max_len = max(len(str(c.value or '')) for c in col)
-        ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    return send_file(output, as_attachment=True, download_name='社团活动数据分析.xlsx', mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+
+@app.route('/api/excellent-clubs', methods=['GET', 'POST'])
+def excellent_clubs():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': '未登录'}), 401
+    # GET 对所有登录用户开放，POST 仅管理员
+    if request.method == 'POST' and user['role'] != 'admin':
+        return jsonify({'error': '无权限'}), 403
+    conn = db.get_conn()
+    try:
+        if request.method == 'GET':
+            rows = conn.execute('SELECT ec.club_name, cp.emblem_url, cp.star_rating FROM excellent_clubs ec LEFT JOIN club_profiles cp ON ec.club_name=cp.club_name ORDER BY ec.selected_at DESC').fetchall()
+            data = []
+            for r in rows:
+                data.append({
+                    'clubName': r['club_name'],
+                    'emblemUrl': r['emblem_url'] if r['emblem_url'] else '',
+                    'starRating': r['star_rating'] or 0
+                })
+            return jsonify({'success': True, 'data': data})
+        else:
+            body = request.get_json(silent=True) or {}
+            club_names = body.get('clubs', [])
+            conn.execute('DELETE FROM excellent_clubs')
+            for cn in club_names:
+                conn.execute('INSERT OR IGNORE INTO excellent_clubs (club_name) VALUES (?)', (cn,))
+            conn.commit()
+            return jsonify({'success': True})
+    finally:
+        conn.close()
 
 
 @app.route('/api/excellent-club-scores')
@@ -15870,2198 +16058,1683 @@ def excellent_club_scores():
         if end_date:
             date_where += ' AND date(created_at)<=?'
             date_params.append(end_date)
-        all_clubs_rows = conn.execute('SELECT club_name FROM club_profiles').fetchall()
-        all_club_names = [r['club_name'] for r in all_clubs_rows]
-        star_map = {}
-        for r in conn.execute('SELECT club_name, star_rating FROM club_profiles').fetchall():
-            star_map[r['club_name']] = r['star_rating'] if r['star_rating'] else 0
-        activity_count_map = {}
-        for r in conn.execute(f'SELECT club_name, COUNT(*) as cnt FROM checkin_sessions WHERE 1=1{date_where} GROUP BY club_name', date_params).fetchall():
-            activity_count_map[r['club_name']] = r['cnt']
-        teacher_session_rows = conn.execute(f'SELECT club_name, id FROM checkin_sessions WHERE teacher_ids IS NOT NULL AND teacher_ids != ""{date_where}', date_params).fetchall()
-        teacher_guided_map = {}
-        for r in teacher_session_rows:
-            cn = r['club_name']
-            teacher_guided_map[cn] = teacher_guided_map.get(cn, 0) + 1
-        material_approved_map = {}
-        for r in conn.execute("SELECT club_name, COUNT(DISTINCT group_id) as cnt FROM club_uploads WHERE status='approved' AND (source='upload' OR source='activity' OR source IS NULL) GROUP BY club_name").fetchall():
-            material_approved_map[r['club_name']] = r['cnt']
-        excellent_activity_map = {}
-        ea_rows = conn.execute('SELECT group_id FROM excellent_activities').fetchall()
-        for ea in ea_rows:
-            gid = ea['group_id'] or ''
-            club_name = None
+        # 获取所有社团
+        all_clubs = conn.execute('SELECT club_name FROM club_profiles').fetchall()
+        # 活动次数
+        session_rows = conn.execute(f'SELECT club_name, COUNT(*) as cnt FROM checkin_sessions WHERE 1=1{date_where} GROUP BY club_name', date_params).fetchall()
+        session_map = {r['club_name']: r['cnt'] for r in session_rows}
+        # 指导老师指导次数
+        teacher_guided_rows = conn.execute(f'SELECT cs.club_name, COUNT(*) as cnt FROM checkin_sessions cs WHERE cs.is_completed=1{date_where} GROUP BY cs.club_name', date_params).fetchall()
+        teacher_guided_map = {r['club_name']: r['cnt'] for r in teacher_guided_rows}
+        # 材料审核通过次数
+        material_rows = conn.execute(f'SELECT club_name, COUNT(DISTINCT COALESCE(group_id, CAST(id AS TEXT))) as cnt FROM club_uploads WHERE status="approved" AND (source="upload" OR source="activity" OR source IS NULL){date_where.replace("created_at", "upload_time")} GROUP BY club_name').fetchall()
+        material_map = {r['club_name']: r['cnt'] for r in material_rows}
+        # 优秀活动次数
+        excellent_rows = conn.execute('SELECT ea.group_id FROM excellent_activities ea').fetchall()
+        excellent_group_ids = []
+        for r in excellent_rows:
+            gid = r['group_id']
             if gid.startswith('session_'):
                 try:
-                    sid = int(gid.replace('session_', ''))
-                    sess = conn.execute('SELECT club_name FROM checkin_sessions WHERE id=?', (sid,)).fetchone()
-                    if sess:
-                        club_name = sess['club_name']
+                    excellent_group_ids.append(int(gid.replace('session_', '')))
                 except ValueError:
                     pass
             else:
-                mat = conn.execute('SELECT club_name FROM club_uploads WHERE group_id=? LIMIT 1', (gid,)).fetchone()
-                if mat:
-                    club_name = mat['club_name']
-            if club_name:
-                excellent_activity_map[club_name] = excellent_activity_map.get(club_name, 0) + 1
+                excellent_group_ids.append(gid)
+        excellent_club_map = {}
+        if excellent_group_ids:
+            # 分离数字ID和字符串ID
+            num_ids = [x for x in excellent_group_ids if isinstance(x, int)]
+            str_ids = [x for x in excellent_group_ids if isinstance(x, str)]
+            if num_ids:
+                placeholders = ','.join(['?'] * len(num_ids))
+                ea_club_rows = conn.execute(f'SELECT club_name, COUNT(*) as cnt FROM checkin_sessions WHERE id IN ({placeholders}) GROUP BY club_name', num_ids).fetchall()
+                for r in ea_club_rows:
+                    excellent_club_map[r['club_name']] = excellent_club_map.get(r['club_name'], 0) + r['cnt']
+            if str_ids:
+                placeholders = ','.join(['?'] * len(str_ids))
+                ea_club_rows2 = conn.execute(f'SELECT club_name, COUNT(*) as cnt FROM checkin_sessions WHERE activity_name IN ({placeholders}) GROUP BY club_name', str_ids).fetchall()
+                for r in ea_club_rows2:
+                    excellent_club_map[r['club_name']] = excellent_club_map.get(r['club_name'], 0) + r['cnt']
+        # 计算综合评分
+        max_sessions = max(session_map.values()) if session_map else 1
+        max_teacher = max(teacher_guided_map.values()) if teacher_guided_map else 1
+        max_material = max(material_map.values()) if material_map else 1
+        max_excellent = max(excellent_club_map.values()) if excellent_club_map else 1
+        data = []
+        for c in all_clubs:
+            cn = c['club_name']
+            sc = session_map.get(cn, 0)
+            tg = teacher_guided_map.get(cn, 0)
+            ma = material_map.get(cn, 0)
+            ea = excellent_club_map.get(cn, 0)
+            # 加权评分：活动40% + 指导20% + 材料20% + 优秀20%
+            score = (sc / max_sessions * 40 if max_sessions else 0) + \
+                    (tg / max_teacher * 20 if max_teacher else 0) + \
+                    (ma / max_material * 20 if max_material else 0) + \
+                    (ea / max_excellent * 20 if max_excellent else 0)
+            data.append({
+                'clubName': cn,
+                'activityCount': sc,
+                'teacherGuidedCount': tg,
+                'materialApprovedCount': ma,
+                'excellentActivityCount': ea,
+                'combinedScore': round(score, 1)
+            })
+        data.sort(key=lambda x: x['combinedScore'], reverse=True)
+        return jsonify({'success': True, 'data': data})
     finally:
         conn.close()
-    results = []
-    max_activity = max(activity_count_map.values()) if activity_count_map else 1
-    max_teacher = max(teacher_guided_map.values()) if teacher_guided_map else 0
-    max_material = max(material_approved_map.values()) if material_approved_map else 0
-    max_excellent = max(excellent_activity_map.values()) if excellent_activity_map else 0
-    for cn in all_club_names:
-        star = star_map.get(cn, 0)
-        star_score_map = {5: 100, 4: 70, 3: 40}
-        star_score = star_score_map.get(star, 0)
-        act_count = activity_count_map.get(cn, 0)
-        act_score = (act_count / max_activity) * 100 if max_activity > 0 else 0
-        teacher_count = teacher_guided_map.get(cn, 0)
-        teacher_score = (teacher_count / max_teacher) * 100 if max_teacher > 0 else 0
-        material_count = material_approved_map.get(cn, 0)
-        material_score = (material_count / max_material) * 100 if max_material > 0 else 0
-        excellent_count = excellent_activity_map.get(cn, 0)
-        excellent_score = (excellent_count / max_excellent) * 100 if max_excellent > 0 else 0
-        combined = round(star_score * 0.15 + act_score * 0.35 + teacher_score * 0.20 + material_score * 0.10 + excellent_score * 0.10, 1)
-        results.append({
-            'clubName': cn,
-            'starRating': star,
-            'starScore': round(star_score, 1),
-            'activityCount': act_count,
-            'activityScore': round(act_score, 1),
-            'teacherGuidedCount': teacher_count,
-            'teacherScore': round(teacher_score, 1),
-            'materialApprovedCount': material_count,
-            'materialScore': round(material_score, 1),
-            'excellentActivityCount': excellent_count,
-            'excellentScore': round(excellent_score, 1),
-            'combinedScore': combined,
-        })
-    results.sort(key=lambda x: x['combinedScore'], reverse=True)
-    return jsonify({'success': True, 'data': results, 'maxValues': {
-        'maxActivity': max_activity,
-        'maxTeacher': max_teacher,
-        'maxMaterial': max_material,
-        'maxExcellent': max_excellent,
-    }})
 
 
-@app.route('/api/excellent-clubs', methods=['GET', 'POST'])
-def handle_excellent_clubs():
-    if request.method == 'GET':
-        conn = db.get_conn()
-        try:
-            rows = conn.execute('SELECT club_name FROM excellent_clubs ORDER BY selected_at').fetchall()
-        finally:
-            conn.close()
-        club_names = [r['club_name'] for r in rows]
-        if not club_names:
-            return jsonify({'success': True, 'data': []})
-        conn = db.get_conn()
-        try:
-            profiles = {}
-            for p in conn.execute('SELECT club_name, emblem_url, president, star_rating FROM club_profiles').fetchall():
-                profiles[p['club_name']] = {'emblem_url': p['emblem_url'] if 'emblem_url' in p.keys() else '', 'president': p['president'] if 'president' in p.keys() else '', 'star_rating': p['star_rating'] if 'star_rating' in p.keys() else 0}
-        finally:
-            conn.close()
-        result = []
-        for cn in club_names:
-            p = profiles.get(cn, profiles.get(cn, {'emblem_url': '', 'president': '', 'star_rating': 0}))
-            result.append({'clubName': cn, 'emblemUrl': p.get('emblem_url', ''), 'president': p.get('president', ''), 'starRating': p.get('star_rating', 0)})
-        return jsonify({'success': True, 'data': result})
-    else:
-        user = get_current_user()
-        if not user or user['role'] != 'admin':
-            return jsonify({'error': '无权限'}), 403
-        data = request.json or {}
-        clubs = data.get('clubs', [])
-        if not isinstance(clubs, list):
-            clubs = [clubs] if clubs else []
-        if len(clubs) > 24:
-            return jsonify({'error': '最多选择24个社团'}), 400
-        conn = db.get_conn()
-        try:
-            conn.execute('DELETE FROM excellent_clubs')
-            for cn in clubs:
-                cn = cn.strip()
-                if cn:
-                    conn.execute('INSERT INTO excellent_clubs (club_name) VALUES (?)', (cn,))
-            conn.commit()
-        finally:
-            conn.close()
-        return jsonify({'success': True})
-
-
-@app.route('/api/excellent-activities', methods=['GET', 'POST'])
-def handle_excellent_activities():
-    if request.method == 'GET':
-        conn = db.get_conn()
-        try:
-            rows = conn.execute('SELECT group_id FROM excellent_activities ORDER BY selected_at').fetchall()
-        finally:
-            conn.close()
-        group_ids = [r['group_id'] for r in rows]
-        if not group_ids:
-            return jsonify({'success': True, 'data': []})
-        result = []
-        conn = db.get_conn()
-        try:
-            for gid in group_ids:
-                if gid.startswith('session_'):
-                    sid = gid.replace('session_', '')
-                    try:
-                        sid_int = int(sid)
-                    except ValueError:
-                        continue
-                    sess = conn.execute('SELECT cs.*, COUNT(cr.id) as checkin_count FROM checkin_sessions cs LEFT JOIN checkin_records cr ON cs.id=cr.session_id WHERE cs.id=? GROUP BY cs.id', (sid_int,)).fetchone()
-                    if sess:
-                        result.append({'groupId': gid, 'clubName': sess['club_name'], 'title': sess['activity_name'] or sess['club_name'] + '的活动', 'time': local_time(sess['created_at']), 'activityName': sess['activity_name'], 'locationName': sess['location_name'] if 'location_name' in sess.keys() else '', 'checkinCount': sess['checkin_count']})
-                else:
-                    materials = conn.execute('SELECT group_id, club_name, description, created_at FROM club_uploads WHERE group_id=? LIMIT 1', (gid,)).fetchall()
-                    if materials:
-                        m = materials[0]
-                        desc = m['description'] or ''
-                        title = desc.replace('[总结]', '').split('|||')[0] if desc.startswith('[总结]') else m['club_name'] + '的活动'
-                        result.append({'groupId': gid, 'clubName': m['club_name'], 'title': title, 'time': local_time(m['created_at'])})
-        finally:
-            conn.close()
-        return jsonify({'success': True, 'data': result})
-    else:
-        user = get_current_user()
-        if not user or user['role'] != 'admin':
-            return jsonify({'error': '无权限'}), 403
-        data = request.json or {}
-        group_ids = data.get('groupIds', [])
-        if not isinstance(group_ids, list):
-            group_ids = [group_ids] if group_ids else []
-        conn = db.get_conn()
-        try:
-            conn.execute('DELETE FROM excellent_activities')
-            for gid in group_ids:
-                gid = gid.strip()
-                if gid:
-                    conn.execute('INSERT INTO excellent_activities (group_id) VALUES (?)', (gid,))
-            conn.commit()
-        finally:
-            conn.close()
-        return jsonify({'success': True})
+@app.route('/api/excellent-activities', methods=['GET'])
+def excellent_activities():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': '未登录'}), 401
+    conn = db.get_conn()
+    try:
+        rows = conn.execute('SELECT ea.group_id FROM excellent_activities ea ORDER BY ea.selected_at DESC').fetchall()
+        data = []
+        for r in rows:
+            gid = r['group_id']
+            # 解析 session_xxx 格式，提取数字部分
+            session_id = None
+            if gid.startswith('session_'):
+                try:
+                    session_id = int(gid.replace('session_', ''))
+                except ValueError:
+                    pass
+            # 优先用数字ID查找，再用activity_name查找
+            act = None
+            if session_id:
+                act = conn.execute('SELECT club_name, activity_name, created_at FROM checkin_sessions WHERE id=? ORDER BY created_at DESC LIMIT 1', (session_id,)).fetchone()
+            if not act:
+                act = conn.execute('SELECT club_name, activity_name, created_at FROM checkin_sessions WHERE activity_name=? ORDER BY created_at DESC LIMIT 1', (gid,)).fetchone()
+            if act:
+                data.append({
+                    'groupId': gid,
+                    'title': act['activity_name'] or gid,
+                    'clubName': act['club_name'],
+                    'time': act['created_at']
+                })
+            else:
+                data.append({
+                    'groupId': gid,
+                    'title': gid,
+                    'clubName': '',
+                    'time': ''
+                })
+        return jsonify({'success': True, 'data': data})
+    finally:
+        conn.close()
 
 
 @app.route('/api/excellent-activities/toggle', methods=['POST'])
-def toggle_excellent_activity():
+def excellent_activities_toggle():
     user = get_current_user()
     if not user or user['role'] != 'admin':
         return jsonify({'error': '无权限'}), 403
-    data = request.json or {}
-    group_id = data.get('group_id', '').strip()
+    body = request.get_json(silent=True) or {}
+    group_id = body.get('group_id', '').strip()
     if not group_id:
-        return jsonify({'error': '缺少活动标识'}), 400
+        return jsonify({'success': False, 'error': '缺少group_id'}), 400
     conn = db.get_conn()
     try:
         existing = conn.execute('SELECT id FROM excellent_activities WHERE group_id=?', (group_id,)).fetchone()
         if existing:
             conn.execute('DELETE FROM excellent_activities WHERE group_id=?', (group_id,))
             conn.commit()
-            return jsonify({'success': True, 'action': 'removed', 'message': '已取消优秀'})
+            return jsonify({'success': True, 'message': '已取消优秀活动'})
         else:
             conn.execute('INSERT INTO excellent_activities (group_id) VALUES (?)', (group_id,))
             conn.commit()
-            club_name = ''
-            activity_name = ''
-            if group_id.startswith('session_'):
-                sid = group_id.replace('session_', '')
-                try:
-                    sid_int = int(sid)
-                    sess = conn.execute('SELECT club_name, activity_name FROM checkin_sessions WHERE id=?', (sid_int,)).fetchone()
-                    if sess:
-                        club_name = sess['club_name']
-                        activity_name = sess['activity_name'] or ''
-                except ValueError:
-                    pass
-            else:
-                mat = conn.execute('SELECT club_name, description FROM club_uploads WHERE group_id=? LIMIT 1', (group_id,)).fetchone()
-                if mat:
-                    club_name = mat['club_name']
-                    desc = mat['description'] or ''
-                    if desc.startswith('[总结]'):
-                        activity_name = desc.replace('[总结]', '').split('|||')[0]
-            if club_name:
-                leaders = conn.execute('SELECT id FROM users WHERE club_name=? AND role="user"', (club_name,)).fetchall()
-                for l in leaders:
-                    send_notification(l['id'], '🌟 活动被评为优秀', '您的活动「' + (activity_name or club_name + '的活动') + '」被评为优秀社团活动，将展示在首页', 'excellent', '/dashboard.html', conn=conn)
-                conn.commit()
-            return jsonify({'success': True, 'action': 'added', 'message': '已选为优秀'})
+            return jsonify({'success': True, 'message': '已设为优秀活动'})
     finally:
         conn.close()
 
 
-OFFCAMPUS_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'offcampus')
-os.makedirs(OFFCAMPUS_FOLDER, exist_ok=True)
-
-TEMPLATE_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'templates')
-os.makedirs(TEMPLATE_FOLDER, exist_ok=True)
-
-
-@app.route('/api/offcampus-template', methods=['GET', 'POST', 'DELETE'])
-def offcampus_template():
-    user = get_current_user()
-    if not user:
-        return jsonify({'error': '未登录'}), 401
-    meta_path = os.path.join(TEMPLATE_FOLDER, 'offcampus_template.meta')
-    def find_template_file():
-        for f in os.listdir(TEMPLATE_FOLDER):
-            if f.startswith('offcampus_template') and not f.endswith('.meta'):
-                return os.path.join(TEMPLATE_FOLDER, f)
-        return None
-    if request.method == 'GET':
-        if not find_template_file() or not os.path.exists(meta_path):
-            return jsonify({'success': True, 'hasTemplate': False})
-        with open(meta_path, 'r', encoding='utf-8') as f:
-            meta = json.load(f)
-        return jsonify({'success': True, 'hasTemplate': True, 'fileName': meta.get('fileName', ''), 'uploadTime': meta.get('uploadTime', '')})
-    elif request.method == 'POST':
-        if user['role'] != 'admin':
-            return jsonify({'error': '仅管理员可上传模板'}), 403
-        if 'file' not in request.files:
-            return jsonify({'error': '请选择文件'}), 400
-        f = request.files['file']
-        if not f or not f.filename:
-            return jsonify({'error': '文件无效'}), 400
-        ext = os.path.splitext(f.filename)[1]
-        fname = 'offcampus_template' + ext
-        save_path = os.path.join(TEMPLATE_FOLDER, fname)
-        for old in os.listdir(TEMPLATE_FOLDER):
-            if old.startswith('offcampus_template'):
-                os.remove(os.path.join(TEMPLATE_FOLDER, old))
-        f.save(save_path)
-        meta = {'fileName': f.filename, 'uploadTime': datetime.now().strftime('%Y-%m-%d %H:%M')}
-        with open(meta_path, 'w', encoding='utf-8') as mf:
-            json.dump(meta, mf, ensure_ascii=False)
-        return jsonify({'success': True, 'fileName': f.filename})
-    elif request.method == 'DELETE':
-        if user['role'] != 'admin':
-            return jsonify({'error': '仅管理员可删除模板'}), 403
-        for old in os.listdir(TEMPLATE_FOLDER):
-            if old.startswith('offcampus_template'):
-                os.remove(os.path.join(TEMPLATE_FOLDER, old))
-        if os.path.exists(meta_path):
-            os.remove(meta_path)
-        return jsonify({'success': True})
-
-
-@app.route('/api/offcampus-template/download')
-def download_offcampus_template():
-    user = get_current_user()
-    if not user:
-        return jsonify({'error': '未登录'}), 401
-    for fname in os.listdir(TEMPLATE_FOLDER):
-        if fname.startswith('offcampus_template') and not fname.endswith('.meta'):
-            meta_path = os.path.join(TEMPLATE_FOLDER, 'offcampus_template.meta')
-            download_name = fname
-            if os.path.exists(meta_path):
-                with open(meta_path, 'r', encoding='utf-8') as f:
-                    meta = json.load(f)
-                    download_name = meta.get('fileName', fname)
-            return send_file(os.path.join(TEMPLATE_FOLDER, fname), as_attachment=True, download_name=download_name)
-    return jsonify({'error': '模板不存在'}), 404
-
-
-@app.route('/api/offcampus', methods=['GET', 'POST'])
-def handle_offcampus():
-    user = get_current_user()
-    if not user:
-        return jsonify({'error': '未登录'}), 401
-    if request.method == 'GET':
-        conn = db.get_conn()
-        try:
-            if user['role'] == 'admin':
-                rows = conn.execute('SELECT * FROM offcampus_requests ORDER BY CASE status WHEN "pending" THEN 0 ELSE 1 END, created_at DESC').fetchall()
-            else:
-                rows = conn.execute('SELECT * FROM offcampus_requests WHERE club_name=? ORDER BY created_at DESC', (user.get('club_name', '') or user.get('clubName', ''),)).fetchall()
-        finally:
-            conn.close()
-        result = []
-        for r in rows:
-            item = {'id': r['id'], 'clubName': r['club_name'], 'title': r['title'], 'location': r['location'], 'activityDate': r['activity_date'], 'description': r['description'], 'fileName': r['file_name'], 'status': r['status'], 'rejectReason': r['reject_reason'], 'submittedBy': r['submitted_by'], 'time': local_time(r['created_at'])}
-            if r['file_path']:
-                item['fileUrl'] = '/api/offcampus/file/' + str(r['id'])
-            result.append(item)
-        return jsonify({'success': True, 'data': result})
-    else:
-        if user['role'] not in ('user', 'admin'):
-            return jsonify({'error': '无权限'}), 403
-        club_name = user.get('club_name', '') or user.get('clubName', '')
-        if not club_name:
-            return jsonify({'error': '未关联社团，请联系管理员绑定社团'}), 400
-        title = request.form.get('title', '').strip()
-        location = request.form.get('location', '').strip()
-        activity_date = request.form.get('activityDate', '').strip()
-        description = request.form.get('description', '').strip()
-        if not title:
-            return jsonify({'error': '请填写活动名称'}), 400
-        file_path = ''
-        file_name = ''
-        if 'file' in request.files:
-            f = request.files['file']
-            if f and f.filename:
-                file_name = f.filename
-                ext = os.path.splitext(f.filename)[1]
-                fname = hashlib.md5((file_name + str(uuid.uuid4())).encode()).hexdigest()[:16] + ext
-                key = 'offcampus/' + fname
-                storage.save(f, key)
-                file_path = key
-        conn = db.get_conn()
-        try:
-            conn.execute('INSERT INTO offcampus_requests (club_name, title, location, activity_date, description, file_path, file_name, status, submitted_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                         (club_name, title, location, activity_date, description, file_path, file_name, 'pending', user.get('username', '')))
-            conn.commit()
-        finally:
-            conn.close()
-        conn = db.get_conn()
-        try:
-            admins = conn.execute("SELECT id FROM users WHERE role='admin'").fetchall()
-        finally:
-            conn.close()
-        for a in admins:
-            send_notification(a['id'], '🏕️ 新校外活动申请', f'{club_name} 提交了校外活动申请「{title}」，请及时审批', 'offcampus', '/dashboard.html')
-        return jsonify({'success': True})
-
-
-@app.route('/api/offcampus/file/<int:rid>')
-def offcampus_file(rid):
-    conn = db.get_conn()
-    try:
-        row = conn.execute('SELECT file_path, file_name FROM offcampus_requests WHERE id=?', (rid,)).fetchone()
-    finally:
-        conn.close()
-    if not row or not row['file_path']:
-        return '文件不存在', 404
-    path = storage.get_path(row['file_path'])
-    if not path:
-        url = storage.get_url(row['file_path'])
-        if url:
-            return jsonify({'url': url})
-        return '文件不存在', 404
-    return send_file(path, as_attachment=True, download_name=row['file_name'])
-
-
-@app.route('/api/offcampus/download-attachments', methods=['GET'])
-def download_offcampus_attachments():
-    user = get_current_user()
-    if not user or user['role'] != 'admin':
-        return jsonify({'error': '无权限'}), 403
-    import zipfile
-    club = request.args.get('club', '').strip()
-    date_start = request.args.get('date_start', '').strip()
-    date_end = request.args.get('date_end', '').strip()
-    status_filter = request.args.get('status', '').strip()
-    conn = db.get_conn()
-    try:
-        q = 'SELECT * FROM offcampus_requests WHERE file_path IS NOT NULL AND file_path != ""'
-        params = []
-        if club:
-            q += ' AND club_name=?'
-            params.append(club)
-        if date_start:
-            q += ' AND created_at>=?'
-            params.append(date_start + ' 00:00:00')
-        if date_end:
-            q += ' AND created_at<=?'
-            params.append(date_end + ' 23:59:59')
-        if status_filter:
-            q += ' AND status=?'
-            params.append(status_filter)
-        q += ' ORDER BY created_at DESC'
-        rows = conn.execute(q, params).fetchall()
-    finally:
-        conn.close()
-    if not rows:
-        return jsonify({'error': '没有可下载的附件'}), 404
-    buf = BytesIO()
-    status_map = {'pending': '待审批', 'approved': '已通过', 'rejected': '已驳回'}
-    actual_count = 0
-    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-        for r in rows:
-            fp = r['file_path']
-            if not fp:
-                continue
-            actual_path = storage.get_path(fp)
-            if not actual_path:
-                continue
-            actual_count += 1
-            club_dir = r['club_name']
-            fn = r['file_name'] or os.path.basename(fp)
-            name, ext = os.path.splitext(fn)
-            arc_name = club_dir + '/' + name + '_' + str(r['id']) + ext
-            zf.write(actual_path, arc_name)
-    if actual_count == 0:
-        return jsonify({'error': '附件文件不存在，可能已被删除'}), 404
-    buf.seek(0)
-    zip_name = '校外活动附件'
-    if club:
-        zip_name += '_' + club
-    if date_start or date_end:
-        zip_name += '_' + (date_start or '起') + '-' + (date_end or '止')
-    zip_name += '.zip'
-    return send_file(buf, as_attachment=True, download_name=zip_name, mimetype='application/zip')
-
-
-@app.route('/api/offcampus/<int:rid>', methods=['PUT', 'DELETE'])
-def update_offcampus(rid):
-    user = get_current_user()
-    if not user:
-        return jsonify({'error': '未登录'}), 401
-    if request.method == 'DELETE':
-        if user['role'] not in ('admin', 'user'):
-            return jsonify({'error': '无权限'}), 403
-        conn = db.get_conn()
-        try:
-            row = conn.execute('SELECT club_name, file_path FROM offcampus_requests WHERE id=?', (rid,)).fetchone()
-            if not row:
-                return jsonify({'error': '不存在'}), 404
-            if user['role'] != 'admin' and row['club_name'] != (user.get('club_name', '') or user.get('clubName', '')):
-                return jsonify({'error': '无权限'}), 403
-            if row['file_path']:
-                storage.delete(row['file_path'])
-            conn.execute('DELETE FROM offcampus_requests WHERE id=?', (rid,))
-            conn.commit()
-        finally:
-            conn.close()
-        return jsonify({'success': True})
-    else:
-        if user['role'] != 'admin':
-            return jsonify({'error': '无权限'}), 403
-        data = request.json or {}
-        action = data.get('action', '')
-        if action not in ('approve', 'reject'):
-            return jsonify({'error': '无效操作'}), 400
-        conn = db.get_conn()
-        try:
-            row = conn.execute('SELECT club_name, title FROM offcampus_requests WHERE id=?', (rid,)).fetchone()
-            if not row:
-                return jsonify({'error': '不存在'}), 404
-            if action == 'approve':
-                conn.execute('UPDATE offcampus_requests SET status="approved" WHERE id=?', (rid,))
-            else:
-                reject_reason = data.get('rejectReason', '').strip()
-                conn.execute('UPDATE offcampus_requests SET status="rejected", reject_reason=? WHERE id=?', (reject_reason, rid))
-            conn.commit()
-        finally:
-            conn.close()
-        club_users = []
-        conn2 = db.get_conn()
-        try:
-            club_users = conn2.execute("SELECT id FROM users WHERE club_name=? AND role='user'", (row['club_name'],)).fetchall()
-        finally:
-            conn2.close()
-        if action == 'approve':
-            for cu in club_users:
-                send_notification(cu['id'], '✅ 校外活动已通过', f'您提交的「{row["title"]}」已通过审批', 'approve', '/dashboard.html')
-        else:
-            reason = data.get('rejectReason', '')
-            for cu in club_users:
-                send_notification(cu['id'], '❌ 校外活动申请被驳回', f'您提交的「{row["title"]}」被驳回，原因：{reason}', 'reject', '/dashboard.html')
-        return jsonify({'success': True})
-
-
-@app.route('/api/debug/base-raw')
-def debug_base_raw():
-    conn = db.get_conn()
-    try:
-        rows = conn.execute('SELECT uuid, name, headers, data_json FROM base_data').fetchall()
-    finally:
-        conn.close()
-    result = []
-    for r in rows:
-        headers = json.loads(r['headers']) if r['headers'] else []
-        data = json.loads(r['data_json']) if r['data_json'] else []
-        sample = data[:3] if data else []
-        result.append({'uuid': r['uuid'], 'name': r['name'], 'headers': headers, 'sampleRows': sample, 'rowCount': len(data)})
-    return jsonify({'success': True, 'data': result})
-
-
-@app.route('/api/teachers')
-def get_teachers_list():
+@app.route('/api/weekly-report/latest')
+def weekly_report_latest():
     user = get_current_user()
     if not user or user['role'] != 'admin':
         return jsonify({'error': '无权限'}), 403
     conn = db.get_conn()
     try:
-        rows = conn.execute('SELECT u.id, u.username, u.club_name, COALESCE(tp.real_name, up.real_name, u.username) as real_name FROM users u LEFT JOIN teacher_profiles tp ON u.id=tp.user_id LEFT JOIN user_profiles up ON u.id=up.user_id WHERE u.role="teacher" ORDER BY real_name').fetchall()
+        row = conn.execute('SELECT id, week_start, week_end, content, created_at FROM weekly_reports WHERE role="admin" ORDER BY created_at DESC LIMIT 1').fetchone()
+        if row:
+            return jsonify({'success': True, 'report': {
+                'id': row['id'],
+                'week_start': row['week_start'],
+                'week_end': row['week_end'],
+                'content': row['content'],
+                'created_at': row['created_at']
+            }})
+        return jsonify({'success': False})
     finally:
         conn.close()
-    result = [{'id': r['id'], 'username': r['username'], 'realName': r['real_name'], 'clubName': r['club_name'] or ''} for r in rows]
-    return jsonify({'success': True, 'data': result})
 
 
-@app.route('/api/admin-notifications', methods=['GET', 'POST'])
-def handle_admin_notifications():
-    if request.method == 'POST':
-        user = get_current_user()
-        if not user or user['role'] != 'admin':
-            return jsonify({'error': '仅管理员可发送通知'}), 403
-        data = request.json or {}
-        title = data.get('title', '').strip()
-        content = data.get('content', '').strip()
-        target_type = data.get('targetType', '').strip()
-        target_clubs = data.get('targetClubs', [])
-        target_teachers = data.get('targetTeachers', [])
-        target_club_str = ','.join(target_clubs) if isinstance(target_clubs, list) else data.get('targetClub', '').strip()
-        target_teacher_str = ','.join(target_teachers) if isinstance(target_teachers, list) else ''
-        if not title:
-            return jsonify({'error': '请输入通知标题'}), 400
-        if target_type not in ('all_teachers', 'all_students', 'all_leaders', 'specific_leader', 'specific_teacher'):
-            return jsonify({'error': '无效的通知对象类型'}), 400
-        if target_type == 'specific_leader' and not target_club_str:
-            return jsonify({'error': '请指定目标社团'}), 400
-        if target_type == 'specific_teacher' and not target_teacher_str:
-            return jsonify({'error': '请指定目标老师'}), 400
-        target_store = target_club_str if target_type == 'specific_leader' else (target_teacher_str if target_type == 'specific_teacher' else '')
-        conn = db.get_conn()
-        try:
-            conn.execute('INSERT INTO admin_notifications (title, content, target_type, target_club, sender_id) VALUES (?, ?, ?, ?, ?)',
-                        (title, content, target_type, target_store, user['id']))
-            conn.commit()
-            notif_id = conn.execute('SELECT last_insert_rowid()').fetchone()[0]
-        finally:
-            conn.close()
-        return jsonify({'success': True, 'id': notif_id})
+@app.route('/api/weekly-report/generate', methods=['POST'])
+def weekly_report_generate():
+    user = get_current_user()
+    if not user or user['role'] not in ('admin', 'user'):
+        return jsonify({'error': '无权限'}), 403
+    from datetime import datetime, timedelta
+    today = datetime.now()
+    if today.weekday() == 6:
+        week_end = today - timedelta(days=1)
     else:
-        user = get_current_user()
-        if not user or user['role'] != 'admin':
-            return jsonify({'error': '仅管理员可查看'}), 403
-        page = int(request.args.get('page', 1))
-        page_size = int(request.args.get('pageSize', 20))
-        target_type = request.args.get('targetType', '').strip()
-        conn = db.get_conn()
-        try:
-            where = ''
-            params = []
-            if target_type:
-                where = 'WHERE target_type=?'
-                params.append(target_type)
-            total = conn.execute(f'SELECT COUNT(*) as c FROM admin_notifications {where}', params).fetchone()['c']
-            offset = (page - 1) * page_size
-            rows = conn.execute(f'SELECT * FROM admin_notifications {where} ORDER BY created_at DESC LIMIT ? OFFSET ?', params + [page_size, offset]).fetchall()
-        finally:
-            conn.close()
-        return jsonify({
-            'success': True,
-            'total': total,
-            'page': page,
-            'pageSize': page_size,
-            'totalPages': math.ceil(total / page_size) if page_size > 0 else 0,
-            'data': [{'id': r['id'], 'title': r['title'], 'content': r['content'], 'targetType': r['target_type'], 'targetClub': r['target_club'], 'senderId': r['sender_id'], 'time': local_time(r['created_at'])} for r in rows]
-        })
-
-
-@app.route('/api/my-admin-notifications')
-def get_my_admin_notifications():
-    user = get_current_user()
-    if not user:
-        return jsonify({'error': '未登录'}), 401
+        week_end = today - timedelta(days=today.weekday() + 1)
+    week_start = week_end - timedelta(days=6)
+    ws_str = week_start.strftime('%Y-%m-%d')
+    we_str = week_end.strftime('%Y-%m-%d')
     conn = db.get_conn()
     try:
-        if user['role'] == 'teacher':
-            username = user['username'] or ''
-            rows = conn.execute('SELECT * FROM admin_notifications WHERE target_type=? OR (target_type=? AND (","||target_club||"," LIKE "%,"||?||",%")) ORDER BY created_at DESC',
-                              ('all_teachers', 'specific_teacher', username)).fetchall()
-        elif user['role'] == 'student':
-            rows = conn.execute('SELECT * FROM admin_notifications WHERE target_type=? ORDER BY created_at DESC', ('all_students',)).fetchall()
-        elif user['role'] == 'user':
-            club = user['club_name'] or ''
-            rows = conn.execute('SELECT * FROM admin_notifications WHERE target_type=? OR (target_type=? AND (target_club=? OR ","||target_club||"," LIKE "%,"||?||",%")) ORDER BY created_at DESC',
-                              ('all_leaders', 'specific_leader', club, club)).fetchall()
+        # 收集本周数据
+        session_rows = conn.execute('SELECT club_name, COUNT(*) as cnt FROM checkin_sessions WHERE date(created_at)>=? AND date(created_at)<=? GROUP BY club_name', (ws_str, we_str)).fetchall()
+        checkin_rows = conn.execute('SELECT cr.club_name, COUNT(*) as cnt FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE date(cs.created_at)>=? AND date(cs.created_at)<=? GROUP BY cr.club_name', (ws_str, we_str)).fetchall()
+        total_sessions = sum(r['cnt'] for r in session_rows)
+        total_checkins = sum(r['cnt'] for r in checkin_rows)
+        total_clubs = len(session_rows)
+        session_map = {r['club_name']: r['cnt'] for r in session_rows}
+        checkin_map = {r['club_name']: r['cnt'] for r in checkin_rows}
+        # 生成周报内容
+        club_summary = '\n'.join([f"- {r['club_name']}：{r['cnt']}次活动" for r in session_rows[:10]])
+        checkin_summary = '\n'.join([f"- {r['club_name']}：{r['cnt']}人次签到" for r in checkin_rows[:10]])
+        if QWEN_API_KEY:
+            messages = [
+                {'role': 'system', 'content': '你是高校社团管理助手。根据本周社团活动数据，生成一份简洁的周报摘要，包含总体情况、活跃社团、建议等，300字以内。'},
+                {'role': 'user', 'content': f'本周({ws_str}至{we_str})数据：\n总活动{total_sessions}次，涉及{total_clubs}个社团，总签到{total_checkins}人次。\n各社团活动：\n{club_summary}\n各社团签到：\n{checkin_summary}'}
+            ]
+            ai_content = call_llm_api(messages, max_tokens=500)
+            content = ai_content if ai_content else f'本周({ws_str}至{we_str})共开展{total_sessions}次活动，涉及{total_clubs}个社团，总签到{total_checkins}人次。'
         else:
-            rows = conn.execute('SELECT * FROM admin_notifications ORDER BY created_at DESC').fetchall()
-        read_ids = set()
-        cleared_ids = set()
-        if rows:
-            notif_ids = [r['id'] for r in rows]
-            placeholders = ','.join(['?'] * len(notif_ids))
-            read_rows = conn.execute(f'SELECT notification_id, cleared FROM admin_notification_reads WHERE user_id=? AND notification_id IN ({placeholders})', [user['id']] + notif_ids).fetchall()
-            for rr in read_rows:
-                if rr['cleared']:
-                    cleared_ids.add(rr['notification_id'])
-                else:
-                    read_ids.add(rr['notification_id'])
-        rows = [r for r in rows if r['id'] not in cleared_ids]
-    finally:
-        conn.close()
-    return jsonify({
-        'success': True,
-        'data': [{'id': r['id'], 'title': r['title'], 'content': r['content'], 'targetType': r['target_type'], 'targetClub': r['target_club'], 'time': local_time(r['created_at']), 'isRead': r['id'] in read_ids} for r in rows]
-    })
-
-
-@app.route('/api/admin-notifications/<int:nid>/read', methods=['POST'])
-def mark_admin_notification_read(nid):
-    user = get_current_user()
-    if not user:
-        return jsonify({'error': '未登录'}), 401
-    conn = db.get_conn()
-    try:
-        conn.execute('INSERT OR IGNORE INTO admin_notification_reads (notification_id, user_id) VALUES (?, ?)', (nid, user['id']))
+            content = f'本周({ws_str}至{we_str})共开展{total_sessions}次活动，涉及{total_clubs}个社团，总签到{total_checkins}人次。\n\n各社团活动情况：\n{club_summary}\n\n各社团签到情况：\n{checkin_summary}'
+        report_role = 'admin' if user['role'] == 'admin' else 'user'
+        conn.execute('INSERT INTO weekly_reports (role, week_start, week_end, content) VALUES (?, ?, ?, ?)',
+                     (report_role, ws_str, we_str, content))
         conn.commit()
+        row = conn.execute('SELECT id, week_start, week_end, content, created_at FROM weekly_reports WHERE role=? ORDER BY created_at DESC LIMIT 1', (report_role,)).fetchone()
+        return jsonify({'success': True, 'report': {
+            'id': row['id'],
+            'week_start': row['week_start'],
+            'week_end': row['week_end'],
+            'content': row['content'],
+            'created_at': row['created_at']
+        }})
     finally:
         conn.close()
-    return jsonify({'success': True})
 
 
-@app.route('/api/admin-notifications/<int:nid>', methods=['DELETE'])
-def delete_admin_notification(nid):
+@app.route('/api/weekly-report/list')
+def weekly_report_list():
     user = get_current_user()
-    if not user or user['role'] != 'admin':
-        return jsonify({'error': '仅管理员可删除通知'}), 403
-    conn = db.get_conn()
-    try:
-        conn.execute('DELETE FROM admin_notification_reads WHERE notification_id=?', (nid,))
-        conn.execute('DELETE FROM admin_notifications WHERE id=?', (nid,))
-        conn.commit()
-    finally:
-        conn.close()
-    return jsonify({'success': True})
-
-
-@app.route('/api/club-structures')
-def get_club_structures():
-    user = get_current_user()
-    if not user or user['role'] != 'admin':
+    if not user or user['role'] not in ('admin', 'user'):
         return jsonify({'error': '无权限'}), 403
-    club_name = request.args.get('clubName', '').strip()
     conn = db.get_conn()
     try:
-        if club_name:
-            clubs = conn.execute('SELECT club_name, description, star_rating, president, category, guiding_unit, emblem_url FROM club_profiles WHERE club_name=?', (club_name,)).fetchall()
-        else:
-            clubs = conn.execute('SELECT club_name, description, star_rating, president, category, guiding_unit, emblem_url FROM club_profiles ORDER BY club_name').fetchall()
-        result = []
-        for c in clubs:
-            cn = c['club_name']
-            depts = conn.execute('SELECT id, dept_name, description, parent_id FROM club_departments WHERE club_name=? ORDER BY id', (cn,)).fetchall()
-            members = conn.execute('SELECT real_name, student_id_num, class_name, college, department, specialty, joined_at FROM club_members WHERE club_name=? ORDER BY joined_at', (cn,)).fetchall()
-            teachers = conn.execute('SELECT teacher_name, introduction FROM club_teachers WHERE club_name=?', (cn,)).fetchall()
-            leaders = conn.execute("SELECT u.username, up.real_name FROM users u LEFT JOIN user_profiles up ON u.id=up.user_id WHERE u.club_name=? AND u.role='user'", (cn,)).fetchall()
-            dept_list = []
-            for d in depts:
-                dept_members = [m for m in members if m['department'] == d['dept_name']]
-                dept_list.append({
-                    'id': d['id'], 'name': d['dept_name'], 'description': d['description'],
-                    'parentId': d['parent_id'] if 'parent_id' in d.keys() else 0,
-                    'memberCount': len(dept_members),
-                    'members': [{'realName': m['real_name'], 'studentIdNum': m['student_id_num'], 'className': m['class_name'], 'college': m['college'] if 'college' in m.keys() else '', 'specialty': m['specialty'], 'joinedAt': m['joined_at']} for m in dept_members]
-                })
-            unassigned = [m for m in members if not m['department'] or not any(d['dept_name'] == m['department'] for d in depts)]
-            result.append({
-                'clubName': cn, 'description': c['description'], 'starRating': c['star_rating'],
-                'president': c['president'] if 'president' in c.keys() else '',
-                'category': c['category'] if 'category' in c.keys() else '',
-                'guidingUnit': c['guiding_unit'] if 'guiding_unit' in c.keys() else '',
-                'emblemUrl': c['emblem_url'] if 'emblem_url' in c.keys() else '',
-                'leaders': [{'username': l['username'], 'realName': l['real_name']} for l in leaders],
-                'teachers': [{'name': t['teacher_name'], 'introduction': t['introduction']} for t in teachers],
-                'departments': dept_list,
-                'unassignedMembers': [{'realName': m['real_name'], 'studentIdNum': m['student_id_num'], 'className': m['class_name'], 'college': m['college'] if 'college' in m.keys() else '', 'specialty': m['specialty'], 'joinedAt': m['joined_at']} for m in unassigned],
-                'totalMembers': len(members), 'totalDepts': len(depts)
-            })
+        role_filter = 'admin' if user['role'] == 'admin' else 'user'
+        rows = conn.execute('SELECT id, week_start, week_end, created_at FROM weekly_reports WHERE role=? ORDER BY created_at DESC', (role_filter,)).fetchall()
+        return jsonify({'success': True, 'list': [dict(r) for r in rows]})
     finally:
         conn.close()
-    return jsonify({'success': True, 'data': result})
 
 
-@app.route('/api/export-club-structures')
-def export_club_structures():
+@app.route('/api/weekly-report/<int:rid>')
+def weekly_report_detail(rid):
     user = get_current_user()
-    if not user or user['role'] != 'admin':
+    if not user or user['role'] not in ('admin', 'user'):
         return jsonify({'error': '无权限'}), 403
-    try:
-        from docx import Document
-        from docx.shared import Pt, Cm, RGBColor
-        from docx.enum.text import WD_ALIGN_PARAGRAPH
-        from docx.enum.table import WD_TABLE_ALIGNMENT
-    except ImportError:
-        return jsonify({'error': '导出功能需要安装 python-docx 库'}), 500
-    club_name = request.args.get('clubName', '').strip()
     conn = db.get_conn()
     try:
-        if club_name:
-            clubs = conn.execute('SELECT club_name, description, star_rating, president, category, guiding_unit FROM club_profiles WHERE club_name=?', (club_name,)).fetchall()
-        else:
-            clubs = conn.execute('SELECT club_name, description, star_rating, president, category, guiding_unit FROM club_profiles ORDER BY club_name').fetchall()
-        doc = Document()
-        style = doc.styles['Normal']
-        style.font.name = 'Microsoft YaHei'
-        style.font.size = Pt(10.5)
-        style.paragraph_format.space_after = Pt(4)
-        for ci, club in enumerate(clubs):
-            cn = club['club_name']
-            if ci > 0:
-                doc.add_page_break()
-            doc.add_heading(cn, level=1)
-            depts = conn.execute('SELECT id, dept_name, description, parent_id FROM club_departments WHERE club_name=? ORDER BY id', (cn,)).fetchall()
-            doc.add_heading('部门结构', level=2)
-            if depts:
-                dept_map = {d['id']: d['dept_name'] for d in depts}
-                for d in depts:
-                    dept_name = d['dept_name'] or '未命名部门'
-                    dept_desc = d['description'] or '暂无描述'
-                    parent_name = dept_map.get(d['parent_id'] if 'parent_id' in d.keys() else 0, '')
-                    p = doc.add_paragraph()
-                    run = p.add_run('■ ' + dept_name)
-                    run.bold = True
-                    run.font.size = Pt(11)
-                    if parent_name:
-                        p.add_run('  上级部门：' + parent_name).font.size = Pt(9)
-                    desc_p = doc.add_paragraph('  部门介绍：' + dept_desc)
-                    desc_p.paragraph_format.space_after = Pt(2)
-                    for run in desc_p.runs:
-                        run.font.size = Pt(10)
-            else:
-                doc.add_paragraph('暂无部门信息')
+        role_filter = 'admin' if user['role'] == 'admin' else 'user'
+        row = conn.execute('SELECT id, week_start, week_end, content, created_at FROM weekly_reports WHERE id=? AND role=?', (rid, role_filter)).fetchone()
+        if row:
+            return jsonify({'success': True, 'report': {
+                'id': row['id'],
+                'week_start': row['week_start'],
+                'week_end': row['week_end'],
+                'content': row['content'],
+                'created_at': row['created_at']
+            }})
+        return jsonify({'success': False, 'error': '未找到周报'}), 404
     finally:
         conn.close()
-    buf = BytesIO()
-    doc.save(buf)
-    buf.seek(0)
-    fname = f'{club_name}_社团结构.docx' if club_name else '全部社团结构.docx'
-    return send_file(buf, as_attachment=True, download_name=fname, mimetype='application/vnd.openxmlformats-officedocument.wordprocessingml.document')
 
 
-@app.route('/api/workload/submit', methods=['POST'])
-def workload_submit():
+@app.route('/api/export-online-stats')
+def export_online_stats():
     user = get_current_user()
-    if not user or user['role'] != 'student':
-        return jsonify({'error': '仅学生可提交工作量'}), 403
-    data = request.get_json(force=True)
-    item_name = (data.get('item_name') or '').strip()
-    score = data.get('score')
-    if not item_name:
-        return jsonify({'error': '请填写活动/事项名称'}), 400
-    try:
-        score = float(score)
-        if score <= 0:
-            raise ValueError
-    except (TypeError, ValueError):
-        return jsonify({'error': '工作量分数必须为正数'}), 400
-    club_name = (data.get('club_name') or '').strip()
-    if not club_name:
-        club_name = user.get('club_name') or ''
-    if not club_name:
-        return jsonify({'error': '您未加入任何社团'}), 400
-    conn = db.get_conn()
-    try:
-        member_row = conn.execute('SELECT 1 FROM club_members WHERE user_id=? AND club_name=?', (user['id'], club_name)).fetchone()
-        if not member_row and club_name != (user.get('club_name') or ''):
-            return jsonify({'error': '您不是该社团成员'}), 403
-        profile = conn.execute('SELECT real_name FROM user_profiles WHERE user_id=?', (user['id'],)).fetchone()
-        student_name = profile['real_name'] if profile and profile['real_name'] else user['username']
-        conn.execute('INSERT INTO workload_submissions (student_user_id, student_name, club_name, item_name, score, status) VALUES (?,?,?,?,?,?)',
-                     (user['id'], student_name, club_name, item_name, score, 'pending'))
-        conn.commit()
-    finally:
-        conn.close()
-    return jsonify({'success': True, 'message': '提交成功，等待审核'})
-
-
-@app.route('/api/workload/my-submissions', methods=['GET'])
-def workload_my_submissions():
-    user = get_current_user()
-    if not user or user['role'] != 'student':
-        return jsonify({'error': '请先登录'}), 401
-    conn = db.get_conn()
-    try:
-        rows = conn.execute('SELECT id, item_name, score, status, review_note, created_at, reviewed_at FROM workload_submissions WHERE student_user_id=? ORDER BY created_at DESC', (user['id'],)).fetchall()
-    finally:
-        conn.close()
-    return jsonify({'success': True, 'data': [dict(r) for r in rows]})
-
-
-@app.route('/api/workload/pending', methods=['GET'])
-def workload_pending():
-    user = get_current_user()
-    if not user or user['role'] not in ('user', 'admin'):
-        return jsonify({'error': '仅社团负责人可查看'}), 403
-    req_club = request.args.get('club', '').strip()
-    if user['role'] == 'user':
-        club_name = req_club if req_club else (user.get('club_name') or '')
-    else:
-        club_name = req_club
-    if not club_name:
-        return jsonify({'success': True, 'data': []})
+    if not user or user['role'] not in ('admin', 'user'):
+        return jsonify({'error': '无权限'}), 403
+    import csv
+    import io
     start_date = request.args.get('start_date', '').strip()
     end_date = request.args.get('end_date', '').strip()
     conn = db.get_conn()
     try:
         date_where = ''
-        date_params = [club_name, 'pending']
+        join_date_where = ''
+        date_params = []
         if start_date:
-            date_where += ' AND date(ws.created_at)>=?'
+            date_where += ' AND date(created_at)>=?'
+            join_date_where += ' AND date(cs.created_at)>=?'
             date_params.append(start_date)
         if end_date:
-            date_where += ' AND date(ws.created_at)<=?'
+            date_where += ' AND date(created_at)<=?'
+            join_date_where += ' AND date(cs.created_at)<=?'
             date_params.append(end_date)
-        rows = conn.execute(f'SELECT ws.id, ws.student_user_id, ws.student_name, ws.item_name, ws.score, ws.status, ws.created_at FROM workload_submissions ws WHERE ws.club_name=? AND ws.status=?{date_where} ORDER BY ws.created_at DESC', date_params).fetchall()
+        session_rows = conn.execute(f'SELECT club_name, COUNT(*) as cnt FROM checkin_sessions WHERE 1=1{date_where} GROUP BY club_name', date_params).fetchall()
+        checkin_rows = conn.execute(f'SELECT cr.club_name, COUNT(*) as cnt FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE 1=1{join_date_where} GROUP BY cr.club_name', date_params).fetchall()
+        session_map = {r['club_name']: r['cnt'] for r in session_rows}
+        checkin_map = {r['club_name']: r['cnt'] for r in checkin_rows}
+        all_clubs = set(list(session_map.keys()) + list(checkin_map.keys()))
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(['社团名称', '活动次数', '签到人次', '平均签到'])
+        for cn in sorted(all_clubs):
+            sc = session_map.get(cn, 0)
+            tc = checkin_map.get(cn, 0)
+            avg = round(tc / sc, 1) if sc > 0 else 0
+            writer.writerow([cn, sc, tc, avg])
+        output.seek(0)
+        from flask import Response
+        return Response(
+            output.getvalue().encode('utf-8-sig'),
+            mimetype='text/csv',
+            headers={'Content-Disposition': 'attachment; filename=online_stats.csv'}
+        )
     finally:
         conn.close()
-    return jsonify({'success': True, 'data': [dict(r) for r in rows]})
 
 
-@app.route('/api/workload/review/<int:sub_id>', methods=['POST'])
-def workload_review(sub_id):
-    user = get_current_user()
-    if not user or user['role'] not in ('user', 'admin'):
-        return jsonify({'error': '仅社团负责人可审核'}), 403
-    data = request.get_json(force=True)
-    action = data.get('action')
-    review_note = (data.get('review_note') or '').strip()
-    if action not in ('approve', 'reject'):
-        return jsonify({'error': '无效操作'}), 400
-    conn = db.get_conn()
-    try:
-        sub = conn.execute('SELECT id, club_name, status FROM workload_submissions WHERE id=?', (sub_id,)).fetchone()
-        if not sub:
-            return jsonify({'error': '记录不存在'}), 404
-        if sub['status'] != 'pending':
-            return jsonify({'error': '该记录已审核'}), 400
-        if user['role'] == 'user' and sub['club_name'] != (user.get('club_name') or ''):
-            return jsonify({'error': '无权审核'}), 403
-        new_status = 'approved' if action == 'approve' else 'rejected'
-        profile = conn.execute('SELECT real_name FROM user_profiles WHERE user_id=?', (user['id'],)).fetchone()
-        reviewer_name = profile['real_name'] if profile and profile['real_name'] else user['username']
-        conn.execute('UPDATE workload_submissions SET status=?, reviewer_id=?, reviewer_name=?, review_note=?, reviewed_at=datetime("now","localtime") WHERE id=?',
-                     (new_status, user['id'], reviewer_name, review_note, sub_id))
-        conn.commit()
-    finally:
-        conn.close()
-    return jsonify({'success': True, 'message': '审核完成'})
-
-
-@app.route('/api/workload/my-clubs', methods=['GET'])
-def workload_my_clubs():
-    user = get_current_user()
-    if not user or user['role'] != 'student':
-        return jsonify({'error': '仅学生可查看'}), 403
-    conn = db.get_conn()
-    try:
-        rows = conn.execute('SELECT club_name FROM club_members WHERE user_id=?', (user['id'],)).fetchall()
-        clubs = [r['club_name'] for r in rows if r['club_name']]
-        if not clubs and user.get('club_name'):
-            clubs = [user['club_name']]
-    finally:
-        conn.close()
-    return jsonify({'success': True, 'clubs': clubs})
-
-
-@app.route('/api/workload/club-stats', methods=['GET'])
-def workload_club_stats():
-    user = get_current_user()
-    if not user:
-        return jsonify({'error': '请先登录'}), 401
-    if user['role'] == 'student':
-        club_name = request.args.get('club', '') or user.get('club_name') or ''
-    elif user['role'] == 'user':
-        club_name = user.get('club_name') or ''
-    elif user['role'] == 'admin':
-        club_name = request.args.get('club', '')
-    else:
-        return jsonify({'error': '无权限'}), 403
-    if not club_name:
-        conn_pre = db.get_conn()
-        try:
-            mc = conn_pre.execute('SELECT club_name FROM club_members WHERE user_id=? LIMIT 1', (user['id'],)).fetchone()
-            if mc:
-                club_name = mc['club_name']
-        finally:
-            conn_pre.close()
-    if not club_name:
-        return jsonify({'success': True, 'data': []})
-    start_date = request.args.get('start_date', '').strip()
-    end_date = request.args.get('end_date', '').strip()
-    conn = db.get_conn()
-    try:
-        members = conn.execute('SELECT cm.user_id, cm.real_name, cm.student_id_num, cm.class_name FROM club_members cm LEFT JOIN users u ON cm.user_id=u.id WHERE cm.club_name=? AND (cm.user_id=0 OR u.id IS NOT NULL) ORDER BY cm.real_name', (club_name,)).fetchall()
-        act_date_where = ''
-        act_date_params = [club_name]
-        wl_date_where = ''
-        wl_date_params = [club_name, 'approved']
-        if start_date:
-            act_date_where += ' AND date(cs.created_at)>=?'
-            act_date_params.append(start_date)
-            wl_date_where += ' AND date(ws.created_at)>=?'
-            wl_date_params.append(start_date)
-        if end_date:
-            act_date_where += ' AND date(cs.created_at)<=?'
-            act_date_params.append(end_date)
-            wl_date_where += ' AND date(ws.created_at)<=?'
-            wl_date_params.append(end_date)
-        activity_counts = {}
-        act_rows = conn.execute(f'SELECT cr.student_id, COUNT(DISTINCT cr.session_id) as cnt FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE cs.club_name=? AND cs.is_completed=1 AND cr.student_id IS NOT NULL AND cr.student_id!="" AND cr.student_id!=0{act_date_where} GROUP BY cr.student_id', act_date_params).fetchall()
-        for r in act_rows:
-            activity_counts[r['student_id']] = r['cnt']
-        act_name_rows = conn.execute(f'SELECT cr.student_name, COUNT(DISTINCT cr.session_id) as cnt FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE cs.club_name=? AND cs.is_completed=1{act_date_where} GROUP BY cr.student_name', act_date_params).fetchall()
-        act_name_map = {}
-        for r in act_name_rows:
-            act_name_map[r['student_name']] = r['cnt']
-        workload_sums = {}
-        wl_rows = conn.execute(f'SELECT student_user_id, SUM(score) as total_score FROM workload_submissions ws WHERE ws.club_name=? AND ws.status=?{wl_date_where} GROUP BY student_user_id', wl_date_params).fetchall()
-        for r in wl_rows:
-            workload_sums[r['student_user_id']] = r['total_score']
-        result = []
-        for m in members:
-            uid = m['user_id']
-            name = m['real_name'] or ''
-            act_count = activity_counts.get(uid, 0) or activity_counts.get(str(uid), 0) or act_name_map.get(name, 0)
-            other_score = workload_sums.get(uid, 0)
-            result.append({
-                'user_id': uid,
-                'real_name': name,
-                'student_id_num': m['student_id_num'],
-                'class_name': m['class_name'],
-                'activity_count': act_count,
-                'activity_score': act_count,
-                'other_score': round(other_score, 1),
-                'total_score': round(act_count + other_score, 1)
-            })
-    finally:
-        conn.close()
-    return jsonify({'success': True, 'data': result, 'club_name': club_name})
-
-
-@app.route('/api/workload/student-detail', methods=['GET'])
-def workload_student_detail():
-    user = get_current_user()
-    if not user:
-        return jsonify({'error': '请先登录'}), 401
-    req_club = request.args.get('club', '')
-    student_user_id = request.args.get('user_id', '')
-    if not student_user_id:
-        return jsonify({'error': '缺少参数'}), 400
-    student_user_id = int(student_user_id)
-    conn = db.get_conn()
-    try:
-        student = conn.execute('SELECT u.id, u.username, u.club_name, up.real_name, up.student_id as sid, up.class_name FROM users u LEFT JOIN user_profiles up ON u.id=up.user_id WHERE u.id=?', (student_user_id,)).fetchone()
-        if not student:
-            return jsonify({'error': '学生不存在'}), 404
-        club_name = ''
-        filter_by_club = True
-        if user['role'] == 'user':
-            club_name = user.get('club_name') or ''
-            member = conn.execute('SELECT id FROM club_members WHERE club_name=? AND user_id=?', (club_name, student_user_id)).fetchone()
-            if not member:
-                return jsonify({'error': '无权查看'}), 403
-        elif user['role'] == 'student':
-            club_name = req_club or user.get('club_name') or ''
-            if not club_name:
-                mc = conn.execute('SELECT club_name FROM club_members WHERE user_id=? LIMIT 1', (user['id'],)).fetchone()
-                if mc:
-                    club_name = mc['club_name']
-            if not club_name:
-                club_name = student['club_name'] or ''
-            if not club_name:
-                mc2 = conn.execute('SELECT club_name FROM club_members WHERE user_id=? LIMIT 1', (student_user_id,)).fetchone()
-                if mc2:
-                    club_name = mc2['club_name']
-            if user['id'] == student_user_id:
-                filter_by_club = False
-            else:
-                member = conn.execute('SELECT id FROM club_members WHERE club_name=? AND user_id=?', (club_name, student_user_id)).fetchone()
-                if not member:
-                    return jsonify({'error': '无权查看'}), 403
-        elif user['role'] == 'admin':
-            club_name = student['club_name'] or ''
-            member_club = conn.execute('SELECT club_name FROM club_members WHERE user_id=? LIMIT 1', (student_user_id,)).fetchone()
-            if member_club:
-                club_name = member_club['club_name']
-            filter_by_club = False
-        activity_list = []
-        if filter_by_club and club_name:
-            act_rows = conn.execute('SELECT cs.activity_name, cs.created_at, cr.checkin_method, cs.club_name FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE cr.student_id=? AND cs.club_name=? AND cs.is_completed=1 ORDER BY cs.created_at DESC', (student_user_id, club_name)).fetchall()
-            if not act_rows:
-                act_rows = conn.execute('SELECT cs.activity_name, cs.created_at, cr.checkin_method, cs.club_name FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE cr.student_name=? AND cs.club_name=? AND cs.is_completed=1 ORDER BY cs.created_at DESC', (student['real_name'] or student['username'], club_name)).fetchall()
-        else:
-            act_rows = conn.execute('SELECT cs.activity_name, cs.created_at, cr.checkin_method, cs.club_name FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE cr.student_id=? AND cs.is_completed=1 ORDER BY cs.created_at DESC', (student_user_id,)).fetchall()
-            if not act_rows:
-                act_rows = conn.execute('SELECT cs.activity_name, cs.created_at, cr.checkin_method, cs.club_name FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE cr.student_name=? AND cs.is_completed=1 ORDER BY cs.created_at DESC', (student['real_name'] or student['username'],)).fetchall()
-        for r in act_rows:
-            activity_list.append({'name': r['activity_name'] or '未命名活动', 'date': r['created_at'], 'type': 'activity', 'club_name': r['club_name']})
-        other_list = []
-        if filter_by_club and club_name:
-            wl_rows = conn.execute('SELECT item_name, score, status, created_at, review_note, club_name FROM workload_submissions WHERE student_user_id=? AND club_name=? ORDER BY created_at DESC', (student_user_id, club_name)).fetchall()
-        else:
-            wl_rows = conn.execute('SELECT item_name, score, status, created_at, review_note, club_name FROM workload_submissions WHERE student_user_id=? ORDER BY created_at DESC', (student_user_id,)).fetchall()
-        for r in wl_rows:
-            other_list.append({'name': r['item_name'], 'score': r['score'], 'status': r['status'], 'date': r['created_at'], 'review_note': r['review_note'], 'type': 'other', 'club_name': r['club_name']})
-    finally:
-        conn.close()
-    return jsonify({
-        'success': True,
-        'student': {'user_id': student['id'], 'real_name': student['real_name'] or student['username'], 'sid': student['sid'] or '', 'class_name': student['class_name'] or '', 'club_name': club_name},
-        'activity_list': [dict(r) for r in activity_list],
-        'other_list': [dict(r) for r in other_list],
-        'activity_count': len(activity_list),
-        'activity_score': len(activity_list),
-        'other_score': round(sum(r['score'] for r in other_list if r['status'] == 'approved'), 1)
-    })
-
-
-@app.route('/workload.html')
-def serve_workload():
-    return send_file(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'public', 'workload.html'))
-
+# ==================== 赋分规则 API ====================
 
 @app.route('/api/scoring-rules', methods=['GET', 'POST'])
-def handle_scoring_rules():
+def scoring_rules():
     user = get_current_user()
     if not user or user['role'] != 'admin':
-        return jsonify({'error': '仅管理员可操作'}), 403
-    if request.method == 'GET':
-        conn = db.get_conn()
-        try:
-            rows = conn.execute('SELECT star_level, collective_limit, individual_limit, updated_at, date_start, date_end FROM scoring_rules ORDER BY star_level DESC').fetchall()
-        finally:
-            conn.close()
-        return jsonify({'success': True, 'data': [dict(r) for r in rows]})
-    else:
-        data = request.get_json(force=True)
-        rules = data.get('rules', [])
-        date_start = (data.get('date_start') or '').strip()
-        date_end = (data.get('date_end') or '').strip()
-        if date_start and date_end and date_end < date_start:
-            return jsonify({'error': '结束日期不能早于开始日期'}), 400
-        conn = db.get_conn()
-        try:
-            for r in rules:
-                star = r.get('star_level')
-                coll = r.get('collective_limit', 0)
-                indiv = r.get('individual_limit', 0)
-                if star is None:
-                    continue
-                try:
-                    coll = float(coll) if coll else 0
-                    indiv = float(indiv) if indiv else 0
-                except (TypeError, ValueError):
-                    coll = 0
-                    indiv = 0
-                conn.execute('UPDATE scoring_rules SET collective_limit=?, individual_limit=?, updated_at=datetime("now","localtime") WHERE star_level=?', (coll, indiv, star))
-            conn.execute('UPDATE scoring_rules SET date_start=?, date_end=?', (date_start, date_end))
-            if date_start or date_end:
-                conn.execute('UPDATE scoring_submissions SET date_start=?, date_end=? WHERE status=?', (date_start, date_end, 'draft'))
+        return jsonify({'error': '无权限'}), 403
+    conn = db.get_conn()
+    try:
+        if request.method == 'GET':
+            rows = conn.execute('SELECT star_level, collective_limit, individual_limit, date_start, date_end FROM scoring_rules ORDER BY star_level').fetchall()
+            data = []
+            for r in rows:
+                item = {'star_level': r['star_level'], 'collective_limit': r['collective_limit'], 'individual_limit': r['individual_limit']}
+                item['date_start'] = r['date_start'] if 'date_start' in r.keys() else ''
+                item['date_end'] = r['date_end'] if 'date_end' in r.keys() else ''
+                data.append(item)
+            return jsonify({'success': True, 'data': data})
+        else:
+            body = request.get_json(silent=True) or {}
+            rules = body.get('rules', [])
+            date_start = body.get('date_start', '')
+            date_end = body.get('date_end', '')
+            for rule in rules:
+                sl = rule.get('star_level', 0)
+                cl = rule.get('collective_limit', 0)
+                il = rule.get('individual_limit', 0)
+                conn.execute('UPDATE scoring_rules SET collective_limit=?, individual_limit=?, date_start=?, date_end=?, updated_at=CURRENT_TIMESTAMP WHERE star_level=?', (cl, il, date_start, date_end, sl))
             conn.commit()
-        finally:
-            conn.close()
-        return jsonify({'success': True, 'message': '赋分规则已保存'})
+            return jsonify({'success': True, 'message': '赋分规则已保存'})
+    finally:
+        conn.close()
 
 
 @app.route('/api/scoring-club-overrides', methods=['GET', 'POST'])
-def handle_scoring_club_overrides():
+def scoring_club_overrides():
     user = get_current_user()
     if not user or user['role'] != 'admin':
-        return jsonify({'error': '仅管理员可操作'}), 403
-    if request.method == 'GET':
-        conn = db.get_conn()
-        try:
-            rows = conn.execute('SELECT sco.club_name, sco.collective_limit, sco.individual_limit, sco.updated_at, cp.star_rating FROM scoring_club_overrides sco LEFT JOIN club_profiles cp ON sco.club_name=cp.club_name ORDER BY cp.star_rating DESC, sco.club_name').fetchall()
-        finally:
-            conn.close()
-        return jsonify({'success': True, 'data': [dict(r) for r in rows]})
-    else:
-        data = request.get_json(force=True)
-        overrides = data.get('overrides', [])
-        conn = db.get_conn()
-        try:
-            for o in overrides:
-                club_name = (o.get('club_name') or '').strip()
-                if not club_name:
-                    continue
-                coll = o.get('collective_limit')
-                indiv = o.get('individual_limit')
-                try:
-                    coll = float(coll) if coll is not None and coll != '' else None
-                except (TypeError, ValueError):
-                    coll = None
-                try:
-                    indiv = float(indiv) if indiv is not None and indiv != '' else None
-                except (TypeError, ValueError):
-                    indiv = None
-                existing = conn.execute('SELECT id FROM scoring_club_overrides WHERE club_name=?', (club_name,)).fetchone()
-                if existing:
-                    conn.execute('UPDATE scoring_club_overrides SET collective_limit=?, individual_limit=?, updated_at=datetime("now","localtime") WHERE club_name=?', (coll, indiv, club_name))
+        return jsonify({'error': '无权限'}), 403
+    conn = db.get_conn()
+    try:
+        if request.method == 'GET':
+            rows = conn.execute('SELECT club_name, collective_limit, individual_limit FROM scoring_club_overrides').fetchall()
+            return jsonify({'success': True, 'data': [dict(r) for r in rows]})
+        else:
+            body = request.get_json(silent=True) or {}
+            overrides = body.get('overrides', [])
+            for ov in overrides:
+                cn = ov.get('club_name', '')
+                cl = ov.get('collective_limit')
+                il = ov.get('individual_limit')
+                if cl is None and il is None:
+                    conn.execute('DELETE FROM scoring_club_overrides WHERE club_name=?', (cn,))
                 else:
-                    conn.execute('INSERT INTO scoring_club_overrides (club_name, collective_limit, individual_limit) VALUES (?,?,?)', (club_name, coll, indiv))
+                    conn.execute('INSERT OR REPLACE INTO scoring_club_overrides (club_name, collective_limit, individual_limit, updated_at) VALUES (?, ?, ?, CURRENT_TIMESTAMP)', (cn, cl, il))
             conn.commit()
-        finally:
-            conn.close()
-        return jsonify({'success': True, 'message': '社团单独赋分已保存'})
+            return jsonify({'success': True, 'message': '社团赋分覆盖已保存'})
+    finally:
+        conn.close()
 
 
 @app.route('/api/scoring-club-overrides/<club_name>', methods=['DELETE'])
-def delete_scoring_club_override(club_name):
+def scoring_club_override_delete(club_name):
     user = get_current_user()
     if not user or user['role'] != 'admin':
-        return jsonify({'error': '仅管理员可操作'}), 403
+        return jsonify({'error': '无权限'}), 403
     conn = db.get_conn()
     try:
         conn.execute('DELETE FROM scoring_club_overrides WHERE club_name=?', (club_name,))
         conn.commit()
+        return jsonify({'success': True, 'message': '已删除社团赋分覆盖'})
     finally:
         conn.close()
-    return jsonify({'success': True, 'message': '已恢复为星级默认值'})
 
+
+# ==================== 赋分计算/提交 API ====================
 
 @app.route('/api/scoring/calculate', methods=['GET'])
 def scoring_calculate():
     user = get_current_user()
-    if not user or user['role'] not in ('user', 'admin', 'teacher'):
-        return jsonify({'error': '仅社团负责人、管理员或指导老师可查看'}), 403
-    if user['role'] == 'user':
-        club_name = user.get('club_name') or ''
-    elif user['role'] == 'teacher':
-        club_name = request.args.get('club', '') or user.get('club_name') or ''
-    else:
-        club_name = request.args.get('club', '')
-    if not club_name:
-        return jsonify({'success': True, 'data': [], 'club_name': '', 'star_level': 0, 'collective_limit': 0, 'individual_limit': 0})
+    if not user:
+        return jsonify({'error': '未登录'}), 401
+    club_name = request.args.get('club', '').strip()
     conn = db.get_conn()
     try:
+        # 获取日期范围
+        rule_row = conn.execute('SELECT date_start, date_end FROM scoring_rules LIMIT 1').fetchone()
+        date_start = rule_row['date_start'] if rule_row and 'date_start' in rule_row.keys() and rule_row['date_start'] else ''
+        date_end = rule_row['date_end'] if rule_row and 'date_end' in rule_row.keys() and rule_row['date_end'] else ''
+
+        # 确定社团
+        if not club_name:
+            if user['role'] == 'user':
+                club_name = user.get('club_name', '')
+            else:
+                return jsonify({'error': '请指定社团'}), 400
+
+        # 获取社团星级
         profile = conn.execute('SELECT star_rating FROM club_profiles WHERE club_name=?', (club_name,)).fetchone()
         star_level = profile['star_rating'] if profile else 0
-        rule = conn.execute('SELECT collective_limit, individual_limit FROM scoring_rules WHERE star_level=?', (star_level,)).fetchone()
-        collective_limit = rule['collective_limit'] if rule else 0
-        individual_limit = rule['individual_limit'] if rule else 0
-        date_row = conn.execute('SELECT date_start, date_end FROM scoring_rules LIMIT 1').fetchone()
-        date_start = date_row['date_start'] if date_row else ''
-        date_end = date_row['date_end'] if date_row else ''
+
+        # 获取赋分上限
         override = conn.execute('SELECT collective_limit, individual_limit FROM scoring_club_overrides WHERE club_name=?', (club_name,)).fetchone()
-        has_override = False
-        if override:
-            if override['collective_limit'] is not None:
-                collective_limit = override['collective_limit']
-                has_override = True
-            if override['individual_limit'] is not None:
-                individual_limit = override['individual_limit']
-                has_override = True
-        members = conn.execute('SELECT cm.user_id, cm.real_name, cm.student_id_num, cm.class_name, cm.college FROM club_members cm LEFT JOIN users u ON cm.user_id=u.id WHERE cm.club_name=? AND (cm.user_id=0 OR u.id IS NOT NULL) ORDER BY cm.real_name', (club_name,)).fetchall()
-        if date_start and date_end and date_end < date_start:
-            date_start = ''
-            date_end = ''
-        activity_counts = {}
-        date_params_act = [club_name]
-        date_cond_act = ''
-        if date_start:
-            date_cond_act += ' AND date(cs.created_at)>=?'
-            date_params_act.append(date_start)
-        if date_end:
-            date_cond_act += ' AND date(cs.created_at)<=?'
-            date_params_act.append(date_end)
-        act_rows = conn.execute('SELECT cr.student_id, COUNT(DISTINCT cr.session_id) as cnt FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE cs.club_name=? AND cs.is_completed=1 AND cr.student_id IS NOT NULL AND cr.student_id!="" AND cr.student_id!=0' + date_cond_act + ' GROUP BY cr.student_id', date_params_act).fetchall()
-        for r in act_rows:
-            activity_counts[r['student_id']] = r['cnt']
-        date_params_name = [club_name]
-        date_cond_name = ''
-        if date_start:
-            date_cond_name += ' AND date(cs.created_at)>=?'
-            date_params_name.append(date_start)
-        if date_end:
-            date_cond_name += ' AND date(cs.created_at)<=?'
-            date_params_name.append(date_end)
-        act_name_rows = conn.execute('SELECT cr.student_name, COUNT(DISTINCT cr.session_id) as cnt FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE cs.club_name=? AND cs.is_completed=1' + date_cond_name + ' GROUP BY cr.student_name', date_params_name).fetchall()
-        act_name_map = {}
-        for r in act_name_rows:
-            act_name_map[r['student_name']] = r['cnt']
-        workload_sums = {}
-        wl_date_params = [club_name, 'approved']
-        wl_date_cond = ''
-        if date_start:
-            wl_date_cond += ' AND date(created_at)>=?'
-            wl_date_params.append(date_start)
-        if date_end:
-            wl_date_cond += ' AND date(created_at)<=?'
-            wl_date_params.append(date_end)
-        wl_rows = conn.execute('SELECT student_user_id, SUM(score) as total_score FROM workload_submissions WHERE club_name=? AND status=?' + wl_date_cond + ' GROUP BY student_user_id', wl_date_params).fetchall()
-        for r in wl_rows:
-            workload_sums[r['student_user_id']] = r['total_score']
-        member_workloads = []
-        for m in members:
-            uid = m['user_id']
-            name = m['real_name'] or ''
-            act_count = activity_counts.get(uid, 0) or activity_counts.get(str(uid), 0) or act_name_map.get(name, 0)
-            other_score = workload_sums.get(uid, 0)
-            total = round(act_count + other_score, 1)
-            member_workloads.append({
-                'user_id': uid,
-                'real_name': name,
-                'student_id_num': m['student_id_num'],
-                'class_name': m['class_name'],
-                'college': m['college'] if 'college' in m.keys() else '',
-                'activity_count': act_count,
-                'other_score': round(other_score, 1),
-                'total_workload': total
-            })
-        total_workload_sum = sum(mw['total_workload'] for mw in member_workloads)
-        results = []
-        for mw in member_workloads:
-            if total_workload_sum > 0 and collective_limit > 0:
-                preliminary = (mw['total_workload'] / total_workload_sum) * collective_limit
-            else:
-                preliminary = 0
-            if individual_limit > 0 and preliminary > individual_limit:
-                final_score = round(individual_limit, 1)
-            else:
-                final_score = round(preliminary, 1)
-            results.append({
-                'user_id': mw['user_id'],
-                'real_name': mw['real_name'],
-                'student_id_num': mw['student_id_num'],
-                'class_name': mw['class_name'],
-                'college': mw['college'],
-                'activity_count': mw['activity_count'],
-                'other_score': mw['other_score'],
-                'total_workload': mw['total_workload'],
-                'preliminary_score': round(preliminary, 1),
-                'final_score': final_score,
-                'capped': preliminary > individual_limit if individual_limit > 0 else False
-            })
-    finally:
-        conn.close()
-    return jsonify({
-        'success': True,
-        'data': results,
-        'club_name': club_name,
-        'star_level': star_level,
-        'collective_limit': collective_limit,
-        'individual_limit': individual_limit,
-        'has_override': has_override,
-        'total_workload_sum': round(total_workload_sum, 1),
-        'member_count': len(results),
-        'date_start': date_start,
-        'date_end': date_end
-    })
+        if override and override['collective_limit'] is not None:
+            collective_limit = override['collective_limit']
+            individual_limit = override['individual_limit']
+        else:
+            rule = conn.execute('SELECT collective_limit, individual_limit FROM scoring_rules WHERE star_level=?', (star_level,)).fetchone()
+            collective_limit = rule['collective_limit'] if rule else 0
+            individual_limit = rule['individual_limit'] if rule else 0
 
+        # 获取社团成员
+        members = conn.execute('SELECT u.id as user_id, COALESCE(up.real_name, u.username) as real_name, up.student_id as student_id_num, up.college, up.class_name FROM club_members cm JOIN users u ON cm.user_id=u.id LEFT JOIN user_profiles up ON u.id=up.user_id WHERE cm.club_name=?', (club_name,)).fetchall()
 
-@app.route('/api/scoring/calculate-export', methods=['GET'])
-def scoring_calculate_export():
-    import openpyxl
-    from openpyxl.styles import Font, Alignment, PatternFill
-    user = get_current_user()
-    if not user or user['role'] not in ('user', 'admin', 'teacher'):
-        return jsonify({'error': '仅社团负责人、管理员或指导老师可导出'}), 403
-    if user['role'] == 'user':
-        club_name = user.get('club_name') or ''
-    elif user['role'] == 'teacher':
-        club_name = request.args.get('club', '') or user.get('club_name') or ''
-    else:
-        club_name = request.args.get('club', '')
-    if not club_name:
-        return jsonify({'error': '请指定社团'}), 400
-    conn = db.get_conn()
-    try:
-        profile = conn.execute('SELECT star_rating FROM club_profiles WHERE club_name=?', (club_name,)).fetchone()
-        star_level = profile['star_rating'] if profile else 0
-        rule = conn.execute('SELECT collective_limit, individual_limit FROM scoring_rules WHERE star_level=?', (star_level,)).fetchone()
-        collective_limit = rule['collective_limit'] if rule else 0
-        individual_limit = rule['individual_limit'] if rule else 0
-        date_row = conn.execute('SELECT date_start, date_end FROM scoring_rules LIMIT 1').fetchone()
-        date_start = date_row['date_start'] if date_row else ''
-        date_end = date_row['date_end'] if date_row else ''
-        override = conn.execute('SELECT collective_limit, individual_limit FROM scoring_club_overrides WHERE club_name=?', (club_name,)).fetchone()
-        has_override = False
-        if override:
-            if override['collective_limit'] is not None:
-                collective_limit = override['collective_limit']
-                has_override = True
-            if override['individual_limit'] is not None:
-                individual_limit = override['individual_limit']
-                has_override = True
-        members = conn.execute('SELECT cm.user_id, cm.real_name, cm.student_id_num, cm.class_name, cm.college FROM club_members cm LEFT JOIN users u ON cm.user_id=u.id WHERE cm.club_name=? AND (cm.user_id=0 OR u.id IS NOT NULL) ORDER BY cm.real_name', (club_name,)).fetchall()
-        if date_start and date_end and date_end < date_start:
-            date_start = ''
-            date_end = ''
-        activity_counts = {}
-        date_params_act = [club_name]
-        date_cond_act = ''
-        if date_start:
-            date_cond_act += ' AND date(cs.created_at)>=?'
-            date_params_act.append(date_start)
-        if date_end:
-            date_cond_act += ' AND date(cs.created_at)<=?'
-            date_params_act.append(date_end)
-        act_rows = conn.execute('SELECT cr.student_name, COUNT(DISTINCT cr.session_id) as cnt FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE cs.club_name=? AND cs.is_completed=1' + date_cond_act + ' GROUP BY cr.student_name', date_params_act).fetchall()
-        for r in act_rows:
-            activity_counts[r['student_name']] = r['cnt']
-        workload_sums = {}
-        wl_date_params = [club_name, 'approved']
-        wl_date_cond = ''
-        if date_start:
-            wl_date_cond += ' AND date(created_at)>=?'
-            wl_date_params.append(date_start)
-        if date_end:
-            wl_date_cond += ' AND date(created_at)<=?'
-            wl_date_params.append(date_end)
-        wl_rows = conn.execute('SELECT student_user_id, SUM(score) as total_score FROM workload_submissions WHERE club_name=? AND status=?' + wl_date_cond + ' GROUP BY student_user_id', wl_date_params).fetchall()
-        for r in wl_rows:
-            workload_sums[r['student_user_id']] = r['total_score']
-        member_workloads = []
-        for m in members:
-            uid = m['user_id']
-            name = m['real_name'] or ''
-            act_count = activity_counts.get(name, 0)
-            other_score = workload_sums.get(uid, 0)
-            total = round(act_count + other_score, 1)
-            member_workloads.append({
-                'user_id': uid, 'real_name': name,
-                'student_id_num': m['student_id_num'], 'class_name': m['class_name'],
-                'college': m['college'] if 'college' in m.keys() else '',
-                'activity_count': act_count, 'other_score': round(other_score, 1), 'total_workload': total
-            })
-        total_workload_sum = sum(mw['total_workload'] for mw in member_workloads)
-        results = []
-        for mw in member_workloads:
-            if total_workload_sum > 0 and collective_limit > 0:
-                preliminary = (mw['total_workload'] / total_workload_sum) * collective_limit
-            else:
-                preliminary = 0
-            if individual_limit > 0 and preliminary > individual_limit:
-                final_score = round(individual_limit, 1)
-            else:
-                final_score = round(preliminary, 1)
-            results.append({
-                'user_id': mw['user_id'], 'real_name': mw['real_name'],
-                'student_id_num': mw['student_id_num'], 'class_name': mw['class_name'],
-                'college': mw['college'], 'activity_count': mw['activity_count'],
-                'other_score': mw['other_score'], 'total_workload': mw['total_workload'],
-                'preliminary_score': round(preliminary, 1), 'final_score': final_score,
-                'capped': preliminary > individual_limit if individual_limit > 0 else False
-            })
-    finally:
-        conn.close()
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = '赋分计算结果'
-    header_font = Font(bold=True, size=11)
-    header_fill = PatternFill(start_color='667EEA', end_color='667EEA', fill_type='solid')
-    header_font_white = Font(bold=True, size=11, color='FFFFFF')
-    headers = ['序号', '姓名', '学号', '班级', '学院', '活动次数', '其他工作量', '总工作量', '集体限额内得分', '最终赋分', '是否封顶']
-    for col, h in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col, value=h)
-        cell.font = header_font_white
-        cell.fill = header_fill
-        cell.alignment = Alignment(horizontal='center', vertical='center')
-    info_row = 1
-    ws.insert_rows(info_row)
-    date_range_info = f' | 统计范围：{date_start}~{date_end}' if date_start or date_end else ''
-    info_cell = ws.cell(row=info_row, column=1, value=f'社团：{club_name} | 星级：{star_level}星 | 集体限额：{collective_limit}分 | 个人封顶：{individual_limit}分 | 总工作量：{total_workload_sum} | 成员数：{len(results)}{" | 有单独赋分" if has_override else ""}{date_range_info}')
-    info_cell.font = Font(bold=True, size=12, color='1A1A2E')
-    ws.merge_cells(start_row=info_row, start_column=1, end_row=info_row, end_column=len(headers))
-    for row_idx, r in enumerate(results, info_row + 1):
-        ws.cell(row=row_idx, column=1, value=row_idx - info_row)
-        ws.cell(row=row_idx, column=2, value=r['real_name'])
-        ws.cell(row=row_idx, column=3, value=r['student_id_num'] or '')
-        ws.cell(row=row_idx, column=4, value=r['class_name'] or '')
-        ws.cell(row=row_idx, column=5, value=r['college'] or '')
-        ws.cell(row=row_idx, column=6, value=r['activity_count'])
-        ws.cell(row=row_idx, column=7, value=r['other_score'])
-        ws.cell(row=row_idx, column=8, value=r['total_workload'])
-        ws.cell(row=row_idx, column=9, value=r['preliminary_score'])
-        final_cell = ws.cell(row=row_idx, column=10, value=r['final_score'])
-        final_cell.font = Font(bold=True, color='00B894')
-        capped_text = '是（达到封顶值）' if r['capped'] else '否'
-        ws.cell(row=row_idx, column=11, value=capped_text)
-    for col_letter in ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K']:
-        ws.column_dimensions[col_letter].width = 16 if col_letter in ('A', 'I', 'J', 'K') else 14
-    output = BytesIO()
-    wb.save(output)
-    output.seek(0)
-    safe_name = club_name.replace('/', '_').replace('\\', '_')
-    return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                     as_attachment=True, download_name=f'赋分计算_{safe_name}.xlsx')
-
-
-@app.route('/api/scoring/my-score', methods=['GET'])
-def scoring_my_score():
-    user = get_current_user()
-    if not user or user['role'] != 'student':
-        return jsonify({'error': '仅学生可查看'}), 403
-    club_name = (request.args.get('club') or '').strip()
-    if not club_name:
-        club_name = user.get('club_name') or ''
-    if not club_name:
-        return jsonify({'success': True, 'data': []})
-    conn = db.get_conn()
-    try:
-        member_row = conn.execute('SELECT 1 FROM club_members WHERE user_id=? AND club_name=?', (user['id'], club_name)).fetchone()
-        if not member_row and club_name != (user.get('club_name') or ''):
-            return jsonify({'error': '您不是该社团成员'}), 403
-        profile = conn.execute('SELECT star_rating FROM club_profiles WHERE club_name=?', (club_name,)).fetchone()
-        star_level = profile['star_rating'] if profile else 0
-        rule = conn.execute('SELECT collective_limit, individual_limit FROM scoring_rules WHERE star_level=?', (star_level,)).fetchone()
-        collective_limit = rule['collective_limit'] if rule else 0
-        individual_limit = rule['individual_limit'] if rule else 0
-        override = conn.execute('SELECT collective_limit, individual_limit FROM scoring_club_overrides WHERE club_name=?', (club_name,)).fetchone()
-        if override:
-            if override['collective_limit'] is not None:
-                collective_limit = override['collective_limit']
-            if override['individual_limit'] is not None:
-                individual_limit = override['individual_limit']
-        members = conn.execute('SELECT cm.user_id, cm.real_name FROM club_members cm LEFT JOIN users u ON cm.user_id=u.id WHERE cm.club_name=? AND (cm.user_id=0 OR u.id IS NOT NULL)', (club_name,)).fetchall()
-        activity_counts = {}
-        act_rows = conn.execute('SELECT cr.student_name, COUNT(DISTINCT cr.session_id) as cnt FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE cs.club_name=? AND cs.is_completed=1 GROUP BY cr.student_name', (club_name,)).fetchall()
-        for r in act_rows:
-            activity_counts[r['student_name']] = r['cnt']
-        workload_sums = {}
-        wl_rows = conn.execute('SELECT student_user_id, SUM(score) as total_score FROM workload_submissions WHERE club_name=? AND status=? GROUP BY student_user_id', (club_name, 'approved')).fetchall()
-        for r in wl_rows:
-            workload_sums[r['student_user_id']] = r['total_score']
+        # 计算每个成员的活动次数
+        data = []
         total_workload_sum = 0
-        my_data = None
         for m in members:
-            uid = m['user_id']
-            name = m['real_name'] or ''
-            act_count = activity_counts.get(name, 0)
-            other_score = workload_sums.get(uid, 0)
-            total = round(act_count + other_score, 1)
-            total_workload_sum += total
-            if uid == user['id']:
-                my_data = {'activity_count': act_count, 'other_score': round(other_score, 1), 'total_workload': total}
-        if my_data and total_workload_sum > 0 and collective_limit > 0:
-            preliminary = (my_data['total_workload'] / total_workload_sum) * collective_limit
-        else:
-            preliminary = 0
-        if individual_limit > 0 and preliminary > individual_limit:
-            final_score = round(individual_limit, 1)
-        else:
-            final_score = round(preliminary, 1)
+            if date_start and date_end:
+                act_count = conn.execute('SELECT COUNT(DISTINCT cs.id) as cnt FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE cr.student_name=? AND cs.club_name=? AND date(cs.created_at)>=? AND date(cs.created_at)<=?', (m['real_name'], club_name, date_start, date_end)).fetchone()['cnt']
+            else:
+                act_count = conn.execute('SELECT COUNT(DISTINCT cs.id) as cnt FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE cr.student_name=? AND cs.club_name=?', (m['real_name'], club_name)).fetchone()['cnt']
+            # 获取其他工作量
+            wl_row = conn.execute('SELECT COALESCE(SUM(score),0) as other_score FROM workload_submissions WHERE student_user_id=? AND club_name=? AND status="approved"', (m['user_id'], club_name)).fetchone()
+            other_score = wl_row['other_score'] if wl_row else 0
+            total_workload = act_count + other_score
+            total_workload_sum += total_workload
+
+            data.append({
+                'user_id': m['user_id'],
+                'real_name': m['real_name'],
+                'student_id_num': m['student_id_num'] or '',
+                'college': m['college'] or '',
+                'class_name': m['class_name'] or '',
+                'activity_count': act_count,
+                'other_score': other_score,
+                'total_workload': total_workload,
+                'preliminary_score': 0,
+                'final_score': 0,
+                'capped': False
+            })
+
+        # 第二轮：用完整的 total_workload_sum 计算每个成员的初步分数
+        for d in data:
+            if collective_limit > 0 and total_workload_sum > 0:
+                d['preliminary_score'] = round(d['total_workload'] / total_workload_sum * collective_limit, 2)
+            # 个人上限封顶
+            d['final_score'] = d['preliminary_score']
+            if individual_limit > 0 and d['final_score'] > individual_limit:
+                d['final_score'] = individual_limit
+                d['capped'] = True
+
+        return jsonify({
+            'success': True,
+            'club_name': club_name,
+            'star_level': star_level,
+            'collective_limit': collective_limit,
+            'individual_limit': individual_limit,
+            'total_workload_sum': total_workload_sum,
+            'member_count': len(members),
+            'date_start': date_start,
+            'date_end': date_end,
+            'data': data
+        })
     finally:
         conn.close()
-    return jsonify({
-        'success': True,
-        'club_name': club_name,
-        'star_level': star_level,
-        'collective_limit': collective_limit,
-        'individual_limit': individual_limit,
-        'my_workload': my_data,
-        'preliminary_score': round(preliminary, 1),
-        'final_score': final_score,
-        'capped': preliminary > individual_limit if individual_limit > 0 else False
-    })
 
 
 @app.route('/api/scoring/save', methods=['POST'])
 def scoring_save():
     user = get_current_user()
-    if not user or user['role'] not in ('user', 'admin'):
-        return jsonify({'error': '仅社团负责人可操作'}), 403
-    club_name = user.get('club_name') or '' if user['role'] == 'user' else request.get_json(force=True).get('club_name', '') or request.args.get('club', '')
+    if not user:
+        return jsonify({'error': '未登录'}), 401
+    body = request.get_json(silent=True) or {}
+    items = body.get('items', [])
+    club_name = user.get('club_name', '') if user['role'] == 'user' else request.args.get('club', '')
     if not club_name:
-        return jsonify({'error': '未关联社团'}), 400
-    data = request.get_json(force=True)
-    items = data.get('items', [])
+        return jsonify({'error': '无法确定社团'}), 400
     conn = db.get_conn()
     try:
-        existing = conn.execute('SELECT id, status FROM scoring_submissions WHERE club_name=? ORDER BY created_at DESC LIMIT 1', (club_name,)).fetchone()
-        if existing and existing['status'] in ('pending_teacher', 'teacher_approved', 'submitted_tuanwei', 'tuanwei_approved'):
-            return jsonify({'error': '当前状态不可编辑，赋分已提交审核'}), 400
-        date_row = conn.execute('SELECT date_start, date_end FROM scoring_rules LIMIT 1').fetchone()
-        cur_ds = date_row['date_start'] if date_row else ''
-        cur_de = date_row['date_end'] if date_row else ''
-        if existing:
-            sub_id = existing['id']
-            conn.execute('UPDATE scoring_submissions SET updated_at=datetime("now","localtime"), date_start=?, date_end=? WHERE id=?', (cur_ds, cur_de, sub_id))
-            conn.execute('DELETE FROM scoring_submission_items WHERE submission_id=?', (sub_id,))
-        else:
-            cursor = conn.execute('INSERT INTO scoring_submissions (club_name, status, submitted_by, date_start, date_end) VALUES (?,?,?,?,?)', (club_name, 'draft', user['id'], cur_ds, cur_de))
-            sub_id = cursor.lastrowid
+        # 查找或创建提交记录
+        sub = conn.execute('SELECT id FROM scoring_submissions WHERE club_name=? ORDER BY updated_at DESC LIMIT 1', (club_name,)).fetchone()
+        if not sub:
+            conn.execute('INSERT INTO scoring_submissions (club_name, status) VALUES (?, ?)', (club_name, 'draft'))
+            conn.commit()
+            sub = conn.execute('SELECT id FROM scoring_submissions WHERE club_name=? ORDER BY updated_at DESC LIMIT 1', (club_name,)).fetchone()
+        sub_id = sub['id']
+        # 删除旧明细
+        conn.execute('DELETE FROM scoring_submission_items WHERE submission_id=?', (sub_id,))
         for item in items:
-            conn.execute('INSERT INTO scoring_submission_items (submission_id, student_user_id, student_name, student_id_num, college, class_name, total_workload, final_score, activity_count, other_score) VALUES (?,?,?,?,?,?,?,?,?,?)',
-                         (sub_id, item.get('user_id') or item.get('student_user_id', 0), item.get('student_name', '') or item.get('real_name', ''), item.get('student_id_num', ''), item.get('college', ''), item.get('class_name', ''), item.get('total_workload', 0), item.get('final_score', 0), item.get('activity_count', 0), item.get('other_score', 0)))
+            conn.execute('INSERT INTO scoring_submission_items (submission_id, student_user_id, student_name, student_id_num, college, class_name, total_workload, final_score) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                         (sub_id, item.get('user_id', 0), item.get('student_name', item.get('real_name', '')), item.get('student_id_num', ''), item.get('college', ''), item.get('class_name', ''), item.get('total_workload', 0), item.get('final_score', 0)))
+        conn.execute('UPDATE scoring_submissions SET updated_at=CURRENT_TIMESTAMP WHERE id=?', (sub_id,))
         conn.commit()
+        return jsonify({'success': True, 'message': '赋分已保存'})
     finally:
         conn.close()
-    return jsonify({'success': True, 'message': '保存成功', 'submission_id': sub_id})
+
+
+@app.route('/api/scoring/submission-status', methods=['GET'])
+def scoring_submission_status():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': '未登录'}), 401
+    club_name = user.get('club_name', '') if user['role'] == 'user' else request.args.get('club', '')
+    if not club_name:
+        return jsonify({'error': '无法确定社团'}), 400
+    conn = db.get_conn()
+    try:
+        sub = conn.execute('SELECT id, status FROM scoring_submissions WHERE club_name=? ORDER BY updated_at DESC LIMIT 1', (club_name,)).fetchone()
+        if not sub:
+            return jsonify({'success': True, 'data': {'status': 'draft', 'reviews': [], 'items': []}})
+        reviews = conn.execute('SELECT tr.teacher_name, tr.status, tr.review_note, tr.reviewed_at FROM scoring_teacher_reviews tr WHERE tr.submission_id=?', (sub['id'],)).fetchall()
+        items = conn.execute('SELECT student_user_id, student_name, student_id_num, college, class_name, total_workload, final_score FROM scoring_submission_items WHERE submission_id=?', (sub['id'],)).fetchall()
+        return jsonify({
+            'success': True,
+            'data': {
+                'status': sub['status'],
+                'reviews': [dict(r) for r in reviews],
+                'items': [dict(i) for i in items]
+            }
+        })
+    finally:
+        conn.close()
 
 
 @app.route('/api/scoring/submit-to-teachers', methods=['POST'])
 def scoring_submit_to_teachers():
     user = get_current_user()
-    if not user or user['role'] not in ('user', 'admin'):
-        return jsonify({'error': '仅社团负责人可操作'}), 403
-    club_name = user.get('club_name') or '' if user['role'] == 'user' else request.get_json(force=True).get('club_name', '')
-    if not club_name:
-        return jsonify({'error': '未关联社团'}), 400
+    if not user or user['role'] != 'user':
+        return jsonify({'error': '仅社团负责人可提交'}), 403
+    club_name = user.get('club_name', '')
     conn = db.get_conn()
     try:
-        sub = conn.execute('SELECT id, status FROM scoring_submissions WHERE club_name=? ORDER BY created_at DESC LIMIT 1', (club_name,)).fetchone()
+        sub = conn.execute('SELECT id, status FROM scoring_submissions WHERE club_name=? ORDER BY updated_at DESC LIMIT 1', (club_name,)).fetchone()
         if not sub:
             return jsonify({'error': '请先计算并保存赋分'}), 400
-        if sub['status'] != 'draft':
-            return jsonify({'error': '当前状态不可提交'}), 400
-        sub_id = sub['id']
-        conn.execute('DELETE FROM scoring_teacher_reviews WHERE submission_id=?', (sub_id,))
-        teachers = conn.execute('SELECT user_id FROM teacher_clubs WHERE club_name=?', (club_name,)).fetchall()
-        if not teachers:
-            teachers = conn.execute('SELECT user_id FROM club_teachers WHERE club_name=? AND user_id IS NOT NULL AND user_id>0', (club_name,)).fetchall()
-        teacher_ids = list(set([t['user_id'] for t in teachers if t['user_id']]))
-        users_teachers = conn.execute('SELECT id as user_id FROM users WHERE role=? AND club_name=?', ('teacher', club_name)).fetchall()
-        for ut in users_teachers:
-            if ut['user_id'] not in teacher_ids:
-                teacher_ids.append(ut['user_id'])
-        if not teacher_ids:
-            conn.execute('UPDATE scoring_submissions SET status=?, updated_at=datetime("now","localtime") WHERE id=?', ('teacher_approved', sub_id))
-            conn.commit()
-            return jsonify({'success': True, 'message': '无指导老师，已自动跳过审核', 'status': 'teacher_approved'})
-        for tid in teacher_ids:
-            profile = conn.execute('SELECT real_name FROM teacher_profiles WHERE user_id=?', (tid,)).fetchone()
-            tname = profile['real_name'] if profile and profile['real_name'] else ''
+        if sub['status'] not in ('draft', 'pending_teacher'):
+            return jsonify({'error': '当前状态不允许提交'}), 400
+        conn.execute('UPDATE scoring_submissions SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', ('pending_teacher', sub['id']))
+        # 为指导老师创建审核记录
+        teacher_rows = conn.execute('SELECT tc.user_id, COALESCE(up.real_name, u.username) as real_name FROM teacher_clubs tc JOIN users u ON tc.user_id=u.id LEFT JOIN user_profiles up ON u.id=up.user_id WHERE tc.club_name=?', (club_name,)).fetchall()
+        for t in teacher_rows:
             try:
-                conn.execute('INSERT INTO scoring_teacher_reviews (submission_id, teacher_user_id, teacher_name, status) VALUES (?,?,?,?)', (sub_id, tid, tname, 'pending'))
-            except:
+                conn.execute('INSERT OR IGNORE INTO scoring_teacher_reviews (submission_id, teacher_user_id, teacher_name, status) VALUES (?, ?, ?, ?)', (sub['id'], t['user_id'], t['real_name'], 'pending'))
+            except Exception:
                 pass
-        conn.execute('UPDATE scoring_submissions SET status=?, updated_at=datetime("now","localtime") WHERE id=?', ('pending_teacher', sub_id))
         conn.commit()
+        return jsonify({'success': True, 'message': '已提交指导老师审核'})
     finally:
         conn.close()
-    return jsonify({'success': True, 'message': '已提交指导老师审核', 'status': 'pending_teacher'})
-
-
-@app.route('/api/scoring/teacher-review/<int:review_id>', methods=['POST'])
-def scoring_teacher_review(review_id):
-    user = get_current_user()
-    if not user or user['role'] != 'teacher':
-        return jsonify({'error': '仅指导老师可审核'}), 403
-    data = request.get_json(force=True)
-    action = data.get('action')
-    review_note = (data.get('review_note') or '').strip()
-    if action not in ('approve', 'reject'):
-        return jsonify({'error': '无效操作'}), 400
-    conn = db.get_conn()
-    try:
-        review = conn.execute('SELECT id, submission_id, teacher_user_id, status FROM scoring_teacher_reviews WHERE id=?', (review_id,)).fetchone()
-        if not review:
-            return jsonify({'error': '审核记录不存在'}), 404
-        if review['teacher_user_id'] != user['id']:
-            return jsonify({'error': '无权审核'}), 403
-        if review['status'] != 'pending':
-            return jsonify({'error': '已审核'}), 400
-        new_status = 'approved' if action == 'approve' else 'rejected'
-        conn.execute('UPDATE scoring_teacher_reviews SET status=?, review_note=?, reviewed_at=datetime("now","localtime") WHERE id=?', (new_status, review_note, review_id))
-        if new_status == 'approved':
-            pending_count = conn.execute('SELECT COUNT(*) as c FROM scoring_teacher_reviews WHERE submission_id=? AND status=?', (review['submission_id'], 'pending')).fetchone()
-            if pending_count['c'] == 0:
-                conn.execute('UPDATE scoring_submissions SET status=?, updated_at=datetime("now","localtime") WHERE id=?', ('teacher_approved', review['submission_id']))
-        else:
-            conn.execute('UPDATE scoring_submissions SET status=?, updated_at=datetime("now","localtime") WHERE id=?', ('draft', review['submission_id']))
-            remaining = conn.execute('SELECT id FROM scoring_teacher_reviews WHERE submission_id=? AND status=? AND id!=?', (review['submission_id'], 'pending', review_id)).fetchall()
-            for r in remaining:
-                conn.execute('UPDATE scoring_teacher_reviews SET status=?, review_note=?, reviewed_at=datetime("now","localtime") WHERE id=?', ('cancelled', '其他老师已驳回，自动取消', r['id']))
-        conn.commit()
-    finally:
-        conn.close()
-    return jsonify({'success': True, 'message': '审核完成'})
 
 
 @app.route('/api/scoring/submit-to-tuanwei', methods=['POST'])
 def scoring_submit_to_tuanwei():
     user = get_current_user()
-    if not user or user['role'] not in ('user', 'admin'):
-        return jsonify({'error': '仅社团负责人可操作'}), 403
-    club_name = user.get('club_name') or '' if user['role'] == 'user' else request.get_json(force=True).get('club_name', '')
-    if not club_name:
-        return jsonify({'error': '未关联社团'}), 400
+    if not user or user['role'] != 'user':
+        return jsonify({'error': '仅社团负责人可提交'}), 403
+    club_name = user.get('club_name', '')
     conn = db.get_conn()
     try:
-        sub = conn.execute('SELECT id, status FROM scoring_submissions WHERE club_name=? ORDER BY created_at DESC LIMIT 1', (club_name,)).fetchone()
+        sub = conn.execute('SELECT id, status FROM scoring_submissions WHERE club_name=? ORDER BY updated_at DESC LIMIT 1', (club_name,)).fetchone()
         if not sub:
-            return jsonify({'error': '请先完成赋分'}), 400
+            return jsonify({'error': '请先计算并保存赋分'}), 400
         if sub['status'] != 'teacher_approved':
-            return jsonify({'error': '需等待指导老师审核通过'}), 400
-        conn.execute('UPDATE scoring_submissions SET status=?, updated_at=datetime("now","localtime") WHERE id=?', ('submitted_tuanwei', sub['id']))
+            return jsonify({'error': '需指导老师审核通过后才能提交团委'}), 400
+        conn.execute('UPDATE scoring_submissions SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', ('submitted_tuanwei', sub['id']))
         conn.commit()
+        return jsonify({'success': True, 'message': '已提交团委审核'})
     finally:
         conn.close()
-    return jsonify({'success': True, 'message': '已提交到团委，等待团委审核'})
 
+
+@app.route('/api/scoring/export/<club_name>', methods=['GET'])
+def scoring_export_club(club_name):
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': '未登录'}), 401
+    try:
+        from openpyxl import Workbook
+    except ImportError:
+        return jsonify({'error': '需要openpyxl库'}), 500
+    conn = db.get_conn()
+    try:
+        items = conn.execute('SELECT si.student_name, si.student_id_num, si.college, si.class_name, si.total_workload, si.final_score FROM scoring_submission_items si JOIN scoring_submissions s ON si.submission_id=s.id WHERE s.club_name=? ORDER BY si.final_score DESC', (club_name,)).fetchall()
+        wb = Workbook()
+        ws = wb.active
+        ws.title = club_name
+        ws.append(['姓名', '学号', '学院', '班级', '总工作量', '最终赋分'])
+        for item in items:
+            ws.append([item['student_name'], item['student_id_num'], item['college'], item['class_name'], item['total_workload'], item['final_score']])
+        import io
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        from flask import send_file
+        return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=f'{club_name}_赋分.xlsx')
+    finally:
+        conn.close()
+
+
+@app.route('/api/scoring/calculate-export', methods=['GET'])
+def scoring_calculate_export():
+    user = get_current_user()
+    if not user or user['role'] not in ('admin', 'user'):
+        return jsonify({'error': '无权限'}), 403
+    club_name = request.args.get('club', '')
+    if not club_name:
+        return jsonify({'error': '请指定社团'}), 400
+    try:
+        from openpyxl import Workbook
+    except ImportError:
+        return jsonify({'error': '需要openpyxl库'}), 500
+    conn = db.get_conn()
+    try:
+        items = conn.execute('SELECT si.student_name, si.student_id_num, si.college, si.class_name, si.total_workload, si.final_score FROM scoring_submission_items si JOIN scoring_submissions s ON si.submission_id=s.id WHERE s.club_name=? AND s.status="tuanwei_approved" ORDER BY si.final_score DESC', (club_name,)).fetchall()
+        wb = Workbook()
+        ws = wb.active
+        ws.title = club_name
+        ws.append(['姓名', '学号', '学院', '班级', '总工作量', '最终赋分'])
+        for item in items:
+            ws.append([item['student_name'], item['student_id_num'], item['college'], item['class_name'], item['total_workload'], item['final_score']])
+        import io
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        from flask import send_file
+        return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=f'{club_name}_赋分预览.xlsx')
+    finally:
+        conn.close()
+
+
+@app.route('/api/scoring/export-all', methods=['GET'])
+def scoring_export_all():
+    user = get_current_user()
+    if not user or user['role'] not in ('admin', 'user'):
+        return jsonify({'error': '无权限'}), 403
+    try:
+        from openpyxl import Workbook
+    except ImportError:
+        return jsonify({'error': '需要openpyxl库'}), 500
+    conn = db.get_conn()
+    try:
+        clubs = conn.execute('SELECT DISTINCT club_name FROM scoring_submissions WHERE status="tuanwei_approved"').fetchall()
+        wb = Workbook()
+        ws_all = wb.active
+        ws_all.title = '全部社团赋分'
+        ws_all.append(['社团', '姓名', '学号', '学院', '班级', '总工作量', '最终赋分'])
+        for c in clubs:
+            items = conn.execute('SELECT si.student_name, si.student_id_num, si.college, si.class_name, si.total_workload, si.final_score FROM scoring_submission_items si JOIN scoring_submissions s ON si.submission_id=s.id WHERE s.club_name=? AND s.status="tuanwei_approved" ORDER BY si.final_score DESC', (c['club_name'],)).fetchall()
+            ws = wb.create_sheet(title=c['club_name'][:31])
+            ws.append(['姓名', '学号', '学院', '班级', '总工作量', '最终赋分'])
+            for item in items:
+                ws.append([item['student_name'], item['student_id_num'], item['college'], item['class_name'], item['total_workload'], item['final_score']])
+                ws_all.append([c['club_name'], item['student_name'], item['student_id_num'], item['college'], item['class_name'], item['total_workload'], item['final_score']])
+        import io
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        from flask import send_file
+        return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='全部社团赋分.xlsx')
+    finally:
+        conn.close()
+
+
+# ==================== 指导老师赋分审核 API ====================
+
+@app.route('/api/scoring/teacher-reviews', methods=['GET'])
+def scoring_teacher_reviews():
+    user = get_current_user()
+    if not user or user['role'] not in ('teacher', 'admin'):
+        return jsonify({'error': '无权限'}), 403
+    conn = db.get_conn()
+    try:
+        if user['role'] == 'teacher':
+            reviews = conn.execute('SELECT tr.id as review_id, tr.status as review_status, tr.review_note, tr.reviewed_at, s.id as submission_id, s.club_name, s.status as submission_status, s.created_at FROM scoring_teacher_reviews tr JOIN scoring_submissions s ON tr.submission_id=s.id WHERE tr.teacher_user_id=? ORDER BY s.created_at DESC', (user['id'],)).fetchall()
+        else:
+            reviews = conn.execute('SELECT tr.id as review_id, tr.status as review_status, tr.review_note, tr.reviewed_at, s.id as submission_id, s.club_name, s.status as submission_status, s.created_at FROM scoring_teacher_reviews tr JOIN scoring_submissions s ON tr.submission_id=s.id ORDER BY s.created_at DESC').fetchall()
+        data = []
+        for r in reviews:
+            items = conn.execute('SELECT student_name, student_id_num, college, class_name, total_workload, final_score FROM scoring_submission_items WHERE submission_id=?', (r['submission_id'],)).fetchall()
+            # 为兼容前端，添加 activity_count 和 other_score 字段
+            item_list = []
+            for i in items:
+                item_list.append({
+                    'student_name': i['student_name'],
+                    'student_id_num': i['student_id_num'],
+                    'college': i['college'],
+                    'class_name': i['class_name'],
+                    'activity_count': 0,
+                    'other_score': 0,
+                    'total_workload': i['total_workload'],
+                    'final_score': i['final_score']
+                })
+            data.append({
+                'club_name': r['club_name'],
+                'submission_status': r['submission_status'],
+                'created_at': r['created_at'],
+                'items': item_list,
+                'review': {
+                    'status': r['review_status'],
+                    'id': r['review_id'],
+                    'review_note': r['review_note'] or ''
+                }
+            })
+        return jsonify({'success': True, 'data': data})
+    finally:
+        conn.close()
+
+
+@app.route('/api/scoring/teacher-review/<int:review_id>', methods=['POST'])
+def scoring_teacher_review_action(review_id):
+    user = get_current_user()
+    if not user or user['role'] not in ('teacher', 'admin'):
+        return jsonify({'error': '无权限'}), 403
+    body = request.get_json(silent=True) or {}
+    action = body.get('action', '')
+    review_note = body.get('review_note', '')
+    if action not in ('approve', 'reject'):
+        return jsonify({'error': '无效操作'}), 400
+    conn = db.get_conn()
+    try:
+        review = conn.execute('SELECT tr.*, s.club_name FROM scoring_teacher_reviews tr JOIN scoring_submissions s ON tr.submission_id=s.id WHERE tr.id=?', (review_id,)).fetchone()
+        if not review:
+            return jsonify({'error': '审核记录不存在'}), 404
+        new_status = 'approved' if action == 'approve' else 'rejected'
+        conn.execute('UPDATE scoring_teacher_reviews SET status=?, review_note=?, reviewed_at=CURRENT_TIMESTAMP WHERE id=?', (new_status, review_note, review_id))
+        # 如果通过，检查是否所有老师都通过了
+        if action == 'approve':
+            pending = conn.execute('SELECT COUNT(*) as cnt FROM scoring_teacher_reviews WHERE submission_id=? AND status="pending"', (review['submission_id'],)).fetchone()['cnt']
+            if pending == 0:
+                conn.execute('UPDATE scoring_submissions SET status="teacher_approved", updated_at=CURRENT_TIMESTAMP WHERE id=?', (review['submission_id'],))
+        else:
+            conn.execute('UPDATE scoring_submissions SET status="draft", updated_at=CURRENT_TIMESTAMP WHERE id=?', (review['submission_id'],))
+        conn.commit()
+        return jsonify({'success': True, 'message': '已通过' if action == 'approve' else '已驳回'})
+    finally:
+        conn.close()
+
+
+# ==================== 团委赋分审核 API ====================
 
 @app.route('/api/scoring/tuanwei-pending', methods=['GET'])
 def scoring_tuanwei_pending():
     user = get_current_user()
     if not user or user['role'] != 'admin':
-        return jsonify({'error': '仅管理员可查看'}), 403
+        return jsonify({'error': '无权限'}), 403
     conn = db.get_conn()
     try:
-        clubs = conn.execute('SELECT club_name FROM club_profiles ORDER BY club_name').fetchall()
-        result = []
-        for c in clubs:
-            sub = conn.execute('SELECT id, status, created_at, updated_at FROM scoring_submissions WHERE club_name=? ORDER BY created_at DESC LIMIT 1', (c['club_name'],)).fetchone()
-            if not sub or sub['status'] not in ('submitted_tuanwei', 'tuanwei_approved'):
-                continue
-            items = conn.execute('SELECT student_user_id, student_name, student_id_num, college, class_name, total_workload, final_score, activity_count, other_score FROM scoring_submission_items WHERE submission_id=?', (sub['id'],)).fetchall()
-            result.append({
-                'club_name': c['club_name'],
-                'submission_id': sub['id'],
-                'status': sub['status'],
-                'created_at': sub['created_at'],
-                'updated_at': sub['updated_at'],
+        subs = conn.execute("SELECT id, club_name, status, updated_at FROM scoring_submissions WHERE status IN ('submitted_tuanwei', 'tuanwei_approved') ORDER BY updated_at DESC").fetchall()
+        data = []
+        for s in subs:
+            items = conn.execute('SELECT student_id_num, student_name, college, class_name, total_workload, final_score FROM scoring_submission_items WHERE submission_id=?', (s['id'],)).fetchall()
+            data.append({
+                'club_name': s['club_name'],
+                'status': s['status'],
+                'updated_at': s['updated_at'],
                 'member_count': len(items),
                 'items': [dict(i) for i in items]
             })
+        return jsonify({'success': True, 'data': data})
     finally:
         conn.close()
-    return jsonify({'success': True, 'data': result})
 
 
 @app.route('/api/scoring/tuanwei-approved-list', methods=['GET'])
 def scoring_tuanwei_approved_list():
     user = get_current_user()
     if not user or user['role'] != 'admin':
-        return jsonify({'error': '仅管理员可查看'}), 403
+        return jsonify({'error': '无权限'}), 403
     semester = request.args.get('semester', '')
     conn = db.get_conn()
     try:
-        rows = conn.execute("SELECT id, club_name, status, created_at, updated_at, date_start, date_end FROM scoring_submissions WHERE status='tuanwei_approved' ORDER BY updated_at DESC").fetchall()
-        rules = conn.execute('SELECT star_level, collective_limit, individual_limit FROM scoring_rules ORDER BY star_level').fetchall()
-        rules_map = {r['star_level']: {'collective_limit': r['collective_limit'], 'individual_limit': r['individual_limit']} for r in rules}
-        overrides = conn.execute('SELECT club_name, collective_limit, individual_limit FROM scoring_club_overrides').fetchall()
-        overrides_map = {o['club_name']: {'collective_limit': o['collective_limit'], 'individual_limit': o['individual_limit']} for o in overrides}
-        clubs_star = {}
-        for cp in conn.execute('SELECT club_name, star_rating FROM club_profiles').fetchall():
-            clubs_star[cp['club_name']] = cp['star_rating']
-        fallback_date = conn.execute('SELECT date_start, date_end FROM scoring_rules LIMIT 1').fetchone()
-        fb_ds = fallback_date['date_start'] if fallback_date else ''
-        fb_de = fallback_date['date_end'] if fallback_date else ''
+        subs = conn.execute("SELECT id, club_name, status, updated_at FROM scoring_submissions WHERE status='tuanwei_approved' ORDER BY updated_at DESC").fetchall()
+        data = []
         semesters = set()
-        result = []
-        for sub in rows:
-            sub_ds = sub['date_start'] or fb_ds
-            sub_de = sub['date_end'] or fb_de
-            sem = ''
-            if sub_ds and sub_de:
-                sem = sub_ds + ' ~ ' + sub_de
-            elif sub_ds:
-                sem = sub_ds + ' ~ '
-            elif sub_de:
-                sem = ' ~ ' + sub_de
-            if sem:
-                semesters.add(sem)
+        for s in subs:
+            items = conn.execute('SELECT student_id_num, student_name, college, class_name, total_workload, final_score FROM scoring_submission_items WHERE submission_id=?', (s['id'],)).fetchall()
+            sem = s['updated_at'][:7] if s['updated_at'] else ''
+            semesters.add(sem)
             if semester and sem != semester:
                 continue
-            star = clubs_star.get(sub['club_name'], 0)
-            rule = rules_map.get(star, {})
-            ov = overrides_map.get(sub['club_name'])
-            coll = rule.get('collective_limit', 0) if rule else 0
-            indiv = rule.get('individual_limit', 0) if rule else 0
-            if ov:
-                if ov['collective_limit'] is not None:
-                    coll = ov['collective_limit']
-                if ov['individual_limit'] is not None:
-                    indiv = ov['individual_limit']
-            items = conn.execute('SELECT student_name, student_id_num, college, class_name, total_workload, final_score, activity_count, other_score FROM scoring_submission_items WHERE submission_id=?', (sub['id'],)).fetchall()
-            result.append({
-                'club_name': sub['club_name'],
-                'submission_id': sub['id'],
-                'star_level': star,
-                'collective_limit': coll,
-                'individual_limit': indiv,
-                'created_at': sub['created_at'],
-                'updated_at': sub['updated_at'],
+            data.append({
+                'club_name': s['club_name'],
                 'semester': sem,
-                'date_start': sub_ds,
-                'date_end': sub_de,
+                'updated_at': s['updated_at'],
                 'member_count': len(items),
+                'submission_id': s['id'],
                 'items': [dict(i) for i in items]
             })
+        return jsonify({'success': True, 'data': data, 'semesters': sorted(semesters, reverse=True)})
     finally:
         conn.close()
-    return jsonify({'success': True, 'data': result, 'semesters': sorted(semesters, reverse=True)})
 
 
 @app.route('/api/scoring/tuanwei-approved-preview', methods=['GET'])
 def scoring_tuanwei_approved_preview():
     user = get_current_user()
     if not user or user['role'] != 'admin':
-        return jsonify({'error': '仅管理员可查看'}), 403
+        return jsonify({'error': '无权限'}), 403
     conn = db.get_conn()
     try:
-        rows = conn.execute("SELECT id, club_name, status, created_at FROM scoring_submissions WHERE status='tuanwei_approved' ORDER BY created_at DESC").fetchall()
-        rules = conn.execute('SELECT star_level, collective_limit, individual_limit FROM scoring_rules ORDER BY star_level').fetchall()
-        rules_map = {r['star_level']: {'collective_limit': r['collective_limit'], 'individual_limit': r['individual_limit']} for r in rules}
-        overrides = conn.execute('SELECT club_name, collective_limit, individual_limit FROM scoring_club_overrides').fetchall()
-        overrides_map = {o['club_name']: {'collective_limit': o['collective_limit'], 'individual_limit': o['individual_limit']} for o in overrides}
-        clubs_star = {}
-        for cp in conn.execute('SELECT club_name, star_rating FROM club_profiles').fetchall():
-            clubs_star[cp['club_name']] = cp['star_rating']
-        result = []
-        seen_clubs = set()
-        for sub in rows:
-            if sub['club_name'] in seen_clubs:
-                continue
-            seen_clubs.add(sub['club_name'])
-            star = clubs_star.get(sub['club_name'], 0)
-            rule = rules_map.get(star, {})
-            ov = overrides_map.get(sub['club_name'])
-            coll = rule.get('collective_limit', 0) if rule else 0
-            indiv = rule.get('individual_limit', 0) if rule else 0
-            if ov:
-                if ov['collective_limit'] is not None:
-                    coll = ov['collective_limit']
-                if ov['individual_limit'] is not None:
-                    indiv = ov['individual_limit']
-            items = conn.execute('SELECT student_name, student_id_num, college, class_name, total_workload, final_score, activity_count, other_score FROM scoring_submission_items WHERE submission_id=?', (sub['id'],)).fetchall()
-            result.append({
-                'club_name': sub['club_name'],
-                'submission_id': sub['id'],
-                'star_level': star,
-                'collective_limit': coll,
-                'individual_limit': indiv,
-                'created_at': sub['created_at'],
+        subs = conn.execute("SELECT id, club_name FROM scoring_submissions WHERE status='tuanwei_approved' ORDER BY updated_at DESC").fetchall()
+        data = []
+        for s in subs:
+            profile = conn.execute('SELECT star_rating FROM club_profiles WHERE club_name=?', (s['club_name'],)).fetchone()
+            override = conn.execute('SELECT collective_limit, individual_limit FROM scoring_club_overrides WHERE club_name=?', (s['club_name'],)).fetchone()
+            star_level = profile['star_rating'] if profile else 0
+            if override and override['collective_limit'] is not None:
+                collective_limit = override['collective_limit']
+                individual_limit = override['individual_limit']
+            else:
+                rule = conn.execute('SELECT collective_limit, individual_limit FROM scoring_rules WHERE star_level=?', (star_level,)).fetchone()
+                collective_limit = rule['collective_limit'] if rule else 0
+                individual_limit = rule['individual_limit'] if rule else 0
+            items = conn.execute('SELECT student_id_num, student_name, college, class_name, total_workload, final_score FROM scoring_submission_items WHERE submission_id=?', (s['id'],)).fetchall()
+            data.append({
+                'club_name': s['club_name'],
+                'star_level': star_level,
+                'collective_limit': collective_limit,
+                'individual_limit': individual_limit,
                 'items': [dict(i) for i in items]
             })
+        return jsonify({'success': True, 'data': data})
     finally:
         conn.close()
-    return jsonify({'success': True, 'data': result})
 
 
 @app.route('/api/scoring/tuanwei-review', methods=['POST'])
 def scoring_tuanwei_review():
     user = get_current_user()
     if not user or user['role'] != 'admin':
-        return jsonify({'error': '仅管理员（团委）可操作'}), 403
-    data = request.get_json(force=True)
-    club_name = data.get('club_name', '')
-    action = data.get('action', '')
-    review_note = data.get('review_note', '')
-    if not club_name:
-        return jsonify({'error': '缺少社团名称'}), 400
+        return jsonify({'error': '无权限'}), 403
+    body = request.get_json(silent=True) or {}
+    club_name = body.get('club_name', '')
+    action = body.get('action', '')
+    review_note = body.get('review_note', '')
     if action not in ('approve', 'reject'):
-        return jsonify({'error': '操作类型无效'}), 400
+        return jsonify({'error': '无效操作'}), 400
     conn = db.get_conn()
     try:
-        sub = conn.execute('SELECT id, status FROM scoring_submissions WHERE club_name=? ORDER BY created_at DESC LIMIT 1', (club_name,)).fetchone()
+        sub = conn.execute("SELECT id FROM scoring_submissions WHERE club_name=? AND status='submitted_tuanwei' ORDER BY updated_at DESC LIMIT 1", (club_name,)).fetchone()
         if not sub:
-            return jsonify({'error': '该社团无赋分提交记录'}), 400
-        if sub['status'] != 'submitted_tuanwei':
-            return jsonify({'error': f'当前状态为 {sub["status"]}，无法审核（需为 submitted_tuanwei）'}), 400
-        if action == 'approve':
-            conn.execute('UPDATE scoring_submissions SET status=?, updated_at=datetime("now","localtime") WHERE id=?', ('tuanwei_approved', sub['id']))
-            conn.commit()
-        else:
-            conn.execute('UPDATE scoring_submissions SET status=?, updated_at=datetime("now","localtime") WHERE id=?', ('teacher_approved', sub['id']))
-            conn.commit()
+            return jsonify({'error': '未找到待审核的赋分提交'}), 404
+        new_status = 'tuanwei_approved' if action == 'approve' else 'draft'
+        conn.execute('UPDATE scoring_submissions SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?', (new_status, sub['id']))
+        conn.commit()
+        return jsonify({'success': True, 'message': '团委审核已通过' if action == 'approve' else '团委审核已驳回'})
     finally:
         conn.close()
-    if action == 'approve':
-        return jsonify({'success': True, 'message': f'{club_name} 团委审核已通过'})
-    else:
-        return jsonify({'success': True, 'message': f'{club_name} 已驳回，退回指导老师确认阶段'})
 
 
-@app.route('/api/scoring/submission-status', methods=['GET'])
-def scoring_submission_status():
-    user = get_current_user()
-    if not user or user['role'] not in ('user', 'admin', 'teacher'):
-        return jsonify({'error': '请先登录'}), 401
-    if user['role'] == 'user':
-        club_name = user.get('club_name') or ''
-    elif user['role'] == 'admin':
-        club_name = request.args.get('club', '')
-    elif user['role'] == 'teacher':
-        club_name = request.args.get('club', '')
-    else:
-        return jsonify({'success': True, 'data': None})
-    if not club_name:
-        return jsonify({'success': True, 'data': None})
-    conn = db.get_conn()
-    try:
-        sub = conn.execute('SELECT id, status, created_at, updated_at FROM scoring_submissions WHERE club_name=? ORDER BY created_at DESC LIMIT 1', (club_name,)).fetchone()
-        if not sub:
-            return jsonify({'success': True, 'data': None})
-        items = conn.execute('SELECT id, student_user_id, student_name, student_id_num, college, class_name, total_workload, final_score, activity_count, other_score FROM scoring_submission_items WHERE submission_id=?', (sub['id'],)).fetchall()
-        reviews = conn.execute('SELECT id, teacher_user_id, teacher_name, status, review_note, reviewed_at FROM scoring_teacher_reviews WHERE submission_id=?', (sub['id'],)).fetchall()
-    finally:
-        conn.close()
-    return jsonify({
-        'success': True,
-        'data': {
-            'id': sub['id'],
-            'status': sub['status'],
-            'created_at': sub['created_at'],
-            'updated_at': sub['updated_at'],
-            'items': [dict(i) for i in items],
-            'reviews': [dict(r) for r in reviews]
-        }
-    })
-
-
-@app.route('/api/scoring/teacher-reviews', methods=['GET'])
-def scoring_teacher_reviews_list():
-    user = get_current_user()
-    if not user or user['role'] != 'teacher':
-        return jsonify({'error': '仅指导老师可查看'}), 403
-    conn = db.get_conn()
-    try:
-        clubs = conn.execute('SELECT club_name FROM teacher_clubs WHERE user_id=?', (user['id'],)).fetchall()
-        if not clubs:
-            clubs = conn.execute('SELECT club_name FROM club_teachers WHERE user_id=?', (user['id'],)).fetchall()
-        club_names = [c['club_name'] for c in clubs if c['club_name']]
-        if user.get('club_name') and user['club_name'] not in club_names:
-            club_names.append(user['club_name'])
-        result = []
-        for cn in club_names:
-            sub = conn.execute('SELECT id, status, created_at FROM scoring_submissions WHERE club_name=? ORDER BY created_at DESC LIMIT 1', (cn,)).fetchone()
-            if not sub:
-                continue
-            review = conn.execute('SELECT id, status, review_note, reviewed_at FROM scoring_teacher_reviews WHERE submission_id=? AND teacher_user_id=?', (sub['id'], user['id'])).fetchone()
-            items = conn.execute('SELECT student_name, student_id_num, college, class_name, total_workload, final_score, activity_count, other_score FROM scoring_submission_items WHERE submission_id=?', (sub['id'],)).fetchall()
-            result.append({
-                'club_name': cn,
-                'submission_id': sub['id'],
-                'submission_status': sub['status'],
-                'created_at': sub['created_at'],
-                'review': dict(review) if review else None,
-                'items': [dict(i) for i in items]
-            })
-    finally:
-        conn.close()
-    return jsonify({'success': True, 'data': result})
-
-
-@app.route('/api/scoring/export/<club_name>', methods=['GET'])
-def scoring_export(club_name):
-    user = get_current_user()
-    if not user or user['role'] not in ('user', 'admin'):
-        return jsonify({'error': '无权限'}), 403
-    if user['role'] == 'user' and user.get('club_name') != club_name:
-        return jsonify({'error': '无权限'}), 403
-    conn = db.get_conn()
-    try:
-        sub = conn.execute('SELECT id, status FROM scoring_submissions WHERE club_name=? ORDER BY created_at DESC LIMIT 1', (club_name,)).fetchone()
-        if not sub:
-            return jsonify({'error': '暂无赋分数据'}), 404
-        items = conn.execute('SELECT student_id_num, student_name, college, class_name, total_workload, final_score FROM scoring_submission_items WHERE submission_id=? ORDER BY student_id_num', (sub['id'],)).fetchall()
-    finally:
-        conn.close()
-    import openpyxl
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = '赋分结果'
-    headers = ['学号', '姓名', '学院', '班级', '总工作量', '个人赋分']
-    ws.append(headers)
-    for col_idx, header in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col_idx)
-        cell.font = openpyxl.styles.Font(bold=True)
-    for item in items:
-        ws.append([item['student_id_num'], item['student_name'], item['college'], item['class_name'], item['total_workload'], item['final_score']])
-    for col in ws.columns:
-        max_length = 0
-        for cell in col:
-            if cell.value:
-                max_length = max(max_length, len(str(cell.value)))
-        ws.column_dimensions[col[0].column_letter].width = max_length + 4
-    buf = BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    fname = f'{club_name}_赋分结果.xlsx'
-    return send_file(buf, as_attachment=True, download_name=fname, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-
+# ==================== 最终学分 API ====================
 
 @app.route('/api/final-credits/status', methods=['GET'])
 def final_credits_status():
     user = get_current_user()
     if not user or user['role'] != 'admin':
-        return jsonify({'error': '仅管理员可查看'}), 403
+        return jsonify({'error': '无权限'}), 403
     conn = db.get_conn()
     try:
-        clubs = conn.execute('SELECT club_name FROM club_profiles ORDER BY club_name').fetchall()
-        total_clubs = len(clubs)
-        submitted = 0
-        not_submitted = []
-        for c in clubs:
-            sub = conn.execute('SELECT status FROM scoring_submissions WHERE club_name=? ORDER BY created_at DESC LIMIT 1', (c['club_name'],)).fetchone()
-            if sub and sub['status'] == 'tuanwei_approved':
-                submitted += 1
-            else:
-                not_submitted.append(c['club_name'])
-        has_final = conn.execute('SELECT COUNT(*) as c FROM final_credits').fetchone()['c']
+        total_clubs = conn.execute("SELECT COUNT(DISTINCT club_name) as c FROM scoring_submissions").fetchone()['c']
+        submitted = conn.execute("SELECT COUNT(DISTINCT club_name) as c FROM scoring_submissions WHERE status='tuanwei_approved'").fetchone()['c']
+        not_submitted_rows = conn.execute("SELECT DISTINCT club_name FROM scoring_submissions WHERE status!='tuanwei_approved'").fetchall()
+        not_submitted = [r['club_name'] for r in not_submitted_rows]
+        has_final = conn.execute("SELECT COUNT(*) as c FROM final_credits").fetchone()['c'] > 0
+        return jsonify({
+            'success': True,
+            'total_clubs': total_clubs,
+            'submitted': submitted,
+            'all_submitted': submitted == total_clubs and total_clubs > 0,
+            'not_submitted': not_submitted,
+            'has_final_credits': has_final
+        })
     finally:
         conn.close()
-    return jsonify({
-        'success': True,
-        'total_clubs': total_clubs,
-        'submitted': submitted,
-        'not_submitted': not_submitted,
-        'all_submitted': submitted == total_clubs and total_clubs > 0,
-        'has_final_credits': has_final > 0
-    })
 
 
 @app.route('/api/final-credits/calculate', methods=['POST'])
 def final_credits_calculate():
     user = get_current_user()
     if not user or user['role'] != 'admin':
-        return jsonify({'error': '仅管理员可操作'}), 403
+        return jsonify({'error': '无权限'}), 403
     conn = db.get_conn()
     try:
-        date_row = conn.execute('SELECT date_start, date_end FROM scoring_rules LIMIT 1').fetchone()
-        date_start = date_row['date_start'] if date_row else ''
-        date_end = date_row['date_end'] if date_row else ''
-        semester = ''
-        if date_start:
-            try:
-                parts = date_start.split('-')
-                y = int(parts[0])
-                m = int(parts[1])
-                if m >= 9:
-                    semester = f'{y}-{y+1}学年第一学期'
-                elif m >= 3:
-                    semester = f'{y-1}-{y}学年第二学期'
-                else:
-                    semester = f'{y-1}-{y}学年第一学期'
-            except:
-                semester = ''
-        clubs = conn.execute('SELECT club_name FROM club_profiles').fetchall()
-        total_clubs = len(clubs)
-        submitted = 0
-        for c in clubs:
-            sub = conn.execute('SELECT status FROM scoring_submissions WHERE club_name=? ORDER BY created_at DESC LIMIT 1', (c['club_name'],)).fetchone()
-            if sub and sub['status'] == 'tuanwei_approved':
-                submitted += 1
-        if submitted < total_clubs or total_clubs == 0:
-            return jsonify({'error': f'还有 {total_clubs - submitted} 个社团未通过团委审核，无法计算'}), 400
-        student_map = {}
-        for c in clubs:
-            sub = conn.execute('SELECT id FROM scoring_submissions WHERE club_name=? AND status=? ORDER BY created_at DESC LIMIT 1', (c['club_name'], 'tuanwei_approved')).fetchone()
-            if not sub:
-                continue
-            items = conn.execute('SELECT student_id_num, student_name, college, class_name, final_score FROM scoring_submission_items WHERE submission_id=?', (sub['id'],)).fetchall()
-            for item in items:
-                sid = item['student_id_num']
-                if not sid:
-                    continue
-                if sid not in student_map:
-                    sname = item['student_name']
-                    if not sname:
-                        profile = conn.execute('SELECT real_name FROM user_profiles WHERE student_id=?', (sid,)).fetchone()
-                        sname = profile['real_name'] if profile and profile['real_name'] else sid
-                    student_map[sid] = {
-                        'student_id_num': sid,
-                        'student_name': sname,
-                        'college': item['college'] or '',
-                        'class_name': item['class_name'] or '',
-                        'clubs': []
-                    }
-                student_map[sid]['clubs'].append({
-                    'club_name': c['club_name'],
-                    'score': item['final_score']
-                })
-        if semester:
-            conn.execute('DELETE FROM final_credits WHERE semester=?', (semester,))
-        else:
-            conn.execute('DELETE FROM final_credits WHERE semester="" OR semester IS NULL')
-        for sid, info in student_map.items():
-            clubs_list = info['clubs']
-            sorted_clubs = sorted(clubs_list, key=lambda x: x['score'], reverse=True)
-            if len(sorted_clubs) == 1:
-                final_credit = sorted_clubs[0]['score']
-            elif len(sorted_clubs) >= 2:
-                final_credit = round(sorted_clubs[0]['score'] + 0.5 * sorted_clubs[1]['score'], 1)
+        conn.execute('DELETE FROM final_credits')
+        # 获取所有已通过团委审核的赋分
+        rows = conn.execute("SELECT s.club_name, si.student_id_num, si.student_name, si.college, si.class_name, si.final_score FROM scoring_submission_items si JOIN scoring_submissions s ON si.submission_id=s.id WHERE s.status='tuanwei_approved' ORDER BY si.student_id_num, si.final_score DESC").fetchall()
+        # 按学号分组
+        from collections import defaultdict
+        student_map = defaultdict(list)
+        for r in rows:
+            student_map[r['student_id_num']].append(r)
+        for sid, scores in student_map.items():
+            scores.sort(key=lambda x: x['final_score'], reverse=True)
+            club1 = scores[0]['club_name'] if len(scores) > 0 else ''
+            score1 = scores[0]['final_score'] if len(scores) > 0 else 0
+            club2 = scores[1]['club_name'] if len(scores) > 1 else ''
+            score2 = scores[1]['final_score'] if len(scores) > 1 else 0
+            # 计算最终学分
+            if len(scores) == 1:
+                final_credit = score1
             else:
-                final_credit = 0
-            club1 = sorted_clubs[0]['club_name'] if len(sorted_clubs) >= 1 else ''
-            score1_val = sorted_clubs[0]['score'] if len(sorted_clubs) >= 1 else 0
-            club2 = sorted_clubs[1]['club_name'] if len(sorted_clubs) >= 2 else ''
-            score2_val = sorted_clubs[1]['score'] if len(sorted_clubs) >= 2 else 0
-            club_scores_str = '; '.join([f"{c['club_name']}({c['score']}分)" for c in sorted_clubs])
-            conn.execute('INSERT INTO final_credits (student_id_num, student_name, college, class_name, club1, score1, club2, score2, club_scores, final_credit, semester) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
-                         (sid, info['student_name'], info['college'], info['class_name'], club1, score1_val, club2, score2_val, club_scores_str, final_credit, semester))
+                final_credit = score1 + 0.5 * score2
+            import json
+            club_scores = json.dumps([{'club': s['club_name'], 'score': s['final_score']} for s in scores])
+            conn.execute('INSERT INTO final_credits (student_id_num, student_name, college, class_name, club1, score1, club2, score2, club_scores, final_credit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                         (sid, scores[0]['student_name'], scores[0]['college'], scores[0]['class_name'], club1, score1, club2, score2, club_scores, round(final_credit, 2)))
         conn.commit()
-        count = len(student_map)
+        return jsonify({'success': True, 'message': '最终学分计算完成'})
     finally:
         conn.close()
-    return jsonify({'success': True, 'message': f'计算完成，共 {count} 名学生', 'count': count})
-
-
-@app.route('/api/my-final-credit', methods=['GET'])
-def my_final_credit():
-    user = get_current_user()
-    if not user or user['role'] != 'student':
-        return jsonify({'error': '仅学生可查看'}), 403
-    conn = db.get_conn()
-    try:
-        profile = conn.execute('SELECT student_id FROM user_profiles WHERE user_id=?', (user['id'],)).fetchone()
-        if not profile or not profile['student_id']:
-            return jsonify({'success': True, 'has_credit': False})
-        rows = conn.execute('SELECT * FROM final_credits WHERE student_id_num=? ORDER BY semester DESC, calculated_at DESC', (profile['student_id'],)).fetchall()
-    finally:
-        conn.close()
-    if not rows:
-        return jsonify({'success': True, 'has_credit': False})
-    semesters = []
-    seen = set()
-    for row in rows:
-        sem = row['semester'] if 'semester' in row.keys() and row['semester'] else '未指定学期'
-        if sem not in seen:
-            seen.add(sem)
-            semesters.append({
-                'semester': sem,
-                'student_name': row['student_name'],
-                'college': row['college'],
-                'class_name': row['class_name'],
-                'club1': row['club1'],
-                'score1': row['score1'],
-                'club2': row['club2'],
-                'score2': row['score2'],
-                'club_scores': row['club_scores'],
-                'final_credit': row['final_credit']
-            })
-    latest = semesters[0] if semesters else None
-    return jsonify({
-        'success': True,
-        'has_credit': True,
-        'student_name': latest['student_name'] if latest else '',
-        'college': latest['college'] if latest else '',
-        'class_name': latest['class_name'] if latest else '',
-        'club1': latest['club1'] if latest else '',
-        'score1': latest['score1'] if latest else 0,
-        'club2': latest['club2'] if latest else '',
-        'score2': latest['score2'] if latest else 0,
-        'club_scores': latest['club_scores'] if latest else '',
-        'final_credit': latest['final_credit'] if latest else 0,
-        'semesters': semesters
-    })
 
 
 @app.route('/api/final-credits/list', methods=['GET'])
 def final_credits_list():
     user = get_current_user()
     if not user or user['role'] != 'admin':
-        return jsonify({'error': '仅管理员可查看'}), 403
+        return jsonify({'error': '无权限'}), 403
     conn = db.get_conn()
     try:
-        rows = conn.execute('SELECT id, student_id_num, student_name, college, class_name, club1, score1, club2, score2, club_scores, final_credit, semester, calculated_at FROM final_credits ORDER BY semester DESC, student_id_num').fetchall()
+        rows = conn.execute('SELECT student_id_num, student_name, college, class_name, club1, score1, club2, score2, final_credit FROM final_credits ORDER BY final_credit DESC').fetchall()
+        data = []
+        for r in rows:
+            data.append({
+                'semester': '',
+                'student_id_num': r['student_id_num'],
+                'student_name': r['student_name'],
+                'college': r['college'],
+                'class_name': r['class_name'],
+                'club1': r['club1'],
+                'score1': r['score1'],
+                'club2': r['club2'],
+                'score2': r['score2'],
+                'final_credit': r['final_credit']
+            })
+        return jsonify({'success': True, 'data': data})
     finally:
         conn.close()
-    return jsonify({'success': True, 'data': [dict(r) for r in rows]})
 
 
 @app.route('/api/final-credits/export', methods=['GET'])
 def final_credits_export():
     user = get_current_user()
-    if not user or user['role'] != 'admin':
-        return jsonify({'error': '仅管理员可导出'}), 403
+    if not user or user['role'] not in ('admin', 'user'):
+        return jsonify({'error': '无权限'}), 403
+    try:
+        from openpyxl import Workbook
+    except ImportError:
+        return jsonify({'error': '需要openpyxl库'}), 500
     conn = db.get_conn()
     try:
-        rows = conn.execute('SELECT student_id_num, student_name, college, class_name, club1, score1, club2, score2, final_credit, semester FROM final_credits ORDER BY semester DESC, student_id_num').fetchall()
+        rows = conn.execute('SELECT student_id_num, student_name, college, class_name, club1, score1, club2, score2, final_credit FROM final_credits ORDER BY college, final_credit DESC').fetchall()
+        wb = Workbook()
+        ws = wb.active
+        ws.title = '最终学分'
+        ws.append(['学号', '姓名', '学院', '班级', '社团1', '赋分1', '社团2', '赋分2', '最终学分'])
+        for r in rows:
+            ws.append([r['student_id_num'], r['student_name'], r['college'], r['class_name'], r['club1'], r['score1'], r['club2'], r['score2'], r['final_credit']])
+        import io
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        from flask import send_file
+        return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='最终学分.xlsx')
     finally:
         conn.close()
-    import openpyxl
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = '汇总'
-    headers = ['学期', '学号', '姓名', '学院', '班级', '加入社团1', '社团1赋分', '加入社团2', '社团2赋分', '最终学分']
-    ws.append(headers)
-    for col_idx, header in enumerate(headers, 1):
-        cell = ws.cell(row=1, column=col_idx)
-        cell.font = openpyxl.styles.Font(bold=True)
-    for r in rows:
-        ws.append([r['semester'] or '', r['student_id_num'], r['student_name'], r['college'], r['class_name'], r['club1'], r['score1'], r['club2'] or '', r['score2'] if r['score2'] else '', r['final_credit']])
-    for col in ws.columns:
-        max_length = 0
-        for cell in col:
-            if cell.value:
-                max_length = max(max_length, len(str(cell.value)))
-        ws.column_dimensions[col[0].column_letter].width = min(max_length + 4, 50)
-    college_map = {}
-    for r in rows:
-        c = r['college'] or '未知学院'
-        if c not in college_map:
-            college_map[c] = []
-        college_map[c].append(r)
-    for college_name, college_rows in college_map.items():
-        sheet_name = college_name[:31]
-        ws_c = wb.create_sheet(title=sheet_name)
-        ws_c.append(headers)
-        for col_idx, header in enumerate(headers, 1):
-            cell = ws_c.cell(row=1, column=col_idx)
-            cell.font = openpyxl.styles.Font(bold=True)
-        for r in college_rows:
-            ws_c.append([r['semester'] or '', r['student_id_num'], r['student_name'], r['college'], r['class_name'], r['club1'], r['score1'], r['club2'] or '', r['score2'] if r['score2'] else '', r['final_credit']])
-        for col in ws_c.columns:
-            max_length = 0
-            for cell in col:
-                if cell.value:
-                    max_length = max(max_length, len(str(cell.value)))
-            ws_c.column_dimensions[col[0].column_letter].width = min(max_length + 4, 50)
-    buf = BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    return send_file(buf, as_attachment=True, download_name='全校学生最终学分清单.xlsx', mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 
-@app.route('/api/scoring/export-all', methods=['GET'])
-def scoring_export_all():
+# ==================== 管理员通知 API ====================
+
+@app.route('/api/admin-notifications', methods=['GET', 'POST'])
+def admin_notifications():
     user = get_current_user()
     if not user or user['role'] != 'admin':
-        return jsonify({'error': '仅管理员可导出'}), 403
+        return jsonify({'error': '无权限'}), 403
     conn = db.get_conn()
     try:
-        clubs = conn.execute('SELECT club_name FROM club_profiles ORDER BY club_name').fetchall()
+        if request.method == 'GET':
+            rows = conn.execute('SELECT id, title, content, target_type, target_club, created_at FROM admin_notifications ORDER BY created_at DESC').fetchall()
+            data = []
+            for r in rows:
+                data.append({
+                    'id': r['id'],
+                    'title': r['title'],
+                    'content': r['content'] or '',
+                    'targetType': r['target_type'],
+                    'targetClub': r['target_club'] or '',
+                    'time': r['created_at']
+                })
+            return jsonify({'success': True, 'data': data})
+        else:
+            body = request.get_json(silent=True) or {}
+            title = body.get('title', '').strip()
+            content = body.get('content', '').strip()
+            target_type = body.get('targetType', 'all_students')
+            target_clubs = body.get('targetClubs', [])
+            target_teachers = body.get('targetTeachers', [])
+            if not title or not content:
+                return jsonify({'error': '标题和内容不能为空'}), 400
+            target_club = ','.join(target_clubs) if target_clubs else ''
+            conn.execute('INSERT INTO admin_notifications (title, content, target_type, target_club, sender_id) VALUES (?, ?, ?, ?, ?)', (title, content, target_type, target_club, user['id']))
+            conn.commit()
+            # 发送给目标用户
+            notif_id = conn.execute('SELECT last_insert_rowid() as id').fetchone()['id']
+            if target_type == 'all_students':
+                users = conn.execute("SELECT id FROM users WHERE role IN ('user', 'student')").fetchall()
+            elif target_type == 'all_leaders':
+                users = conn.execute("SELECT id FROM users WHERE role='user'").fetchall()
+            elif target_type == 'all_teachers':
+                users = conn.execute("SELECT id FROM users WHERE role='teacher'").fetchall()
+            elif target_type == 'specific_leader' and target_clubs:
+                placeholders = ','.join(['?'] * len(target_clubs))
+                users = conn.execute(f"SELECT DISTINCT u.id FROM users u JOIN club_members cm ON u.id=cm.user_id WHERE cm.club_name IN ({placeholders})", target_clubs).fetchall()
+            elif target_type == 'specific_teacher' and target_teachers:
+                placeholders = ','.join(['?'] * len(target_teachers))
+                users = conn.execute(f"SELECT u.id FROM users u LEFT JOIN user_profiles up ON u.id=up.user_id WHERE u.role='teacher' AND (u.username IN ({placeholders}) OR up.real_name IN ({placeholders}))", target_teachers + target_teachers).fetchall()
+            else:
+                users = []
+            for u in users:
+                try:
+                    conn.execute('INSERT OR IGNORE INTO admin_notification_reads (notification_id, user_id) VALUES (?, ?)', (notif_id, u['id']))
+                except Exception:
+                    pass
+            conn.commit()
+            return jsonify({'success': True, 'message': '通知已发送'})
     finally:
         conn.close()
-    import openpyxl
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = '目录'
-    ws.append(['社团名称', '状态'])
-    ws.cell(row=1, column=1).font = openpyxl.styles.Font(bold=True)
-    ws.cell(row=1, column=2).font = openpyxl.styles.Font(bold=True)
+
+
+@app.route('/api/admin-notifications/<int:nid>', methods=['DELETE'])
+def admin_notification_delete(nid):
+    user = get_current_user()
+    if not user or user['role'] != 'admin':
+        return jsonify({'error': '无权限'}), 403
     conn = db.get_conn()
     try:
-        for c in clubs:
-            club_name = c['club_name']
-            sub = conn.execute('SELECT id, status FROM scoring_submissions WHERE club_name=? ORDER BY created_at DESC LIMIT 1', (club_name,)).fetchone()
-            status_text = {'draft': '草稿', 'pending_teacher': '待老师审核', 'teacher_approved': '老师已通过', 'submitted_tuanwei': '待团委审核', 'tuanwei_approved': '团委已通过'}
-            st = status_text.get(sub['status'], '未提交') if sub else '未提交'
-            ws.append([club_name, st])
-            if not sub:
-                continue
-            items = conn.execute('SELECT student_id_num, student_name, college, class_name, total_workload, final_score FROM scoring_submission_items WHERE submission_id=? ORDER BY student_id_num', (sub['id'],)).fetchall()
-            sheet_name = club_name[:31]
-            ws_c = wb.create_sheet(title=sheet_name)
-            headers = ['学号', '姓名', '学院', '班级', '总工作量', '个人赋分']
-            ws_c.append(headers)
-            for col_idx, header in enumerate(headers, 1):
-                ws_c.cell(row=1, column=col_idx).font = openpyxl.styles.Font(bold=True)
-            for item in items:
-                ws_c.append([item['student_id_num'], item['student_name'], item['college'], item['class_name'], item['total_workload'], item['final_score']])
-            for col in ws_c.columns:
-                max_length = 0
-                for cell in col:
-                    if cell.value:
-                        max_length = max(max_length, len(str(cell.value)))
-                ws_c.column_dimensions[col[0].column_letter].width = min(max_length + 4, 50)
+        conn.execute('DELETE FROM admin_notification_reads WHERE notification_id=?', (nid,))
+        conn.execute('DELETE FROM admin_notifications WHERE id=?', (nid,))
+        conn.commit()
+        return jsonify({'success': True})
     finally:
         conn.close()
-    for col in ws.columns:
-        max_length = 0
-        for cell in col:
-            if cell.value:
-                max_length = max(max_length, len(str(cell.value)))
-        ws.column_dimensions[col[0].column_letter].width = min(max_length + 4, 50)
-    buf = BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    return send_file(buf, as_attachment=True, download_name='各社团赋分明细.xlsx', mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 
-@app.route('/api/club-favorites/toggle', methods=['POST'])
-def toggle_club_favorite():
+@app.route('/api/admin-notifications/<int:nid>/read', methods=['POST'])
+def admin_notification_mark_read(nid):
     user = get_current_user()
     if not user:
         return jsonify({'error': '未登录'}), 401
+    conn = db.get_conn()
+    try:
+        conn.execute('INSERT OR IGNORE INTO admin_notification_reads (notification_id, user_id, read_at) VALUES (?, ?, CURRENT_TIMESTAMP)', (nid, user['id']))
+        conn.commit()
+        return jsonify({'success': True})
+    finally:
+        conn.close()
+
+
+@app.route('/api/my-admin-notifications', methods=['GET'])
+def my_admin_notifications():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': '未登录'}), 401
+    conn = db.get_conn()
+    try:
+        rows = conn.execute('SELECT n.id, n.title, n.content, n.target_type, n.target_club, n.created_at, COALESCE(r.read_at IS NOT NULL, 0) as isRead FROM admin_notifications n LEFT JOIN admin_notification_reads r ON n.id=r.notification_id AND r.user_id=? WHERE n.target_type IN ("all_students", "all_leaders", "all_teachers", "specific_leader", "specific_teacher") ORDER BY n.created_at DESC', (user['id'],)).fetchall()
+        data = []
+        for r in rows:
+            # 检查是否是目标用户
+            target_type = r['target_type']
+            target_club = r['target_club'] or ''
+            include = False
+            if target_type == 'all_students' and user['role'] in ('user', 'student'):
+                include = True
+            elif target_type == 'all_leaders' and user['role'] == 'user':
+                include = True
+            elif target_type == 'all_teachers' and user['role'] == 'teacher':
+                include = True
+            elif target_type == 'specific_leader' and user['role'] == 'user':
+                clubs = [c.strip() for c in target_club.split(',') if c.strip()]
+                if not clubs or user.get('club_name', '') in clubs:
+                    include = True
+            elif target_type == 'specific_teacher' and user['role'] == 'teacher':
+                include = True
+            if include:
+                data.append({
+                    'id': r['id'],
+                    'title': r['title'],
+                    'content': r['content'] or '',
+                    'isRead': bool(r['isRead']),
+                    'time': r['created_at']
+                })
+        return jsonify({'success': True, 'data': data})
+    finally:
+        conn.close()
+
+
+# ==================== 工作量统计 API ====================
+
+@app.route('/api/workload/pending', methods=['GET'])
+def workload_pending():
+    user = get_current_user()
+    if not user or user['role'] != 'user':
+        return jsonify({'error': '无权限'}), 403
+    club_name = user.get('club_name', '')
+    start_date = request.args.get('start_date', '').strip()
+    end_date = request.args.get('end_date', '').strip()
+    conn = db.get_conn()
+    try:
+        date_where = ''
+        params = [club_name]
+        if start_date:
+            date_where += ' AND date(created_at)>=?'
+            params.append(start_date)
+        if end_date:
+            date_where += ' AND date(created_at)<=?'
+            params.append(end_date)
+        rows = conn.execute(f'SELECT id, student_name, item_name, score, status, created_at FROM workload_submissions WHERE club_name=? AND status="pending"{date_where} ORDER BY created_at DESC', params).fetchall()
+        data = [{'id': r['id'], 'student_name': r['student_name'], 'item_name': r['item_name'], 'score': r['score'], 'created_at': r['created_at']} for r in rows]
+        return jsonify({'success': True, 'data': data})
+    finally:
+        conn.close()
+
+
+@app.route('/api/workload/review/<int:wid>', methods=['POST'])
+def workload_review(wid):
+    user = get_current_user()
+    if not user or user['role'] != 'user':
+        return jsonify({'error': '无权限'}), 403
+    body = request.get_json(silent=True) or {}
+    action = body.get('action', '')
+    review_note = body.get('review_note', '')
+    if action not in ('approve', 'reject'):
+        return jsonify({'error': '无效操作'}), 400
+    conn = db.get_conn()
+    try:
+        record = conn.execute('SELECT club_name FROM workload_submissions WHERE id=?', (wid,)).fetchone()
+        if not record:
+            return jsonify({'error': '记录不存在'}), 404
+        if user['role'] == 'user' and record['club_name'] != user.get('club_name', ''):
+            return jsonify({'error': '无权审核该社团的工作量'}), 403
+        new_status = 'approved' if action == 'approve' else 'rejected'
+        conn.execute('UPDATE workload_submissions SET status=?, reviewer_id=?, reviewer_name=?, review_note=?, reviewed_at=CURRENT_TIMESTAMP WHERE id=?', (new_status, user['id'], user.get('real_name', ''), review_note, wid))
+        conn.commit()
+        return jsonify({'success': True, 'message': '已通过' if action == 'approve' else '已驳回'})
+    finally:
+        conn.close()
+
+
+@app.route('/api/workload/club-stats', methods=['GET'])
+def workload_club_stats():
+    user = get_current_user()
+    if not user or user['role'] not in ('user', 'teacher', 'admin', 'student'):
+        return jsonify({'error': '无权限'}), 403
+    club_name = request.args.get('club', '') or user.get('club_name', '')
+    start_date = request.args.get('start_date', '').strip()
+    end_date = request.args.get('end_date', '').strip()
+    conn = db.get_conn()
+    try:
+        # 学生角色从club_members获取社团
+        if not club_name and user['role'] == 'student':
+            membership = conn.execute('SELECT club_name FROM club_members WHERE user_id=? LIMIT 1', (user['id'],)).fetchone()
+            if membership:
+                club_name = membership['club_name']
+        if not club_name:
+            return jsonify({'success': True, 'data': []})
+        # 查询社团成员的工作量统计
+        rows = conn.execute('SELECT u.id as user_id, COALESCE(up.real_name, u.username) as real_name, up.student_id as student_id_num, up.class_name, (SELECT COUNT(DISTINCT cs.id) FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE cr.student_name=COALESCE(up.real_name, u.username) AND cs.club_name=?) as activity_count, (SELECT COALESCE(SUM(score),0) FROM workload_submissions WHERE student_user_id=u.id AND club_name=? AND status="approved") as other_score FROM users u JOIN club_members cm ON u.id=cm.user_id LEFT JOIN user_profiles up ON u.id=up.user_id WHERE cm.club_name=? ORDER BY other_score DESC', (club_name, club_name, club_name)).fetchall()
+        data = []
+        for r in rows:
+            data.append({
+                'user_id': r['user_id'],
+                'real_name': r['real_name'],
+                'student_id_num': r['student_id_num'] or '',
+                'class_name': r['class_name'] or '',
+                'activity_count': r['activity_count'],
+                'other_score': r['other_score'],
+                'total_score': r['activity_count'] + r['other_score']
+            })
+        return jsonify({'success': True, 'data': data})
+    finally:
+        conn.close()
+
+
+@app.route('/api/workload/student-detail', methods=['GET'])
+def workload_student_detail():
+    user = get_current_user()
+    if not user or user['role'] not in ('user', 'teacher', 'admin'):
+        return jsonify({'error': '无权限'}), 403
+    student_id = request.args.get('user_id', '0')
+    club_name = request.args.get('club', '') or user.get('club_name', '')
+    conn = db.get_conn()
+    try:
+        stu = conn.execute('SELECT u.id, COALESCE(up.real_name, u.username) as real_name, up.student_id as student_id_num, up.class_name FROM users u LEFT JOIN user_profiles up ON u.id=up.user_id WHERE u.id=?', (student_id,)).fetchone()
+        if not stu:
+            return jsonify({'error': '学生不存在'}), 404
+        activity_count = conn.execute('SELECT COUNT(DISTINCT cs.id) as cnt FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE cr.student_name=? AND cs.club_name=?', (stu['real_name'], club_name)).fetchone()['cnt']
+        wl_rows = conn.execute('SELECT item_name, score, status, review_note, created_at FROM workload_submissions WHERE student_user_id=? AND club_name=?', (student_id, club_name)).fetchall()
+        other_score = sum(r['score'] for r in wl_rows if r['status'] == 'approved')
+        activity_list = conn.execute('SELECT cs.activity_name as name, cs.created_at as date FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE cr.student_name=? AND cs.club_name=?', (stu['real_name'], club_name)).fetchall()
+        return jsonify({
+            'success': True,
+            'student': {'real_name': stu['real_name'], 'sid': stu['student_id_num'] or '', 'class_name': stu['class_name'] or '', 'club_name': club_name},
+            'activity_score': activity_count,
+            'other_score': other_score,
+            'activity_list': [dict(a) for a in activity_list],
+            'other_list': [{'name': r['item_name'], 'score': r['score'], 'status': r['status'], 'date': r['created_at'], 'review_note': r['review_note'] or ''} for r in wl_rows]
+        })
+    finally:
+        conn.close()
+
+
+# ==================== 工作量补充 API ====================
+
+@app.route('/api/workload/my-clubs', methods=['GET'])
+def workload_my_clubs():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': '未登录'}), 401
+    conn = db.get_conn()
+    try:
+        clubs = []
+        if user['role'] == 'student':
+            rows = conn.execute('SELECT DISTINCT cm.club_name FROM club_members cm WHERE cm.user_id=?', (user['id'],)).fetchall()
+            clubs = [r['club_name'] for r in rows]
+        elif user['role'] == 'user':
+            club_name = user.get('club_name', '')
+            if club_name:
+                clubs = [club_name]
+        elif user['role'] == 'teacher':
+            rows = conn.execute('SELECT club_name FROM teacher_clubs WHERE user_id=?', (user['id'],)).fetchall()
+            clubs = [r['club_name'] for r in rows]
+        elif user['role'] == 'admin':
+            rows = conn.execute('SELECT DISTINCT club_name FROM club_profiles').fetchall()
+            clubs = [r['club_name'] for r in rows]
+        return jsonify({'success': True, 'data': clubs})
+    finally:
+        conn.close()
+
+
+@app.route('/api/workload/submit', methods=['POST'])
+def workload_submit():
+    user = get_current_user()
+    if not user or user['role'] not in ('student', 'user'):
+        return jsonify({'error': '无权限'}), 403
     data = request.json or {}
-    club_name = (data.get('club_name') or '').strip()
+    club_name = data.get('club_name', '')
+    item_name = data.get('item_name', '')
+    score = data.get('score', 0)
+    description = data.get('description', '')
+    if not club_name or not item_name:
+        return jsonify({'error': '缺少必要参数'}), 400
+    try:
+        score = float(score)
+    except (ValueError, TypeError):
+        return jsonify({'error': '分数格式错误'}), 400
+    conn = db.get_conn()
+    try:
+        conn.execute('INSERT INTO workload_submissions (student_user_id, club_name, item_name, score, description, status, created_at) VALUES (?,?,?,?,?,"pending",CURRENT_TIMESTAMP)',
+                     (user['id'], club_name, item_name, score, description))
+        conn.commit()
+        return jsonify({'success': True, 'message': '提交成功，等待审核'})
+    finally:
+        conn.close()
+
+
+@app.route('/api/workload/my-submissions', methods=['GET'])
+def workload_my_submissions():
+    user = get_current_user()
+    if not user or user['role'] not in ('student', 'user'):
+        return jsonify({'error': '无权限'}), 403
+    conn = db.get_conn()
+    try:
+        rows = conn.execute('SELECT ws.*, COALESCE(up.real_name, u.username) as student_name FROM workload_submissions ws JOIN users u ON ws.student_user_id=u.id LEFT JOIN user_profiles up ON u.id=up.user_id WHERE ws.student_user_id=? ORDER BY ws.created_at DESC', (user['id'],)).fetchall()
+        return jsonify({'success': True, 'data': [dict(r) for r in rows]})
+    finally:
+        conn.close()
+
+
+@app.route('/api/my-final-credit', methods=['GET'])
+def my_final_credit():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': '未登录'}), 401
+    conn = db.get_conn()
+    try:
+        # 获取学生学号
+        up = conn.execute('SELECT student_id FROM user_profiles WHERE user_id=?', (user['id'],)).fetchone()
+        student_id_num = up['student_id'] if up else ''
+        result = []
+        if student_id_num:
+            rows = conn.execute('SELECT * FROM final_credits WHERE student_id_num=?', (student_id_num,)).fetchall()
+            for r in rows:
+                result.append({
+                    'student_id_num': r['student_id_num'],
+                    'student_name': r['student_name'],
+                    'final_credit': r['final_credit'],
+                    'club_scores': r['club_scores'],
+                    'semester': r.get('semester', ''),
+                    'calculated_at': r['calculated_at']
+                })
+        if not result:
+            # 尝试从 club_members 获取社团并计算
+            memberships = conn.execute('SELECT cm.club_name FROM club_members cm WHERE cm.user_id=?', (user['id'],)).fetchall()
+            for m in memberships:
+                real_name_row = conn.execute('SELECT COALESCE(up.real_name, u.username) as real_name FROM users u LEFT JOIN user_profiles up ON u.id=up.user_id WHERE u.id=?', (user['id'],)).fetchone()
+                real_name = real_name_row['real_name'] if real_name_row else ''
+                act_count = conn.execute('SELECT COUNT(DISTINCT cs.id) as cnt FROM checkin_records cr JOIN checkin_sessions cs ON cr.session_id=cs.id WHERE cr.student_name=? AND cs.club_name=?', (real_name, m['club_name'])).fetchone()['cnt']
+                other_score = conn.execute('SELECT COALESCE(SUM(score),0) as s FROM workload_submissions WHERE student_user_id=? AND club_name=? AND status="approved"', (user['id'], m['club_name'])).fetchone()['s']
+                total = act_count + other_score
+                result.append({'club_name': m['club_name'], 'total_workload': total, 'final_score': 0, 'status': '未计算'})
+        return jsonify({'success': True, 'data': result})
+    finally:
+        conn.close()
+
+
+# ==================== 社团结构 API ====================
+
+@app.route('/api/club-structures', methods=['GET'])
+def club_structures():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': '未登录'}), 401
+    conn = db.get_conn()
+    try:
+        clubs = conn.execute('SELECT cp.club_name, cp.star_rating, cp.category, cp.emblem_url, cp.guiding_unit, cp.president FROM club_profiles cp ORDER BY cp.club_name').fetchall()
+        data = []
+        for c in clubs:
+            cn = c['club_name']
+            # 成员列表
+            members = conn.execute("SELECT COALESCE(up.real_name, u.username) as real_name, up.class_name, cm.department, cm.joined_at FROM club_members cm JOIN users u ON cm.user_id=u.id LEFT JOIN user_profiles up ON u.id=up.user_id WHERE cm.club_name=?", (cn,)).fetchall()
+            total_members = len(members)
+            # 指导老师
+            teacher_rows = conn.execute("SELECT COALESCE(up.real_name, u.username) as name FROM teacher_clubs tc JOIN users u ON tc.user_id=u.id LEFT JOIN user_profiles up ON u.id=up.user_id WHERE tc.club_name=?", (cn,)).fetchall()
+            teachers = [{'name': t['name']} for t in teacher_rows]
+            # 负责人账号
+            leader_rows = conn.execute("SELECT u.username FROM users u WHERE u.role='user' AND u.club_name=?", (cn,)).fetchall()
+            leaders = [{'username': l['username']} for l in leader_rows]
+            # 部门结构
+            dept_rows = conn.execute("SELECT id, parent_id, dept_name, description FROM club_departments WHERE club_name=? ORDER BY id", (cn,)).fetchall()
+            departments = []
+            for d in dept_rows:
+                dept_members = conn.execute("SELECT COALESCE(up.real_name, u.username) as realName, up.class_name as className FROM club_members cm JOIN users u ON cm.user_id=u.id LEFT JOIN user_profiles up ON u.id=up.user_id WHERE cm.club_name=? AND cm.department=?", (cn, d['dept_name'])).fetchall()
+                departments.append({
+                    'id': d['id'],
+                    'parentId': d['parent_id'] or 0,
+                    'name': d['dept_name'],
+                    'memberCount': len(dept_members),
+                    'description': d['description'] or '',
+                    'members': [{'realName': m['realName'], 'className': m['className'] or ''} for m in dept_members]
+                })
+            # 未分配部门的成员
+            unassigned = [m for m in members if not m['department']]
+            total_depts = len(dept_rows)
+            data.append({
+                'clubName': cn,
+                'starRating': c['star_rating'],
+                'category': c['category'] or '',
+                'emblemUrl': c['emblem_url'] if 'emblem_url' in c.keys() else '',
+                'guidingUnit': c['guiding_unit'] or '',
+                'president': c['president'] or '',
+                'totalDepts': total_depts,
+                'totalMembers': total_members,
+                'teachers': teachers,
+                'leaders': leaders,
+                'departments': departments,
+                'unassignedMembers': [{'realName': m['real_name'], 'className': m['class_name'] or ''} for m in unassigned]
+            })
+        return jsonify({'success': True, 'data': data})
+    finally:
+        conn.close()
+
+
+@app.route('/api/export-club-structures', methods=['GET'])
+def export_club_structures():
+    user = get_current_user()
+    if not user or user['role'] not in ('admin', 'user'):
+        return jsonify({'error': '无权限'}), 403
+    club_name = request.args.get('clubName', '').strip()
+    try:
+        from openpyxl import Workbook
+    except ImportError:
+        return jsonify({'error': '需要openpyxl库'}), 500
+    conn = db.get_conn()
+    try:
+        if club_name:
+            clubs = conn.execute('SELECT club_name, star_rating, category FROM club_profiles WHERE club_name=?', (club_name,)).fetchall()
+        else:
+            clubs = conn.execute('SELECT club_name, star_rating, category FROM club_profiles ORDER BY club_name').fetchall()
+        wb = Workbook()
+        for c in clubs:
+            ws = wb.create_sheet(title=c['club_name'][:31])
+            # 部门及简介
+            dept_rows = conn.execute("SELECT dept_name, description FROM club_departments WHERE club_name=? ORDER BY id", (c['club_name'],)).fetchall()
+            if dept_rows:
+                ws.append(['部门', '部门简介'])
+                for d in dept_rows:
+                    ws.append([d['dept_name'], d['description'] or ''])
+                ws.append([])
+            # 成员列表
+            ws.append(['姓名', '班级', '部门', '加入时间'])
+            members = conn.execute("SELECT COALESCE(up.real_name, u.username) as real_name, up.class_name, cm.department, cm.joined_at FROM club_members cm JOIN users u ON cm.user_id=u.id LEFT JOIN user_profiles up ON u.id=up.user_id WHERE cm.club_name=?", (c['club_name'],)).fetchall()
+            for m in members:
+                ws.append([m['real_name'], m['class_name'] or '', m['department'] or '', m['joined_at'] or ''])
+        if 'Sheet' in wb.sheetnames:
+            del wb['Sheet']
+        import io
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        from flask import send_file
+        fname = f'{club_name}社团结构.xlsx' if club_name else '全部社团结构.xlsx'
+        return send_file(output, mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name=fname)
+    finally:
+        conn.close()
+
+
+# ==================== 退社申请 API ====================
+
+@app.route('/api/my-quit-applications', methods=['GET'])
+def my_quit_applications():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': '未登录'}), 401
+    conn = db.get_conn()
+    try:
+        rows = conn.execute('SELECT id, club_name, reason, status, handler_note, created_at FROM quit_applications WHERE user_id=? ORDER BY created_at DESC', (user['id'],)).fetchall()
+        data = [{'id': r['id'], 'clubName': r['club_name'], 'reason': r['reason'], 'status': r['status'], 'createdAt': r['created_at'], 'handlerNote': r['handler_note'] or ''} for r in rows]
+        return jsonify({'success': True, 'data': data})
+    finally:
+        conn.close()
+
+
+@app.route('/api/quit-apply', methods=['POST'])
+def quit_apply():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': '未登录'}), 401
+    body = request.get_json(silent=True) or {}
+    club_name = body.get('club_name', '').strip()
+    reason = body.get('reason', '').strip()
+    if not club_name or not reason:
+        return jsonify({'error': '社团名称和退社原因不能为空'}), 400
+    conn = db.get_conn()
+    try:
+        existing = conn.execute('SELECT id FROM quit_applications WHERE user_id=? AND club_name=? AND status="pending"', (user['id'], club_name)).fetchone()
+        if existing:
+            return jsonify({'error': '已有待处理的退社申请'}), 400
+        conn.execute('INSERT INTO quit_applications (user_id, username, club_name, reason, status) VALUES (?, ?, ?, ?, ?)', (user['id'], user['username'], club_name, reason, 'pending'))
+        conn.commit()
+        return jsonify({'success': True, 'message': '退社申请已提交'})
+    finally:
+        conn.close()
+
+
+@app.route('/api/quit-applications/manage', methods=['GET'])
+def quit_applications_manage():
+    user = get_current_user()
+    if not user or user['role'] not in ('user', 'teacher', 'admin'):
+        return jsonify({'error': '无权限'}), 403
+    conn = db.get_conn()
+    try:
+        if user['role'] == 'admin':
+            rows = conn.execute('SELECT q.id, COALESCE(up.real_name, u.username) as studentName, q.club_name, q.reason, q.status, q.handler_note, q.created_at FROM quit_applications q JOIN users u ON q.user_id=u.id LEFT JOIN user_profiles up ON u.id=up.user_id ORDER BY q.created_at DESC').fetchall()
+        elif user['role'] == 'teacher':
+            teacher_clubs = conn.execute('SELECT club_name FROM teacher_clubs WHERE user_id=?', (user['id'],)).fetchall()
+            club_names = [r['club_name'] for r in teacher_clubs]
+            if not club_names:
+                return jsonify({'success': True, 'data': []})
+            placeholders = ','.join(['?'] * len(club_names))
+            rows = conn.execute(f'SELECT q.id, COALESCE(up.real_name, u.username) as studentName, q.club_name, q.reason, q.status, q.handler_note, q.created_at FROM quit_applications q JOIN users u ON q.user_id=u.id LEFT JOIN user_profiles up ON u.id=up.user_id WHERE q.club_name IN ({placeholders}) ORDER BY q.created_at DESC', club_names).fetchall()
+        else:
+            club_name = user.get('club_name', '')
+            rows = conn.execute('SELECT q.id, COALESCE(up.real_name, u.username) as studentName, q.club_name, q.reason, q.status, q.handler_note, q.created_at FROM quit_applications q JOIN users u ON q.user_id=u.id LEFT JOIN user_profiles up ON u.id=up.user_id WHERE q.club_name=? ORDER BY q.created_at DESC', (club_name,)).fetchall()
+        data = [{'id': r['id'], 'studentName': r['studentName'], 'clubName': r['club_name'], 'reason': r['reason'], 'status': r['status'], 'createdAt': r['created_at'], 'handlerNote': r['handler_note'] or ''} for r in rows]
+        return jsonify({'success': True, 'data': data})
+    finally:
+        conn.close()
+
+
+@app.route('/api/quit-applications/<int:app_id>/handle', methods=['POST'])
+def quit_application_handle(app_id):
+    user = get_current_user()
+    if not user or user['role'] not in ('user', 'teacher', 'admin'):
+        return jsonify({'error': '无权限'}), 403
+    body = request.get_json(silent=True) or {}
+    action = body.get('action', '')
+    handler_note = body.get('handler_note', '')
+    if action not in ('approve', 'reject'):
+        return jsonify({'error': '无效操作'}), 400
+    conn = db.get_conn()
+    try:
+        app_row = conn.execute('SELECT * FROM quit_applications WHERE id=?', (app_id,)).fetchone()
+        if not app_row:
+            return jsonify({'error': '申请不存在'}), 404
+        new_status = 'approved' if action == 'approve' else 'rejected'
+        conn.execute('UPDATE quit_applications SET status=?, handler_note=?, handled_at=CURRENT_TIMESTAMP WHERE id=?', (new_status, handler_note, app_id))
+        if action == 'approve':
+            conn.execute('DELETE FROM club_members WHERE user_id=? AND club_name=?', (app_row['user_id'], app_row['club_name']))
+            conn.execute('DELETE FROM club_cadres WHERE user_id=? AND club_name=?', (app_row['user_id'], app_row['club_name']))
+        conn.commit()
+        return jsonify({'success': True, 'message': '已通过' if action == 'approve' else '已驳回'})
+    finally:
+        conn.close()
+
+
+# ==================== 校外活动 API ====================
+
+@app.route('/api/offcampus', methods=['GET', 'POST'])
+def offcampus_requests():
+    if request.method == 'GET':
+        user = get_current_user()
+        if not user:
+            return jsonify({'error': '未登录'}), 401
+        conn = db.get_conn()
+        try:
+            if user['role'] == 'admin':
+                rows = conn.execute('SELECT o.id, o.title, o.location, o.activity_date, o.description, o.status, o.club_name, o.reject_reason, o.file_path, o.file_name, o.submitted_by, o.created_at FROM offcampus_requests o ORDER BY o.created_at DESC').fetchall()
+            else:
+                rows = conn.execute('SELECT o.id, o.title, o.location, o.activity_date, o.description, o.status, o.club_name, o.reject_reason, o.file_path, o.file_name, o.submitted_by, o.created_at FROM offcampus_requests o WHERE o.submitted_by=? ORDER BY o.created_at DESC', (user['username'],)).fetchall()
+            data = []
+            for r in rows:
+                data.append({
+                    'id': r['id'],
+                    'title': r['title'],
+                    'location': r['location'] or '',
+                    'activityDate': r['activity_date'] or '',
+                    'description': r['description'] or '',
+                    'status': r['status'],
+                    'clubName': r['club_name'],
+                    'studentName': r['submitted_by'] or '',
+                    'rejectReason': r['reject_reason'] or '',
+                    'fileUrl': r['file_path'] or ''
+                })
+            return jsonify({'success': True, 'data': data})
+        finally:
+            conn.close()
+    else:
+        user = get_current_user()
+        if not user:
+            return jsonify({'error': '未登录'}), 401
+        title = request.form.get('title', '').strip()
+        location = request.form.get('location', '').strip()
+        activity_date = request.form.get('activityDate', '').strip()
+        description = request.form.get('description', '').strip()
+        club_name = request.form.get('clubName', user.get('club_name', '')).strip()
+        if not title:
+            return jsonify({'error': '标题不能为空'}), 400
+        file_path = ''
+        file_name = ''
+        if 'file' in request.files:
+            f = request.files['file']
+            if f.filename:
+                import os, uuid
+                file_name = f.filename
+                ext = os.path.splitext(file_name)[1]
+                file_path = f'offcampus/{uuid.uuid4().hex}{ext}'
+                os.makedirs(os.path.join('uploads', 'offcampus'), exist_ok=True)
+                f.save(os.path.join('uploads', file_path))
+        conn = db.get_conn()
+        try:
+            conn.execute('INSERT INTO offcampus_requests (club_name, title, location, activity_date, description, file_path, file_name, status, submitted_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)', (club_name, title, location, activity_date, description, file_path, file_name, 'pending', user['username']))
+            conn.commit()
+            return jsonify({'success': True, 'message': '校外活动申请已提交'})
+        finally:
+            conn.close()
+
+
+@app.route('/api/offcampus/<int:oid>', methods=['PUT', 'DELETE'])
+def offcampus_request_action(oid):
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': '未登录'}), 401
+    conn = db.get_conn()
+    try:
+        if request.method == 'DELETE':
+            conn.execute('DELETE FROM offcampus_requests WHERE id=?', (oid,))
+            conn.commit()
+            return jsonify({'success': True})
+        else:
+            body = request.get_json(silent=True) or {}
+            action = body.get('action', '')
+            if action == 'approve':
+                conn.execute('UPDATE offcampus_requests SET status="approved" WHERE id=?', (oid,))
+            elif action == 'reject':
+                reason = body.get('rejectReason', '')
+                conn.execute('UPDATE offcampus_requests SET status="rejected", reject_reason=? WHERE id=?', (reason, oid))
+            conn.commit()
+            return jsonify({'success': True})
+    finally:
+        conn.close()
+
+
+@app.route('/api/offcampus-template', methods=['GET', 'POST', 'DELETE'])
+def offcampus_template():
+    user = get_current_user()
+    if not user or user['role'] != 'admin':
+        return jsonify({'error': '无权限'}), 403
+    import os
+    template_dir = os.path.join('uploads', 'offcampus_templates')
+    template_file = os.path.join(template_dir, 'template')
+    if request.method == 'GET':
+        if os.path.exists(template_file):
+            files = os.listdir(template_dir)
+            if files:
+                f = files[0]
+                stat = os.stat(os.path.join(template_dir, f))
+                return jsonify({'hasTemplate': True, 'fileName': f, 'uploadTime': datetime.fromtimestamp(stat.st_mtime).strftime('%Y-%m-%d %H:%M')})
+        return jsonify({'hasTemplate': False, 'fileName': '', 'uploadTime': ''})
+    elif request.method == 'POST':
+        if 'file' not in request.files:
+            return jsonify({'error': '请上传文件'}), 400
+        f = request.files['file']
+        if not f.filename:
+            return jsonify({'error': '请选择文件'}), 400
+        os.makedirs(template_dir, exist_ok=True)
+        for old in os.listdir(template_dir):
+            os.remove(os.path.join(template_dir, old))
+        f.save(os.path.join(template_dir, f.filename))
+        return jsonify({'success': True, 'message': '模板已上传'})
+    else:
+        if os.path.exists(template_dir):
+            for old in os.listdir(template_dir):
+                os.remove(os.path.join(template_dir, old))
+        return jsonify({'success': True, 'message': '模板已删除'})
+
+
+@app.route('/api/offcampus-template/download', methods=['GET'])
+def offcampus_template_download():
+    import os
+    template_dir = os.path.join('uploads', 'offcampus_templates')
+    if os.path.exists(template_dir):
+        files = os.listdir(template_dir)
+        if files:
+            return send_from_directory(template_dir, files[0], as_attachment=True)
+    return jsonify({'error': '模板不存在'}), 404
+
+
+@app.route('/api/offcampus/download-attachments', methods=['GET'])
+def offcampus_download_attachments():
+    user = get_current_user()
+    if not user or user['role'] != 'admin':
+        return jsonify({'error': '无权限'}), 403
+    import zipfile, io, os
+    conn = db.get_conn()
+    try:
+        rows = conn.execute("SELECT file_path, file_name FROM offcampus_requests WHERE file_path!='' AND file_path IS NOT NULL").fetchall()
+        output = io.BytesIO()
+        with zipfile.ZipFile(output, 'w') as zf:
+            for r in rows:
+                fpath = os.path.join('uploads', r['file_path'])
+                if os.path.exists(fpath):
+                    zf.write(fpath, r['file_name'] or os.path.basename(fpath))
+        output.seek(0)
+        from flask import send_file
+        return send_file(output, mimetype='application/zip', as_attachment=True, download_name='校外活动附件.zip')
+    finally:
+        conn.close()
+
+
+# ==================== 收藏 API ====================
+
+@app.route('/api/club-favorites', methods=['GET'])
+def club_favorites():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': '未登录'}), 401
+    conn = db.get_conn()
+    try:
+        rows = conn.execute('SELECT cf.club_name, cp.category, cp.emblem_url FROM club_favorites cf LEFT JOIN club_profiles cp ON cf.club_name=cp.club_name WHERE cf.user_id=? ORDER BY cf.created_at DESC', (user['id'],)).fetchall()
+        data = [{'clubName': r['club_name'], 'category': r['category'] or '', 'emblemUrl': r['emblem_url'] if 'emblem_url' in r.keys() else ''} for r in rows]
+        return jsonify({'success': True, 'data': data})
+    finally:
+        conn.close()
+
+
+@app.route('/api/club-favorites/toggle', methods=['POST'])
+def club_favorites_toggle():
+    user = get_current_user()
+    if not user:
+        return jsonify({'error': '未登录'}), 401
+    body = request.get_json(silent=True) or {}
+    club_name = body.get('club_name', '').strip()
     if not club_name:
-        return jsonify({'error': '社团名称不能为空'}), 400
+        return jsonify({'error': '请指定社团'}), 400
     conn = db.get_conn()
     try:
         existing = conn.execute('SELECT id FROM club_favorites WHERE user_id=? AND club_name=?', (user['id'], club_name)).fetchone()
@@ -18077,548 +17750,156 @@ def toggle_club_favorite():
         conn.close()
 
 
-@app.route('/api/club-favorites')
-def get_club_favorites():
+# ==================== 教师列表 API ====================
+
+@app.route('/api/teachers', methods=['GET'])
+def teachers_list():
     user = get_current_user()
-    if not user:
-        return jsonify({'error': '未登录'}), 401
+    if not user or user['role'] != 'admin':
+        return jsonify({'error': '无权限'}), 403
     conn = db.get_conn()
     try:
-        rows = conn.execute('SELECT cf.club_name, cf.created_at, cp.description, cp.star_rating, cp.show_star, cp.emblem_url, cp.category FROM club_favorites cf LEFT JOIN club_profiles cp ON cf.club_name=cp.club_name WHERE cf.user_id=? ORDER BY cf.created_at DESC', (user['id'],)).fetchall()
-        result = []
-        for r in rows:
-            result.append({
-                'clubName': r['club_name'],
-                'description': r['description'] or '',
-                'starRating': r['star_rating'] or 0,
-                'showStar': r['show_star'] or 0,
-                'emblemUrl': r['emblem_url'] or '',
-                'category': r['category'] or '',
-                'favoritedAt': r['created_at']
-            })
-        return jsonify({'success': True, 'data': result})
+        rows = conn.execute('SELECT u.username, COALESCE(up.real_name, u.username) as real_name, tc.club_name FROM users u LEFT JOIN teacher_clubs tc ON u.id=tc.user_id LEFT JOIN user_profiles up ON u.id=up.user_id WHERE u.role="teacher" ORDER BY real_name').fetchall()
+        data = [{'username': r['username'], 'realName': r['real_name'] or r['username'], 'clubName': r['club_name'] or ''} for r in rows]
+        return jsonify({'success': True, 'data': data})
     finally:
         conn.close()
 
 
-@app.route('/api/quit-apply', methods=['POST'])
-def submit_quit_application():
+# ==================== 补全缺失的HTTP方法 ====================
+
+@app.route('/api/admin/teacher-guidance', methods=['GET'])
+def admin_teacher_guidance_list():
     user = get_current_user()
-    if not user:
-        return jsonify({'error': '未登录'}), 401
-    data = request.json or {}
-    club_name = (data.get('club_name') or '').strip()
-    reason = (data.get('reason') or '').strip()
-    if not club_name:
-        return jsonify({'error': '社团名称不能为空'}), 400
-    if not reason:
-        return jsonify({'error': '请填写退社原因'}), 400
+    if not user or user['role'] != 'admin':
+        return jsonify({'error': '无权限'}), 403
     conn = db.get_conn()
     try:
-        member = conn.execute('SELECT id, user_id FROM club_members WHERE club_name=? AND user_id=?', (club_name, user['id'])).fetchone()
-        if not member:
-            member = conn.execute('SELECT id, user_id FROM club_members WHERE club_name=? AND username=?', (club_name, user['username'])).fetchone()
-        if not member:
-            profile = conn.execute('SELECT real_name FROM user_profiles WHERE user_id=?', (user['id'],)).fetchone()
-            if profile and profile['real_name']:
-                member = conn.execute('SELECT id, user_id FROM club_members WHERE club_name=? AND real_name=?', (club_name, profile['real_name'])).fetchone()
-        if not member:
-            return jsonify({'error': '你不在该社团中'}), 400
-        if member['user_id'] == 0 or member['user_id'] is None:
-            conn.execute('UPDATE club_members SET user_id=?, username=? WHERE id=?', (user['id'], user['username'], member['id']))
-            conn.commit()
-        existing = conn.execute('SELECT id FROM quit_applications WHERE user_id=? AND club_name=? AND status=?', (user['id'], club_name, 'pending')).fetchone()
-        if existing:
-            return jsonify({'error': '你已提交过该社团的退社申请，请等待审批'}), 400
-        conn.execute('INSERT INTO quit_applications (user_id, username, club_name, reason) VALUES (?, ?, ?, ?)', (user['id'], user.get('username', ''), club_name, reason))
+        rows = conn.execute('SELECT tg.id, tg.club_name, tg.teacher_name, tg.guidance_count, tg.semester, tg.created_at FROM teacher_guidance tg ORDER BY tg.created_at DESC').fetchall()
+        return jsonify({'success': True, 'data': [dict(r) for r in rows]})
+    finally:
+        conn.close()
+
+
+@app.route('/api/club-teachers', methods=['GET'])
+def club_teachers_get():
+    club_name = request.args.get('club', '').strip()
+    conn = db.get_conn()
+    try:
+        if club_name:
+            rows = conn.execute('SELECT id, club_name, teacher_name, photo_path, introduction, user_id FROM club_teachers WHERE club_name=?', (club_name,)).fetchall()
+        else:
+            rows = conn.execute('SELECT id, club_name, teacher_name, photo_path, introduction, user_id FROM club_teachers ORDER BY club_name').fetchall()
+        return jsonify({'success': True, 'data': [dict(r) for r in rows]})
+    finally:
+        conn.close()
+
+
+@app.route('/api/teacher-photo/<int:tid>', methods=['GET'])
+def teacher_photo_get(tid):
+    conn = db.get_conn()
+    try:
+        row = conn.execute('SELECT photo_path FROM club_teachers WHERE id=?', (tid,)).fetchone()
+        if row and row['photo_path']:
+            return send_from_directory('uploads', row['photo_path'])
+        return jsonify({'error': '无照片'}), 404
+    finally:
+        conn.close()
+
+
+@app.route('/api/finance-managers/<club_name>', methods=['POST'])
+def finance_managers_add(club_name):
+    user = get_current_user()
+    if not user or user['role'] != 'user':
+        return jsonify({'error': '无权限'}), 403
+    body = request.get_json(silent=True) or {}
+    member_id = body.get('member_id', 0)
+    conn = db.get_conn()
+    try:
+        conn.execute('INSERT OR IGNORE INTO finance_managers (club_name, member_id, added_by) VALUES (?, ?, ?)', (club_name, member_id, user['id']))
         conn.commit()
-        return jsonify({'success': True, 'message': '退社申请已提交，请等待社团负责人审批'})
+        return jsonify({'success': True, 'message': '财务管理员已添加'})
     finally:
         conn.close()
 
 
-@app.route('/api/my-quit-applications')
-def get_my_quit_applications():
+@app.route('/api/joint-activities/<int:aid>', methods=['GET', 'PUT'])
+def joint_activity_detail(aid):
     user = get_current_user()
     if not user:
         return jsonify({'error': '未登录'}), 401
     conn = db.get_conn()
     try:
-        rows = conn.execute('SELECT * FROM quit_applications WHERE user_id=? ORDER BY created_at DESC', (user['id'],)).fetchall()
-        result = []
-        for r in rows:
-            result.append({
-                'id': r['id'],
-                'clubName': r['club_name'],
-                'reason': r['reason'],
-                'status': r['status'],
-                'handlerNote': r['handler_note'] or '',
-                'createdAt': r['created_at'],
-                'handledAt': r['handled_at'] or ''
-            })
-        return jsonify({'success': True, 'data': result})
+        if request.method == 'GET':
+            row = conn.execute('SELECT * FROM joint_activities WHERE id=?', (aid,)).fetchone()
+            if row:
+                return jsonify({'success': True, 'data': dict(row)})
+            return jsonify({'error': '活动不存在'}), 404
+        else:
+            body = request.get_json(silent=True) or {}
+            title = body.get('title', '')
+            description = body.get('description', '')
+            if title:
+                conn.execute('UPDATE joint_activities SET title=? WHERE id=?', (title, aid))
+            if description:
+                conn.execute('UPDATE joint_activities SET description=? WHERE id=?', (description, aid))
+            conn.commit()
+            return jsonify({'success': True, 'message': '已更新'})
     finally:
         conn.close()
 
 
-@app.route('/api/quit-applications/manage')
-def get_quit_applications_manage():
+@app.route('/api/recruitments/<int:rid>', methods=['GET'])
+def recruitment_detail(rid):
+    conn = db.get_conn()
+    try:
+        row = conn.execute('SELECT * FROM recruitments WHERE id=?', (rid,)).fetchone()
+        if row:
+            return jsonify({'success': True, 'data': dict(row)})
+        return jsonify({'error': '招募不存在'}), 404
+    finally:
+        conn.close()
+
+
+@app.route('/api/admin/users', methods=['POST'])
+def admin_users_create():
     user = get_current_user()
-    if not user:
-        return jsonify({'error': '未登录'}), 401
-    if user['role'] not in ('user', 'admin', 'teacher'):
+    if not user or user['role'] != 'admin':
         return jsonify({'error': '无权限'}), 403
+    body = request.get_json(silent=True) or {}
+    username = body.get('username', '').strip()
+    password = body.get('password', '').strip()
+    real_name = body.get('real_name', '').strip()
+    role = body.get('role', 'student').strip()
+    if not username or not password:
+        return jsonify({'error': '用户名和密码不能为空'}), 400
     conn = db.get_conn()
     try:
-        if user['role'] == 'admin':
-            rows = conn.execute('SELECT * FROM quit_applications ORDER BY created_at DESC').fetchall()
-        elif user['role'] == 'teacher':
-            teacher_clubs = conn.execute('SELECT club_name FROM teacher_clubs WHERE user_id=?', (user['id'],)).fetchall()
-            club_names = [r['club_name'] for r in teacher_clubs]
-            if not club_names:
-                club_name = user.get('club_name', '')
-                if club_name:
-                    club_names = [club_name]
-            if not club_names:
-                return jsonify({'success': True, 'data': []})
-            placeholders = ','.join(['?' for _ in club_names])
-            rows = conn.execute(f'SELECT * FROM quit_applications WHERE club_name IN ({placeholders}) ORDER BY created_at DESC', club_names).fetchall()
-        else:
-            club_name = user.get('club_name', '')
-            if not club_name:
-                return jsonify({'success': True, 'data': []})
-            rows = conn.execute('SELECT * FROM quit_applications WHERE club_name=? ORDER BY created_at DESC', (club_name,)).fetchall()
-        result = []
-        for r in rows:
-            real_name = r['username']
-            if r['user_id'] and r['user_id'] != 0:
-                profile = conn.execute('SELECT real_name FROM user_profiles WHERE user_id=?', (r['user_id'],)).fetchone()
-                if profile and profile['real_name']:
-                    real_name = profile['real_name']
-            else:
-                member = conn.execute('SELECT real_name FROM club_members WHERE club_name=? AND username=?', (r['club_name'], r['username'])).fetchone()
-                if member and member['real_name']:
-                    real_name = member['real_name']
-            result.append({
-                'id': r['id'],
-                'userId': r['user_id'],
-                'username': r['username'],
-                'realName': real_name,
-                'clubName': r['club_name'],
-                'reason': r['reason'],
-                'status': r['status'],
-                'handlerNote': r['handler_note'] or '',
-                'createdAt': r['created_at'],
-                'handledAt': r['handled_at'] or ''
-            })
-        return jsonify({'success': True, 'data': result})
+        existing = conn.execute('SELECT id FROM users WHERE username=?', (username,)).fetchone()
+        if existing:
+            return jsonify({'error': '用户名已存在'}), 400
+        import hashlib
+        pw_hash = hashlib.sha256(password.encode()).hexdigest()
+        conn.execute('INSERT INTO users (username, password_hash, real_name, role) VALUES (?, ?, ?, ?)', (username, pw_hash, real_name, role))
+        conn.commit()
+        return jsonify({'success': True, 'message': '用户已创建'})
     finally:
         conn.close()
 
 
-@app.route('/api/quit-applications/<int:app_id>/handle', methods=['POST'])
-def handle_quit_application(app_id):
+@app.route('/api/club-recommend', methods=['GET'])
+def club_recommend_get():
     user = get_current_user()
     if not user:
         return jsonify({'error': '未登录'}), 401
-    if user['role'] not in ('user', 'admin', 'teacher'):
-        return jsonify({'error': '无权限'}), 403
-    data = request.json or {}
-    action = data.get('action', '')
-    handler_note = (data.get('handler_note') or '').strip()
-    if action not in ('approve', 'reject'):
-        return jsonify({'error': '无效操作'}), 400
     conn = db.get_conn()
     try:
-        app = conn.execute('SELECT * FROM quit_applications WHERE id=?', (app_id,)).fetchone()
-        if not app:
-            return jsonify({'error': '申请不存在'}), 404
-        if app['status'] != 'pending':
-            return jsonify({'error': '该申请已处理'}), 400
-        if user['role'] != 'admin' and app['club_name'] != user.get('club_name', ''):
-            if user['role'] == 'teacher':
-                teacher_clubs = conn.execute('SELECT club_name FROM teacher_clubs WHERE user_id=?', (user['id'],)).fetchall()
-                teacher_club_names = [r['club_name'] for r in teacher_clubs]
-                if app['club_name'] not in teacher_club_names:
-                    return jsonify({'error': '无权限处理该申请'}), 403
-            else:
-                return jsonify({'error': '无权限处理该申请'}), 403
-        if action == 'approve':
-            conn.execute('UPDATE quit_applications SET status=?, handler_note=?, handled_at=CURRENT_TIMESTAMP WHERE id=?', ('approved', handler_note, app_id))
-            conn.execute('DELETE FROM club_members WHERE club_name=? AND user_id=?', (app['club_name'], app['user_id']))
-            conn.execute('DELETE FROM club_registrations WHERE club_name=? AND user_id=?', (app['club_name'], app['user_id']))
-            conn.execute('DELETE FROM checkin_records WHERE club_name=? AND student_name=?', (app['club_name'], app['username']))
-            conn.execute('DELETE FROM club_favorites WHERE user_id=? AND club_name=?', (app['user_id'], app['club_name']))
-            conn.commit()
-            return jsonify({'success': True, 'message': '已同意退社申请，该成员信息及活动记录已清除'})
-        else:
-            conn.execute('UPDATE quit_applications SET status=?, handler_note=?, handled_at=CURRENT_TIMESTAMP WHERE id=?', ('rejected', handler_note, app_id))
-            conn.commit()
-            return jsonify({'success': True, 'message': '已拒绝退社申请'})
-    finally:
-        conn.close()
-
-
-# ==================== 智能周报 API ====================
-
-@app.route('/api/weekly-report/generate', methods=['POST'])
-def generate_weekly_report():
-    user = get_current_user()
-    if not user or user['role'] not in ('user', 'admin'):
-        return jsonify({'error': '请先登录'}), 401
-
-    from datetime import datetime, timedelta
-    now = datetime.now()
-    # 本周一到今天
-    week_start_date = now - timedelta(days=now.weekday())
-    week_start = week_start_date.strftime('%Y-%m-%d')
-    week_end = now.strftime('%Y-%m-%d')
-
-    conn = db.get_conn()
-    try:
-        if user['role'] == 'user':
-            club_name = user.get('club_name', '')
-            if not club_name:
-                return jsonify({'error': '您未关联社团，无法生成周报'}), 400
-
-            # 社团活动次数
-            activity_count = conn.execute(
-                'SELECT COUNT(*) as c FROM online_activity_data WHERE club_name=? AND activity_date>=? AND activity_date<=?',
-                (club_name, week_start, week_end)
-            ).fetchone()['c']
-
-            # 各活动的参加人数（通过 checkin_sessions + checkin_records 统计）
-            activities = conn.execute(
-                'SELECT id, activity_title, activity_date FROM online_activity_data WHERE club_name=? AND activity_date>=? AND activity_date<=?',
-                (club_name, week_start, week_end)
-            ).fetchall()
-
-            activity_participants = []
-            for act in activities:
-                # 通过 checkin_sessions 查找该活动对应的签到场次，统计参加人数
-                sessions = conn.execute(
-                    "SELECT id FROM checkin_sessions WHERE club_name=? AND activity_name=? AND date(created_at)>=? AND date(created_at)<=?",
-                    (club_name, act['activity_title'] or '', week_start, week_end)
-                ).fetchall()
-                total = 0
-                for s in sessions:
-                    cnt = conn.execute(
-                        'SELECT COUNT(*) as c FROM checkin_records WHERE session_id=?', (s['id'],)
-                    ).fetchone()['c']
-                    total += cnt
-                activity_participants.append({
-                    'title': act['activity_title'] or '未命名活动',
-                    'count': total
-                })
-
-            max_activity = None
-            min_activity = None
-            if activity_participants:
-                max_activity = max(activity_participants, key=lambda x: x['count'])
-                min_activity = min(activity_participants, key=lambda x: x['count'])
-
-            # 指导老师指导次数
-            teacher_guidance_count = conn.execute(
-                'SELECT COUNT(*) as c FROM teacher_checkin_checkout WHERE club_name=? AND date(checkin_time)>=? AND date(checkin_time)<=?',
-                (club_name, week_start, week_end)
-            ).fetchone()['c']
-
-            # 组织周报内容
-            content_lines = [
-                f'【{club_name} 周报】',
-                f'统计周期：{week_start} 至 {week_end}',
-                '',
-                f'一、社团活动概况',
-                f'本周共开展活动 {activity_count} 次。',
-            ]
-            if max_activity:
-                content_lines.append(f'参加人数最多的活动：「{max_activity["title"]}」，共 {max_activity["count"]} 人参加。')
-            if min_activity:
-                content_lines.append(f'参加人数最少的活动：「{min_activity["title"]}」，共 {min_activity["count"]} 人参加。')
-            content_lines.append('')
-            content_lines.append(f'二、指导老师指导情况')
-            content_lines.append(f'本周指导老师到校指导 {teacher_guidance_count} 次。')
-
-            content = '\n'.join(content_lines)
-
-            # 检查本周是否已有该社团的周报
-            existing = conn.execute(
-                'SELECT id FROM weekly_reports WHERE role=? AND club_name=? AND week_start=? AND week_end=?',
-                ('user', club_name, week_start, week_end)
-            ).fetchone()
-            if existing:
-                conn.execute(
-                    'UPDATE weekly_reports SET content=?, created_at=CURRENT_TIMESTAMP WHERE id=?',
-                    (content, existing['id'])
-                )
-                report_id = existing['id']
-            else:
-                conn.execute(
-                    'INSERT INTO weekly_reports (role, club_name, week_start, week_end, content) VALUES (?, ?, ?, ?, ?)',
-                    ('user', club_name, week_start, week_end, content)
-                )
-                report_id = conn.execute('SELECT last_insert_rowid() as id').fetchone()['id']
-            conn.commit()
-
-            report = conn.execute('SELECT id, week_start, week_end, content, created_at FROM weekly_reports WHERE id=?', (report_id,)).fetchone()
-            return jsonify({'success': True, 'report': dict(report)})
-
-        elif user['role'] == 'admin':
-            # 活动的社团个数
-            active_club_count = conn.execute(
-                'SELECT COUNT(DISTINCT club_name) as c FROM online_activity_data WHERE activity_date>=? AND activity_date<=?',
-                (week_start, week_end)
-            ).fetchone()['c']
-
-            # 活动次数最多的五个社团
-            top5_activity_clubs = conn.execute(
-                'SELECT club_name, COUNT(*) as c FROM online_activity_data WHERE activity_date>=? AND activity_date<=? GROUP BY club_name ORDER BY c DESC LIMIT 5',
-                (week_start, week_end)
-            ).fetchall()
-
-            # 指导老师指导次数最多的五个老师
-            top5_teachers = conn.execute(
-                'SELECT tcc.teacher_user_id, tp.real_name, COUNT(*) as c FROM teacher_checkin_checkout tcc LEFT JOIN teacher_profiles tp ON tcc.teacher_user_id=tp.user_id WHERE date(tcc.checkin_time)>=? AND date(tcc.checkin_time)<=? GROUP BY tcc.teacher_user_id ORDER BY c DESC LIMIT 5',
-                (week_start, week_end)
-            ).fetchall()
-
-            # 提交材料情况
-            upload_rows = conn.execute(
-                'SELECT club_name, COUNT(*) as c FROM club_uploads WHERE date(upload_time)>=? AND date(upload_time)<=? GROUP BY club_name',
-                (week_start, week_end)
-            ).fetchall()
-            has_uploads = len(upload_rows) > 0
-
-            # 外出情况
-            offcampus_rows = conn.execute(
-                'SELECT club_name, COUNT(*) as c FROM offcampus_requests WHERE date(created_at)>=? AND date(created_at)<=? GROUP BY club_name',
-                (week_start, week_end)
-            ).fetchall()
-            has_offcampus = len(offcampus_rows) > 0
-
-            # 联合活动发布情况
-            joint_rows = conn.execute(
-                'SELECT club_name, COUNT(*) as c FROM joint_activities WHERE date(created_at)>=? AND date(created_at)<=? GROUP BY club_name',
-                (week_start, week_end)
-            ).fetchall()
-            has_joint = len(joint_rows) > 0
-
-            # 招募情况
-            recruit_rows = conn.execute(
-                'SELECT club_name, COUNT(*) as c FROM recruitments WHERE date(created_at)>=? AND date(created_at)<=? GROUP BY club_name',
-                (week_start, week_end)
-            ).fetchall()
-            has_recruit = len(recruit_rows) > 0
-
-            # 组织周报内容
-            content_lines = [
-                '【管理员周报】',
-                f'统计周期：{week_start} 至 {week_end}',
-                '',
-                f'一、活动概况',
-                f'本周共有 {active_club_count} 个社团开展了活动。',
-            ]
-            if top5_activity_clubs:
-                content_lines.append('活动次数最多的社团：')
-                for i, row in enumerate(top5_activity_clubs, 1):
-                    content_lines.append(f'  {i}. {row["club_name"]}：{row["c"]} 次')
-            content_lines.append('')
-
-            content_lines.append('二、指导老师指导情况')
-            if top5_teachers:
-                content_lines.append('指导次数最多的老师：')
-                for i, row in enumerate(top5_teachers, 1):
-                    name = row['real_name'] or f'老师(ID:{row["teacher_user_id"]})'
-                    content_lines.append(f'  {i}. {name}：{row["c"]} 次')
-            else:
-                content_lines.append('本周暂无指导老师指导记录。')
-            content_lines.append('')
-
-            cn_list = ['一', '二', '三', '四', '五', '六']
-            sec_idx = 2  # 一=活动概况, 二=指导老师, 从三开始
-
-            if has_uploads:
-                content_lines.append(f'{cn_list[sec_idx]}、材料提交情况')
-                for row in upload_rows:
-                    content_lines.append(f'  {row["club_name"]}：提交 {row["c"]} 份材料')
-                content_lines.append('')
-                sec_idx += 1
-
-            if has_offcampus:
-                content_lines.append(f'{cn_list[sec_idx]}、外出申请情况')
-                for row in offcampus_rows:
-                    content_lines.append(f'  {row["club_name"]}：{row["c"]} 条申请')
-                content_lines.append('')
-                sec_idx += 1
-
-            if has_joint:
-                content_lines.append(f'{cn_list[sec_idx]}、联合活动发布情况')
-                for row in joint_rows:
-                    content_lines.append(f'  {row["club_name"]}：发布 {row["c"]} 条联合活动')
-                content_lines.append('')
-                sec_idx += 1
-
-            if has_recruit:
-                content_lines.append(f'{cn_list[sec_idx]}、招募情况')
-                for row in recruit_rows:
-                    content_lines.append(f'  {row["club_name"]}：发布 {row["c"]} 条招募')
-                content_lines.append('')
-
-            content = '\n'.join(content_lines)
-
-            # 检查本周是否已有管理员周报
-            existing = conn.execute(
-                'SELECT id FROM weekly_reports WHERE role=? AND week_start=? AND week_end=?',
-                ('admin', week_start, week_end)
-            ).fetchone()
-            if existing:
-                conn.execute(
-                    'UPDATE weekly_reports SET content=?, created_at=CURRENT_TIMESTAMP WHERE id=?',
-                    (content, existing['id'])
-                )
-                report_id = existing['id']
-            else:
-                conn.execute(
-                    'INSERT INTO weekly_reports (role, club_name, week_start, week_end, content) VALUES (?, ?, ?, ?, ?)',
-                    ('admin', '', week_start, week_end, content)
-                )
-                report_id = conn.execute('SELECT last_insert_rowid() as id').fetchone()['id']
-            conn.commit()
-
-            report = conn.execute('SELECT id, week_start, week_end, content, created_at FROM weekly_reports WHERE id=?', (report_id,)).fetchone()
-            return jsonify({'success': True, 'report': dict(report)})
-    finally:
-        conn.close()
-
-
-@app.route('/api/weekly-report/latest', methods=['GET'])
-def get_latest_weekly_report():
-    user = get_current_user()
-    if not user or user['role'] not in ('user', 'admin'):
-        return jsonify({'error': '请先登录'}), 401
-
-    conn = db.get_conn()
-    try:
-        if user['role'] == 'user':
-            club_name = user.get('club_name', '')
-            report = conn.execute(
-                'SELECT id, role, club_name, week_start, week_end, content, created_at FROM weekly_reports WHERE role=? AND club_name=? ORDER BY created_at DESC LIMIT 1',
-                ('user', club_name)
-            ).fetchone()
-        else:
-            report = conn.execute(
-                'SELECT id, role, club_name, week_start, week_end, content, created_at FROM weekly_reports WHERE role=? ORDER BY created_at DESC LIMIT 1',
-                ('admin',)
-            ).fetchone()
-        if report:
-            return jsonify({'success': True, 'report': dict(report)})
-        else:
-            return jsonify({'success': True, 'report': None})
-    finally:
-        conn.close()
-
-
-@app.route('/api/weekly-report/list', methods=['GET'])
-def list_weekly_reports():
-    user = get_current_user()
-    if not user or user['role'] not in ('user', 'admin'):
-        return jsonify({'error': '请先登录'}), 401
-
-    conn = db.get_conn()
-    try:
-        if user['role'] == 'user':
-            club_name = user.get('club_name', '')
-            rows = conn.execute(
-                "SELECT id, role, club_name, week_start, week_end, content, created_at FROM weekly_reports WHERE role=? AND club_name=? AND created_at>=date('now','-30 days') ORDER BY created_at DESC",
-                ('user', club_name)
-            ).fetchall()
-        else:
-            rows = conn.execute(
-                "SELECT id, role, club_name, week_start, week_end, content, created_at FROM weekly_reports WHERE role=? AND created_at>=date('now','-30 days') ORDER BY created_at DESC",
-                ('admin',)
-            ).fetchall()
-        return jsonify({'success': True, 'list': [dict(r) for r in rows]})
-    finally:
-        conn.close()
-
-
-@app.route('/api/weekly-report/<int:report_id>', methods=['GET'])
-def get_weekly_report(report_id):
-    user = get_current_user()
-    if not user or user['role'] not in ('user', 'admin'):
-        return jsonify({'error': '请先登录'}), 401
-
-    conn = db.get_conn()
-    try:
-        report = conn.execute(
-            'SELECT id, role, club_name, week_start, week_end, content, created_at FROM weekly_reports WHERE id=?',
-            (report_id,)
-        ).fetchone()
-        if not report:
-            return jsonify({'error': '周报不存在'}), 404
-        # 权限校验：社团负责人只能看自己社团的
-        if user['role'] == 'user' and report['club_name'] != user.get('club_name', ''):
-            return jsonify({'error': '无权限查看该周报'}), 403
-        return jsonify({'success': True, 'report': dict(report)})
+        rows = conn.execute('SELECT club_name, description, star_rating, category FROM club_profiles ORDER BY star_rating DESC LIMIT 10').fetchall()
+        data = [{'clubName': r['club_name'], 'description': r['description'] or '', 'starRating': r['star_rating'], 'category': r['category'] or ''} for r in rows]
+        return jsonify({'success': True, 'data': data})
     finally:
         conn.close()
 
 
 if __name__ == '__main__':
-    import sys
-    print('\n  ' + '=' * 50)
-    print('  社团活动统计分析系统')
-    print('  技术栈: Flask + SQLite + Pandas + MapReduce')
-    print('  ' + '=' * 50 + '\n')
-    # 生产环境使用 threaded=True 和 debug=False 提高稳定性
-    is_debug = '--debug' in sys.argv
-    use_ssl = '--ssl' in sys.argv
-    ssl_ctx = None
-    if use_ssl:
-        cert_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cert')
-        cert_file = os.path.join(cert_dir, 'cert.pem')
-        key_file = os.path.join(cert_dir, 'key.pem')
-        if os.path.exists(cert_file) and os.path.exists(key_file):
-            ssl_ctx = (cert_file, key_file)
-            print('  🔒 HTTPS 已启用')
-        else:
-            print('  ⚠️ 未找到证书文件，正在自动生成自签名证书...')
-            try:
-                from cryptography import x509
-                from cryptography.x509.oid import NameOID
-                from cryptography.hazmat.primitives import hashes, serialization
-                from cryptography.hazmat.primitives.asymmetric import rsa
-                import datetime
-                import ipaddress as _ip
-                os.makedirs(cert_dir, exist_ok=True)
-                key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
-                subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, 'localhost')])
-                cert = (x509.CertificateBuilder()
-                    .subject_name(subject).issuer_name(issuer)
-                    .public_key(key.public_key())
-                    .serial_number(x509.random_serial_number())
-                    .not_valid_before(datetime.datetime.utcnow())
-                    .not_valid_after(datetime.datetime.utcnow() + datetime.timedelta(days=365))
-                    .add_extension(x509.SubjectAlternativeName([x509.DNSName('localhost'), x509.IPAddress(_ip.IPv4Address('0.0.0.0'))]), critical=False)
-                    .sign(key, hashes.SHA256()))
-                with open(cert_file, 'wb') as f: f.write(cert.public_bytes(serialization.Encoding.PEM))
-                with open(key_file, 'wb') as f: f.write(key.private_bytes(serialization.Encoding.PEM, serialization.PrivateFormat.TraditionalOpenSSL, serialization.NoEncryption()))
-                ssl_ctx = (cert_file, key_file)
-                print('  🔒 HTTPS 已启用（自签名证书）')
-            except ImportError:
-                print('  ⚠️ 缺少 cryptography 库，尝试 openssl 生成...')
-                try:
-                    from subprocess import run, PIPE
-                    os.makedirs(cert_dir, exist_ok=True)
-                    run(['openssl', 'req', '-x509', '-newkey', 'rsa:2048', '-keyout', key_file, '-out', cert_file, '-days', '365', '-nodes', '-subj', '/CN=localhost'], check=True, stdout=PIPE, stderr=PIPE)
-                    ssl_ctx = (cert_file, key_file)
-                    print('  🔒 HTTPS 已启用（自签名证书）')
-                except Exception as e2:
-                    print(f'  ⚠️ 证书生成失败: {e2}，将以 HTTP 模式运行')
-            except Exception as e:
-                print(f'  ⚠️ 证书生成失败: {e}，将以 HTTP 模式运行')
-    if ssl_ctx:
-        print(f'  📱 手机请访问: https://<本机IP>:5000')
-        app.run(host='0.0.0.0', port=5000, debug=is_debug, threaded=True, ssl_context=ssl_ctx)
-    else:
-        app.run(host='0.0.0.0', port=5000, debug=is_debug, threaded=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)

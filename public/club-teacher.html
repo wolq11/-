@@ -389,13 +389,14 @@ function buildSidebar(){
             {id:'personal',emoji:'👤',name:'个人中心'}
         ]},
         {sec:'活动',items:[
-            {id:'checkin',emoji:'✅',name:'活动签到签退'},
+            {id:'checkin',emoji:'✅',name:'活动签到'},
             {id:'activity',emoji:'📋',name:'活动记录'},
             {id:'joint',emoji:'🤝',name:'联合活动'}
         ]},
         {sec:'数据',items:[
     {id:'guidance',emoji:'📊',name:'指导情况'},
-            {id:'recruit',emoji:'🎯',name:'招募管理'},
+            {id:'recruit',emoji:'👥',name:'成员管理'},
+            {id:'cadres',emoji:'⭐',name:'社团骨干'},
             {id:'memberAnalysis',emoji:'📈',name:'成员分析'}
         ]},
         {sec:'管理',items:[
@@ -438,6 +439,7 @@ function switchPage(id){
     if(id==='activity')loadActivityList();
     if(id==='guidance')loadGuidanceStats();
     if(id==='memberAnalysis')loadMemberAnalysis();
+    if(id==='cadres')loadCadres();
     if(id==='adminNotify')loadTeacherAdminNotify();
     if(id==='finance')loadFinanceRecords();
     if(id==='feedback')loadFeedbacks();
@@ -450,7 +452,15 @@ function switchPage(id){
 function renderClubSwitch(){
     var box=document.getElementById('sbClubChips');
     var h='';
-    myClubs.forEach(function(cn){
+    var orderedClubs=myClubs.slice();
+    var idx1=orderedClubs.indexOf('羽毛球社');
+    var idx2=orderedClubs.indexOf('合唱社团');
+    if(idx1>=0&&idx2>=0){
+        var tmp=orderedClubs[idx1];
+        orderedClubs[idx1]=orderedClubs[idx2];
+        orderedClubs[idx2]=tmp;
+    }
+    orderedClubs.forEach(function(cn){
         h+='<div class="sb-club-chip'+(cn===currentClub?' active':'')+'" onclick="switchClub(\''+esc(cn).replace(/'/g,"\\'")+'\')">'+esc(cn)+'</div>';
     });
     box.innerHTML=h;
@@ -466,6 +476,10 @@ function switchClub(cn){
     }
     var descEl=document.querySelector('#page-memberAnalysis .pg-desc');
     if(descEl)descEl.textContent=cn+' · 成员数据可视化';
+    var cadresDescEl=document.querySelector('#page-cadres .pg-desc');
+    if(cadresDescEl)cadresDescEl.textContent=cn+' · 管理社团骨干成员';
+    var cadresPageActive=document.querySelector('#page-cadres.active');
+    if(cadresPageActive)loadCadres();
     var jointIframe=document.querySelector('#page-joint iframe');
     if(jointIframe){
         jointIframe.onload=function(){if(window.innerWidth<=768){try{var d=this.contentDocument||this.contentWindow.document;this.style.height=d.documentElement.scrollHeight+'px'}catch(e){}}};
@@ -491,6 +505,7 @@ function buildPages(){
         activity:activityPage(),
         guidance:guidancePage(),
         recruit:recruitPage(),
+        cadres:cadresPage(),
         memberAnalysis:memberAnalysisPage(),
         adminNotify:teacherAdminNotifyPage(),
         finance:financePage(),
@@ -760,13 +775,18 @@ function showMaterialDetail(groupId){
 }
 
 function checkinPage(){
-    return '<div class="pg-title">✅ 活动签到签退</div><div class="pg-desc">输入签到码完成签到，活动结束后拍照签退</div>'+
+    return '<div class="pg-title">✅ 活动签到</div><div class="pg-desc">输入签到码完成签到，活动结束后在签退区完成签退</div>'+
     '<div class="card" style="background:linear-gradient(135deg,rgba(0,184,148,0.04),rgba(85,239,196,0.04));border-color:rgba(0,184,148,0.15)">'+
-    '<div class="card-title" style="font-size:1.05em">🔐 快速签到</div>'+
+    '<div class="card-title" style="font-size:1.05em">🔐 快速签到签退</div>'+
     '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">'+
     '<div class="checkin-input-area" style="flex:1;min-width:200px"><div style="font-size:0.78em;color:#6b6d8a;margin-bottom:6px;font-weight:600">🔢 输入签到码</div>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap"><input type="text" id="quickCheckinCode" placeholder="输入6位签到码" maxlength="6" style="flex:1;min-width:120px;padding:12px 16px;border-radius:12px;border:1.5px solid #d1fae5;font-size:1.1em;letter-spacing:4px;font-weight:700;text-align:center;background:#fff;outline:none;color:#1a1a2e" onfocus="this.style.borderColor=\'#00b894\';this.style.boxShadow=\'0 0 0 3px rgba(0,184,148,0.1)\'" onblur="this.style.borderColor=\'#d1fae5\';this.style.boxShadow=\'none\'" />'+
-    '<button class="btn btn-primary" style="padding:12px 24px;font-size:0.92em;white-space:nowrap" onclick="quickCheckinOrCheckout()">确认</button></div></div>'+
+    '<button class="btn btn-primary" style="padding:12px 24px;font-size:0.92em;white-space:nowrap" onclick="quickCheckinOrCheckout()">签到</button></div></div>'+
+    '<div class="checkin-input-area" style="flex:1;min-width:200px"><div style="font-size:0.78em;color:#6b6d8a;margin-bottom:6px;font-weight:600">🗝️ 输入签退码</div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap"><input type="text" id="quickCheckoutCode" placeholder="输入6位签退码" maxlength="6" style="flex:1;min-width:120px;padding:12px 16px;border-radius:12px;border:1.5px solid rgba(102,126,234,0.3);font-size:1.1em;letter-spacing:4px;font-weight:700;text-align:center;background:#fff;outline:none;color:#1a1a2e" onfocus="this.style.borderColor=\'#667eea\';this.style.boxShadow=\'0 0 0 3px rgba(102,126,234,0.1)\'" onblur="this.style.borderColor=\'rgba(102,126,234,0.3)\';this.style.boxShadow=\'none\'" />'+
+    '<button class="btn btn-success" style="padding:12px 24px;font-size:0.92em;white-space:nowrap" onclick="quickCheckoutOnly()">签退</button></div></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px">'+
     '<div class="checkin-scan-area" style="flex:1;min-width:200px"><div style="font-size:0.78em;color:#6b6d8a;margin-bottom:6px;font-weight:600">📱 扫描二维码</div>'+
     '<button class="btn btn-primary" style="padding:12px 24px;font-size:0.92em;width:100%" onclick="openTeacherScanner()">📷 打开摄像头扫码</button></div>'+
     '</div>'+
@@ -774,7 +794,7 @@ function checkinPage(){
     '<div id="teacherLocMapArea" style="display:none;margin-top:12px"><div id="teacherLocMap" style="width:100%;height:220px;border-radius:10px;border:1px solid #f0f0f8"></div></div>'+
     '</div>'+
     '<div id="checkinQuickAction" style="margin-bottom:16px"></div>'+
-    '<div class="card"><div class="card-title">📋 进行中的活动 <span class="badge">点击签到/签退</span></div>'+
+    '<div class="card"><div class="card-title">📋 进行中的活动 <span class="badge">点击签到</span></div>'+
     '<div id="openSessionList"><div class="empty">加载中...</div></div></div>'+
     '<div class="card"><div class="card-title">📜 已结束的活动</div>'+
     '<div id="closedSessionList"><div class="empty">加载中...</div></div></div>';
@@ -811,7 +831,63 @@ function guidancePage(){
 }
 
 function recruitPage(){
-    return '<div class="pg-title">🎯 招募管理</div><div class="pg-desc">社团招募信息管理</div><iframe src="/club-tools.html?panel=recruit&club='+encodeURIComponent(currentClub||'')+'" class="iframe-wrap"></iframe>'
+    return '<div class="pg-title">👥 成员管理</div><div class="pg-desc">管理社团在册成员</div><iframe src="/club-tools.html?panel=recruit&club='+encodeURIComponent(currentClub||'')+'&section=member" class="iframe-wrap"></iframe>'
+}
+
+function cadresPage(){
+    return '<div class="pg-title">⭐ 社团骨干管理</div><div class="pg-desc">'+esc(currentClub||'')+' · 管理社团骨干成员</div>'+
+    '<div class="card"><div class="card-title">添加社团骨干</div>'+
+    '<p style="color:#6b6d8a;font-size:0.82em;margin-bottom:10px">将本社团成员设为骨干，骨干可协助管理社团活动、成员和财务。需输入成员在个人中心填写的真实姓名和学号进行验证。</p>'+
+    '<div class="form-row"><div class="field"><label>姓名 *</label><input type="text" id="cadreName" placeholder="个人中心填写的真实姓名" /></div><div class="field"><label>学号 *</label><input type="text" id="cadreSid" placeholder="个人中心填写的学号" /></div></div>'+
+    '<button class="btn btn-success" onclick="addCadre()">添加为骨干</button></div>'+
+    '<div class="card"><div class="card-title">骨干列表 <span class="badge" id="cadreCount">0</span></div>'+
+    '<div id="cadreList"></div></div>';
+}
+
+function loadCadres(){
+    var club=currentClub||'';
+    var url=api+'/api/club-cadres';
+    if(club)url+='?club='+encodeURIComponent(club);
+    fetch(url).then(function(r){return r.json()}).then(function(res){
+        if(res.error){document.getElementById('cadreList').innerHTML='<div class="empty">'+esc(res.error)+'</div>';return}
+        var list=res.data||[];
+        var el=document.getElementById('cadreCount');
+        if(el)el.textContent=list.length;
+        var box=document.getElementById('cadreList');
+        if(!list.length){box.innerHTML='<div class="empty">暂无骨干成员</div>';return}
+        var h='<table class="data-table cadre-table"><thead><tr><th>姓名</th><th>学号</th><th>添加时间</th><th>操作</th></tr></thead><tbody>';
+        list.forEach(function(c){
+            h+='<tr><td>'+esc(c.real_name)+'</td><td>'+esc(c.student_id_num)+'</td><td>'+(c.created_at||'')+'</td>';
+            h+='<td><button class="btn btn-danger btn-sm" onclick="removeCadre('+c.id+')">移除</button></td></tr>';
+        });
+        h+='</tbody></table>';
+        box.innerHTML=h;
+    });
+}
+
+function addCadre(){
+    var name=document.getElementById('cadreName').value.trim();
+    var sid=document.getElementById('cadreSid').value.trim();
+    if(!name||!sid){toast('请填写姓名和学号','error');return}
+    var body={real_name:name,student_id_num:sid};
+    if(currentClub)body.clubName=currentClub;
+    fetch(api+'/api/club-cadres',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
+    .then(function(r){return r.json()}).then(function(res){
+        if(res.error){toast(res.error,'error');return}
+        toast('添加成功','success');
+        document.getElementById('cadreName').value='';
+        document.getElementById('cadreSid').value='';
+        loadCadres();
+    });
+}
+
+function removeCadre(id){
+    if(!confirm('确认移除该骨干？'))return;
+    fetch(api+'/api/club-cadres/'+id,{method:'DELETE'}).then(function(r){return r.json()}).then(function(res){
+        if(res.error){toast(res.error,'error');return}
+        toast('已移除','success');
+        loadCadres();
+    });
 }
 
 function memberAnalysisPage(){
@@ -915,7 +991,7 @@ function personalPage(){
     '<div class="form-row"><div class="field"><label>头像</label><div style="display:flex;align-items:center;gap:12px;margin-top:4px"><div class="profile-avatar" id="avatarPreview">👨‍🏫</div>'+
     '<label class="btn btn-sm" style="background:rgba(0,184,148,0.06);color:#00b894;cursor:pointer;padding:6px 14px;border-radius:8px;font-size:0.82em;font-weight:600">📷 更换头像<input type="file" accept="image/*" style="display:none" onchange="uploadAvatar(this)" /></label></div></div></div>'+
     '<div class="form-row"><div class="field"><label>工号 *</label><input type="text" id="profileWorkId" placeholder="请输入工号" /></div>'+
-    '<div class="field"><label>姓名 *</label><input type="text" id="profileRealName" placeholder="请输入真实姓名" /></div></div>'+
+    '<div class="field"><label>姓名</label><input type="text" id="profileRealName" readonly style="background:#f5f5f7;color:#86868b" /></div></div>'+
     '<div class="form-row"><div class="field"><label>联系电话</label><input type="text" id="profilePhone" placeholder="请输入联系电话" /></div>'+
     '<div class="field"><label>邮箱</label><input type="text" id="profileEmail" placeholder="请输入邮箱" /></div></div>'+
     '<div class="form-row"><div class="field" style="flex:1 1 100%;min-width:100%"><label>个人简介</label><textarea id="profileIntro" placeholder="请输入个人简介"></textarea></div></div>'+
@@ -949,11 +1025,37 @@ function renderCheckinSessions(sessions){
         var qh='<div style="background:linear-gradient(135deg,rgba(0,184,148,0.06),rgba(85,239,196,0.06));border:1.5px solid rgba(0,184,148,0.15);border-radius:14px;padding:18px">';
         qh+='<div style="font-size:0.94em;font-weight:700;color:#1a1a2e;margin-bottom:10px">🔔 当前有 '+openSessions.length+' 个活动正在进行</div>';
         openSessions.forEach(function(s){
-            qh+='<div style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;background:#fff;border:1px solid #d1fae5;border-radius:8px;margin-right:6px;margin-bottom:6px;cursor:pointer;font-size:0.82em;font-weight:600;color:#00b894" onclick="toggleCheckinSession('+s.id+')">';
-            qh+='✅ '+esc(s.activityName||'未命名活动')+' <span style="color:#a0a3bd;font-weight:400">('+esc(s.clubName||'')+')</span></div>';
+            qh+='<div id="quickAct-'+s.id+'" style="display:flex;align-items:center;gap:8px;padding:8px 14px;background:#fff;border:1px solid #d1fae5;border-radius:10px;margin-bottom:6px;flex-wrap:wrap">';
+            qh+='<span style="font-size:0.84em;font-weight:600;color:#00b894;cursor:pointer" onclick="toggleCheckinSession('+s.id+')">✅ '+esc(s.activityName||'未命名活动')+' <span style="color:#a0a3bd;font-weight:400">('+esc(s.clubName||'')+')</span></span>';
+            qh+='<span id="quickActStatus-'+s.id+'" style="font-size:0.76em;color:#a0a3bd">加载中...</span>';
+            qh+='</div>';
         });
         qh+='</div>';
         quickBox.innerHTML=qh;
+        // Load teacher checkin status for each open session
+        openSessions.forEach(function(s){
+            fetch(api+'/api/teacher-checkin-status?sessionId='+s.id).then(function(r){return r.json()}).then(function(res){
+                if(!res.success)return;
+                var statusLine=document.getElementById('quickActStatus-'+s.id);
+                if(!statusLine)return;
+                var row=document.getElementById('quickAct-'+s.id);
+                if(res.status==='none'){
+                    statusLine.innerHTML='<span style="color:#f39c12">⏳ 未签到</span>';
+                    if(row){
+                        var btn=document.createElement('button');
+                        btn.className='btn btn-primary btn-sm';
+                        btn.style.cssText='margin-left:auto;padding:4px 14px;font-size:0.78em';
+                        btn.textContent='✅ 签到';
+                        btn.onclick=function(){toggleCheckinSession(s.id)};
+                        row.appendChild(btn);
+                    }
+                }else if(res.status==='checked_in'){
+                    statusLine.innerHTML='<span style="color:#00b894">已签到</span>';
+                }else if(res.status==='checked_out'){
+                    statusLine.innerHTML='<span style="color:#667eea">已签退</span>';
+                }
+            });
+        });
     }else if(quickBox){
         quickBox.innerHTML='';
     }
@@ -1097,10 +1199,8 @@ function renderCheckinSessionDetail(session,detail){
         h+='<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-primary btn-sm" onclick="teacherAddStudent('+session.id+')">✅ 添加</button>';
         h+='<button class="btn btn-sm" style="background:#f0f0f8;color:#6b6d8a" onclick="document.getElementById(\'teacherAddStudentForm-'+session.id+'\').style.display=\'none\'">取消</button></div>';
         h+='</div>';
-        h+='<div class="checkin-action-area" id="checkinAction-'+session.id+'"><div class="empty">加载签到状态...</div></div>';
         h+='</div>';
         detail.innerHTML=h;
-        loadTeacherCheckinStatus(session.id,session);
         loadTeacherSessionRecords(session.id);
 }
 
@@ -1123,14 +1223,9 @@ function loadTeacherCheckinStatus(sid,session){
                 getLocation(sid);
             }else if(status==='checked_in'){
                 h+='<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px"><span class="checkin-status-tag checked_in">已签到</span></div>';
-                h+='<div class="location-hint" id="locHint-'+sid+'">📍 正在获取位置...</div>';
                 h+='<div style="margin-top:10px;padding:10px 12px;background:rgba(102,126,234,0.04);border:1px solid rgba(102,126,234,0.12);border-radius:8px">';
-                h+='<div style="font-size:0.82em;color:#4a4d6a;font-weight:600;margin-bottom:6px">🔑 签退码</div>';
-                h+='<div style="font-size:0.74em;color:#a0a3bd;margin-bottom:8px">请向社团负责人获取签退码，负责人在「活动开展」签到信息面板中点击「生成签退码」</div>';
-                h+='<input type="text" id="checkoutCode-'+sid+'" placeholder="输入6位签退码" style="width:100%;padding:10px 14px;border:1.5px solid #e8e8f0;border-radius:10px;font-size:1.1em;letter-spacing:6px;text-align:center;box-sizing:border-box;font-weight:700" maxlength="6" onclick="event.stopPropagation()" onfocus="event.stopPropagation()" /></div>';
-                h+='<button class="btn btn-primary" onclick="doTeacherCheckout('+sid+')" id="checkoutBtn-'+sid+'" style="margin-top:8px" disabled>⏳ 获取位置中...</button>';
-                h+='<div style="font-size:0.72em;color:#e8876a;margin-top:6px">⚠️ 签退必须获取位置信息，请确保已开启定位权限</div>';
-                getLocation(sid);
+                h+='<div style="font-size:0.82em;color:#4a4d6a;font-weight:600">请在上方「快速签到签退」区域输入签退码完成签退</div>';
+                h+='</div>';
             }else if(status==='checked_out'){
                 h+='<div style="display:flex;align-items:center;gap:8px"><span class="checkin-status-tag checked_out">🏁 已完成签到签退</span></div>';
                 h+='<div style="font-size:0.78em;color:#00b894;margin-top:6px">✅ 本次活动指导已记录</div>';
@@ -1262,6 +1357,7 @@ function getLocation(sid){
     var hint=document.getElementById('locHint-'+sid);
     var checkinBtn=document.getElementById('checkinBtn-'+sid);
     var checkoutBtn=document.getElementById('checkoutBtn-'+sid);
+    var directCheckoutBtn=document.getElementById('directCheckoutBtn-'+sid);
     if(!hint)return;
     if(cachedLocation.ready){
         var addrText=cachedLocation.address?' ('+esc(cachedLocation.address)+')':'';
@@ -1274,11 +1370,13 @@ function getLocation(sid){
         }
         hint.innerHTML=info;
         if(checkinBtn){checkinBtn.disabled=false;checkinBtn.textContent='✅ 签到'}
-        if(checkoutBtn){checkoutBtn.disabled=false;checkoutBtn.textContent='签退'}
+        if(checkoutBtn){checkoutBtn.disabled=false;checkoutBtn.textContent='🔑 签退码签退'}
+        if(directCheckoutBtn){directCheckoutBtn.disabled=false;directCheckoutBtn.textContent='🏁 直接签退'}
     }else if(locationError){
         hint.innerHTML='<span class="loc-far">⚠️ '+esc(locationError)+'</span>';
         if(checkinBtn){checkinBtn.disabled=true;checkinBtn.textContent='⚠️ 定位失败'}
         if(checkoutBtn){checkoutBtn.disabled=true;checkoutBtn.textContent='⚠️ 定位失败'}
+        if(directCheckoutBtn){directCheckoutBtn.disabled=true;directCheckoutBtn.textContent='⚠️ 定位失败'}
     }else{
         hint.innerHTML='📍 正在获取位置...';
     }
@@ -1401,7 +1499,6 @@ function doTeacherCheckin(sid){
             if(addr){successMsg+=' 当前位置：'+addr}
             toast(successMsg,'success');
             if(hint){hint.innerHTML='<span style="color:#00b894">✅ 已签到 | 位置：'+esc(addr||'未知')+'</span>'}
-            loadTeacherCheckinStatus(sid,{});
             loadCheckinSessions();
         }).catch(function(err){console.error('[老师签到] 请求失败:', err);toast('签到失败，请重试','error');if(btn){btn.disabled=false;btn.textContent='✅ 签到'}});
     }
@@ -1470,11 +1567,7 @@ function handleQuickCheckinOrCheckout(code,allSessions,resultBox){
             resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#00b894;font-weight:600">✅ 签到码正确！<br><span style="font-size:0.82em;font-weight:400;color:#a0a3bd">正在获取位置并签到...</span></div>';
             doQuickCheckin(openSession,resultBox);
         }else if(res.status==='checked_in'){
-            resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#a0a3bd">';
-            resultBox.innerHTML+='<div style="font-weight:600;margin-bottom:8px">您已签到，请输入签退码完成签退</div>';
-            resultBox.innerHTML+='<input type="text" id="quickCheckoutCode" placeholder="请输入签退码" maxlength="6" style="padding:8px 12px;border:1px solid #e8e8f0;border-radius:8px;font-size:1em;text-align:center;letter-spacing:4px;width:200px" onclick="event.stopPropagation()" onfocus="event.stopPropagation()" />';
-            resultBox.innerHTML+='<br><button class="btn btn-primary" style="margin-top:8px" onclick="doQuickCheckoutWithCode('+openSession.id+')">确认签退</button>';
-            resultBox.innerHTML+='</div>';
+            resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#667eea;font-weight:600">您已签到<br><span style="font-size:0.82em;font-weight:400;color:#a0a3bd">请在右侧"输入签退码"区域完成签退</span></div>';
         }else{
             resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#6b6d8a">您已完成签到签退</div>';
         }
@@ -1591,6 +1684,97 @@ function doQuickCheckoutWithCode(sessionId){
 
 var teacherScannerStream=null;
 var teacherScannerAnim=null;
+
+function quickCheckoutOnly(){
+    var code=document.getElementById('quickCheckoutCode').value.trim();
+    if(!code){toast('请输入签退码','error');return}
+    var resultBox=document.getElementById('quickCheckinResult');
+    resultBox.style.display='block';
+    resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#a0a3bd">正在查找活动...</div>';
+    var clubs=myClubs.length?myClubs:[currentClub];
+    var allSessions=[];
+    var pending=clubs.length;
+    clubs.forEach(function(cn){
+        fetch(api+'/api/checkin-sessions?club='+encodeURIComponent(cn)).then(function(r){return r.json()}).then(function(res){
+            if(res.success&&res.data){
+                res.data.forEach(function(s){allSessions.push(s)});
+            }
+            pending--;
+            if(pending===0)handleQuickCheckout(code,allSessions,resultBox);
+        });
+    });
+}
+
+function handleQuickCheckout(code,allSessions,resultBox){
+    var openSession=allSessions.find(function(s){return s.checkoutCode===code&&s.status==='open'});
+    if(!openSession){
+        resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#e74c3c;font-weight:600">未找到匹配的活动，请检查签退码</div>';
+        return;
+    }
+    fetch(api+'/api/teacher-checkin-status?sessionId='+openSession.id).then(function(r){return r.json()}).then(function(res){
+        if(!res.success){resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#e74c3c">查询状态失败</div>';return}
+        if(res.status==='checked_in'){
+            resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#667eea;font-weight:600">🗝️ 签退码正确！<br><span style="font-size:0.82em;font-weight:400;color:#a0a3bd">正在获取位置并签退...</span></div>';
+            doQuickCheckout(openSession,code,resultBox);
+        }else if(res.status==='checked_out'){
+            resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#a0a3bd">您已完成签到签退</div>';
+        }else{
+            resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#e74c3c;font-weight:600">您尚未签到，请先签到</div>';
+        }
+    });
+}
+
+function doQuickCheckout(session,code,resultBox){
+    function doCheckout(lat,lng,addr){
+        showTeacherLocMap(lat,lng,addr);
+        resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#667eea;font-weight:600">📍 已获取位置'+(addr?'：'+esc(addr):'')+'<br><span style="font-size:0.82em;font-weight:400;color:#a0a3bd">正在签退...</span></div>';
+        var fd=new FormData();
+        fd.append('sessionId',session.id);
+        fd.append('lat',lat);
+        fd.append('lng',lng);
+        fd.append('address',addr);
+        if(code)fd.append('checkoutCode',code);
+        fetch(api+'/api/teacher-checkout',{method:'POST',body:fd})
+        .then(function(r){return r.json()}).then(function(res){
+            if(res.error){resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#e74c3c;font-weight:600">'+esc(res.error)+'</div>';return}
+            var checkoutHtml='<div style="padding:12px;text-align:center;color:#667eea;font-weight:600">🏁 签退成功！本次指导已记录';
+            if(addr){checkoutHtml+='<br><span style="font-size:0.78em;font-weight:400;color:#6b6d8a">📍 当前位置：'+esc(addr)+'</span>'}
+            checkoutHtml+='</div>';
+            resultBox.innerHTML=checkoutHtml;
+            document.getElementById('quickCheckoutCode').value='';
+            loadCheckinSessions();
+        });
+    }
+    function tryIpFallback(errMsg){
+        resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#f0ad4e">⚠️ GPS定位失败，正在尝试网络定位...</div>';
+        fetchIpLocation(function(ipLat,ipLng,ipAddr){
+            if(ipLat!==null&&ipLng!==null){
+                cachedLocation={lat:ipLat,lng:ipLng,ready:true,address:ipAddr||''};
+                doCheckout(ipLat,ipLng,ipAddr||'');
+            }else{
+                resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#e74c3c">⚠️ 定位不可用，无法签退，请确保开启定位权限后重试</div>';
+            }
+        });
+    }
+    resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#a0a3bd">📍 正在获取位置...</div>';
+    if(cachedLocation.ready){
+        doCheckout(cachedLocation.lat,cachedLocation.lng,cachedLocation.address||'');
+    }else if(isSecureContext&&navigator.geolocation){
+        navigator.geolocation.getCurrentPosition(function(pos){
+            var gcj=wgs84ToGcj02(pos.coords.latitude,pos.coords.longitude);
+            var lat=gcj.lat,lng=gcj.lng;
+            reverseGeocode(lat,lng,function(addr){
+                cachedLocation={lat:lat,lng:lng,ready:true,address:addr||''};
+                doCheckout(lat,lng,addr||'');
+            });
+        },function(err){
+            var msg=err.code===1?'定位权限被拒绝':err.code===2?'无法获取位置信息':'定位超时';
+            tryIpFallback(msg);
+        },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+    }else{
+        tryIpFallback(isSecureContext?'浏览器不支持定位':'当前非HTTPS环境');
+    }
+}
 
 function openTeacherScanner(){
     var modal=document.getElementById('teacherScannerModal');
@@ -1712,6 +1896,58 @@ function doTeacherCheckout(sid){
             }else{
                 if(hint)hint.innerHTML='<span style="color:#e74c3c">⚠️ 定位不可用，无法签退，请确保开启定位权限后重试</span>';
                 if(btn){btn.disabled=false;btn.textContent='签退'}
+            }
+        });
+    }
+    if(cachedLocation.ready){
+        doCheckout(cachedLocation.lat,cachedLocation.lng,cachedLocation.address||'');
+    }else if(isSecureContext&&navigator.geolocation){
+        navigator.geolocation.getCurrentPosition(function(pos){
+            var gcj=wgs84ToGcj02(pos.coords.latitude,pos.coords.longitude);
+            var lat=gcj.lat,lng=gcj.lng;
+            reverseGeocode(lat,lng,function(addr){
+                cachedLocation={lat:lat,lng:lng,ready:true,address:addr||''};
+                doCheckout(lat,lng,addr||'');
+            });
+        },function(err){
+            var msg=err.code===1?'定位权限被拒绝':err.code===2?'无法获取位置信息':'定位超时';
+            tryIpFallback(msg);
+        },{enableHighAccuracy:true,timeout:15000,maximumAge:0});
+    }else{
+        tryIpFallback(isSecureContext?'浏览器不支持定位':'当前非HTTPS环境，无法使用GPS定位');
+    }
+}
+
+function doTeacherDirectCheckout(sid){
+    var btn=document.getElementById('directCheckoutBtn-'+sid);
+    var hint=document.getElementById('locHint-'+sid);
+    if(btn){btn.disabled=true;btn.textContent='定位中...'}
+    function doCheckout(lat,lng,addr){
+        showTeacherLocMap(lat,lng,addr);
+        if(hint){hint.innerHTML='<span style="color:#667eea">📍 已获取位置：'+esc(addr||'经纬度:'+lat.toFixed(4)+','+lng.toFixed(4))+'</span>'}
+        if(btn){btn.textContent='签退中...'}
+        fetch(api+'/api/teacher-checkout',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:sid,lat:lat,lng:lng,address:addr})})
+        .then(function(r){return r.json()}).then(function(res){
+            if(res.error){toast(res.error,'error');if(btn){btn.disabled=false;btn.textContent='🏁 直接签退'}return}
+            var checkoutMsg='签退成功！本次指导已记录';
+            if(addr){checkoutMsg+=' 当前位置：'+addr}
+            toast(checkoutMsg,'success');
+            if(hint){hint.innerHTML='<span style="color:#667eea">✅ 已签退 | 位置：'+esc(addr||'未知')+'</span>'}
+            toggleCheckinSession(sid);
+            setTimeout(function(){toggleCheckinSession(sid)},100);
+        }).catch(function(){toast('签退失败','error');if(btn){btn.disabled=false;btn.textContent='🏁 直接签退'}});
+    }
+    function tryIpFallback(errMsg){
+        if(btn){btn.textContent='IP定位中...'}
+        if(hint)hint.innerHTML='<span style="color:#f0ad4e">⚠️ GPS定位失败，正在尝试网络定位...</span>';
+        fetchIpLocation(function(ipLat,ipLng,ipAddr){
+            if(ipLat!==null&&ipLng!==null){
+                if(hint)hint.innerHTML='<span style="color:#f0ad4e">📍 已通过网络获取大致位置 '+esc(ipAddr||'')+'</span>';
+                cachedLocation={lat:ipLat,lng:ipLng,ready:true,address:ipAddr||''};
+                doCheckout(ipLat,ipLng,ipAddr||'');
+            }else{
+                if(hint)hint.innerHTML='<span style="color:#e74c3c">⚠️ 定位不可用，无法签退，请确保开启定位权限后重试</span>';
+                if(btn){btn.disabled=false;btn.textContent='🏁 直接签退'}
             }
         });
     }
@@ -2094,7 +2330,7 @@ function loadTeacherProfile(){
         if(!res.success)return;
         var d=res.data;
         document.getElementById('profileWorkId').value=d.workId||'';
-        document.getElementById('profileRealName').value=d.realName||'';
+        document.getElementById('profileRealName').value=d.realName||currentUser.realName||currentUser.username;
         document.getElementById('profilePhone').value=d.phone||'';
         document.getElementById('profileEmail').value=d.email||'';
         document.getElementById('profileIntro').value=d.introduction||'';
@@ -2151,7 +2387,6 @@ function saveTeacherProfile(){
     var email=document.getElementById('profileEmail').value.trim();
     var introduction=document.getElementById('profileIntro').value.trim();
     if(!workId){toast('请输入工号','error');return}
-    if(!realName){toast('请输入姓名','error');return}
     if(phone&&!/^1\d{10}$/.test(phone)){toast('联系电话必须是11位手机号','error');return}
     var selectedClubs=[];
     document.querySelectorAll('.profileClubCb:checked').forEach(function(cb){selectedClubs.push(cb.value)});

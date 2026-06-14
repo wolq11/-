@@ -78,6 +78,7 @@ a{text-decoration:none;color:inherit}
 .stat-card .sc-label{font-size:0.72em;color:#a0a3bd;margin-top:3px;font-weight:500}
 
 .cols-2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.cols-2>.card{min-width:0}
 
 .form-row{display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap}
 .form-row .field{flex:1;min-width:180px}
@@ -567,7 +568,7 @@ function buildSidebar(){
             {sec:'首页',items:[{id:'home',emoji:'🏠',name:'首页'},{id:'notif',emoji:'🔔',name:'消息通知'}]},
             {sec:'社团',items:[{id:'overview',emoji:'📊',name:'活动概览'},{id:'activityList',emoji:'📋',name:'社团活动列表'},{id:'stats',emoji:'📈',name:'活动统计分析',children:[
                 {id:'statsUpload',emoji:'📤',name:'数据上传分析'}
-            ]},{id:'teacherGuidance',emoji:'👨‍🏫',name:'指导老师指导情况'},{id:'leaders',emoji:'👥',name:'社团负责人'},{id:'clubStruct',emoji:'🏗️',name:'社团结构'},{id:'materials',emoji:'📁',name:'材料管理'},{id:'offcampus',emoji:'🏕️',name:'校外活动审批'},{id:'feedback',emoji:'💬',name:'问题反馈'}]},
+            ]},{id:'teacherGuidance',emoji:'👨‍🏫',name:'指导老师指导情况'},{id:'clubStruct',emoji:'🏗️',name:'社团结构'},{id:'materials',emoji:'📁',name:'材料管理'},{id:'offcampus',emoji:'🏕️',name:'校外活动审批'},{id:'feedback',emoji:'💬',name:'问题反馈'}]},
             {sec:'活动招募与赋分',items:[{id:'recruit',emoji:'🎯',name:'招募管理'},{id:'joint',emoji:'🤝',name:'联合活动'},{id:'scoringRules',emoji:'⚖️',name:'赋分规则'},{id:'finalCredits',emoji:'🎓',name:'最终学分'}]},
             {sec:'首页管理',items:[{id:'showcase',emoji:'🖼️',name:'首页轮播图'},{id:'excellentActivities',emoji:'🌟',name:'优秀社团活动'},{id:'notices',emoji:'📢',name:'热点资讯'}]},
             {sec:'其他',items:[{id:'weeklyReport',emoji:'📰',name:'智能周报'},{id:'adminNotify',emoji:'📨',name:'管理员通知'},{id:'docIndex',emoji:'🗄️',name:'资料库'},{id:'alertCenter',emoji:'🚨',name:'预警中心'},{id:'treehole',emoji:'🌳',name:'树洞管理'},{id:'userMgmt',emoji:'👤',name:'用户管理'}]},
@@ -585,17 +586,17 @@ function buildSidebar(){
                 {id:'activity',emoji:'📋',name:'活动开展'}
             ]},
             {sec:'社团管理',items:[
+                {id:'recruitOld',emoji:'👥',name:'社团管理',children:[
+                    {id:'recruitApproval',emoji:'✅',name:'报名审批'},
+                    {id:'recruitMembers',emoji:'👤',name:'成员管理'},
+                    {id:'recruitAnalysis',emoji:'📈',name:'成员分析'}
+                ]},
                 {id:'workload',emoji:'📊',name:'工作量统计'},
                 {id:'scoring',emoji:'⚖️',name:'社团赋分'},
                 {id:'materials',emoji:'📁',name:'材料上传'},
                 {id:'finance',emoji:'💰',name:'财务登记'},
                 {id:'offcampus',emoji:'🏕️',name:'校外活动申请'},
                 {id:'recruit',emoji:'🎯',name:'招募管理'},
-                {id:'recruitOld',emoji:'👥',name:'社团管理',children:[
-                    {id:'recruitApproval',emoji:'✅',name:'报名审批'},
-                    {id:'recruitMembers',emoji:'👤',name:'成员管理'},
-                    {id:'recruitAnalysis',emoji:'📈',name:'成员分析'}
-                ]},
                 {id:'joint',emoji:'🤝',name:'联合活动'},
                 {id:'cadres',emoji:'⭐',name:'社团骨干'}
             ]},
@@ -628,6 +629,7 @@ function buildSidebar(){
                 {id:'offcampus',emoji:'🏕️',name:'校外活动申请'}
             ]},
             {sec:'通知与沟通',items:[{id:'clubnotice',emoji:'📢',name:'社团通知'},{id:'adminNotify',emoji:'📨',name:'管理员通知'}]},
+            {sec:'工具',items:[{id:'weeklyReport',emoji:'📰',name:'智能周报'},{id:'tools',emoji:'🛠️',name:'协助工具'},{id:'feedback',emoji:'💬',name:'问题反馈'}]},
             {sec:'活动',items:[{id:'joint',emoji:'🤝',name:'联合活动'}]},
             {sec:'',items:[{id:'quitManage',emoji:'🚪',name:'退社管理'}]},
             {sec:'',items:[{id:'me',emoji:'👤',name:'个人中心'}]}
@@ -695,7 +697,7 @@ function switchPage(id){
     document.querySelectorAll('.page iframe').forEach(function(iframe){
         try{iframe.contentWindow.postMessage({action:'pageHidden'},'*')}catch(e){}
     });
-    var _featureMap={'enroll':'enroll','volunteer':'enroll','member':'enroll','recruit':'recruit','joint':'joint','checkin':'checkin','quitManage':'quitManage','scoring':'scoring','scoringRules':'scoringRules'};
+    var _featureMap={'enroll':'enroll','volunteer':'enroll','member':'enroll','recruit':'recruit','joint':'joint','checkin':'checkin','quitManage':'quitManage','scoring':'scoring','scoringRules':'scoringRules','clubnotice':'clubnotice','adminNotify':'adminNotify'};
     if(_featureMap[id])dismissBadge(_featureMap[id]);
     if(id==='notices'){loadNoticeList()}
     if(id==='notif'){loadNotifList()}
@@ -844,6 +846,8 @@ function buildPages(){
             scoring:teacherScoringReviewPage(),
             offcampus:offcampusPage(),
             joint:jointPage(),
+            weeklyReport:weeklyReportPage(),
+            feedback:userFeedbackPage(),
             quitManage:quitManagePage()
         };
     }else{
@@ -1000,10 +1004,10 @@ function buildCommonHome(){
     '<div class="carousel-dots" id="carouselDots"></div>'+
     '</div>'+
     '<div class="cols-2" style="margin-bottom:24px">'+
-    '<div class="card"><div class="card-title">📰 热点资讯</div><div id="homeNews" class="club-news" style="max-height:400px;overflow-y:auto"><div class="empty">加载中...</div></div></div>'+
-    '<div class="card"><div class="card-title">🌟 优秀社团活动</div><div id="homeActivities" class="act-carousel"><div class="act-carousel-track" id="actTrack"></div><div class="act-carousel-dots" id="actDots"></div></div></div>'+
+    '<div class="card"><div class="card-title">热点资讯</div><div id="homeNews" class="club-news" style="max-height:400px;overflow-y:auto"><div class="empty">加载中...</div></div></div>'+
+    '<div class="card"><div class="card-title">优秀社团活动</div><div id="homeActivities" class="act-carousel"><div class="act-carousel-track" id="actTrack"></div><div class="act-carousel-dots" id="actDots"></div></div></div>'+
     '</div>'+
-    '<div class="card"><div class="card-title">🏫 优秀社团</div><div id="homeExcellentClubs" class="excellent-clubs"><div class="empty">加载中...</div></div></div>';
+    '<div class="card"><div class="card-title">优秀社团</div><div id="homeExcellentClubs" class="excellent-clubs"><div class="empty">加载中...</div></div></div>';
 }
 
 function clubsPage(){
@@ -1874,7 +1878,7 @@ function exportAllStructures(){
     }).then(function(blob){
         var url=URL.createObjectURL(blob);
         var a=document.createElement('a');
-        a.href=url;a.download='全部社团结构.docx';
+        a.href=url;a.download='全部社团结构.xlsx';
         document.body.appendChild(a);a.click();
         document.body.removeChild(a);URL.revokeObjectURL(url);
         toast('导出成功','success');
@@ -1888,7 +1892,7 @@ function exportSingleStruct(clubName){
     }).then(function(blob){
         var url=URL.createObjectURL(blob);
         var a=document.createElement('a');
-        a.href=url;a.download=clubName+'社团结构.docx';
+        a.href=url;a.download=clubName+'社团结构.xlsx';
         document.body.appendChild(a);a.click();
         document.body.removeChild(a);URL.revokeObjectURL(url);
         toast('导出成功','success');
@@ -2405,14 +2409,14 @@ function mePage(){
     if(role==='admin'){
         fields='<div class="me-grid">'+
         '<div class="me-field"><label>身份</label><input type="text" value="'+ri.name+'" readonly /></div>'+
-        '<div class="me-field"><label>姓名 *</label><input type="text" id="meRealName" placeholder="请输入真实姓名" required /></div>'+
+        '<div class="me-field"><label>姓名</label><input type="text" id="meRealName" value="'+esc(currentUser.realName||currentUser.username)+'" readonly style="background:#f5f5f7;color:#86868b" /></div>'+
         '<div class="me-field"><label>联系电话 *</label><input type="tel" id="mePhone" placeholder="请输入手机号" required /></div>'+
         '<div class="me-field"><label>邮箱 *</label><input type="email" id="meEmail" placeholder="请输入邮箱地址" required /></div>'+
         '</div>';
     }else if(role==='teacher'){
         fields='<div class="me-grid">'+
         '<div class="me-field"><label>身份</label><input type="text" value="'+ri.name+'" readonly /></div>'+
-        '<div class="me-field"><label>姓名 *</label><input type="text" id="meRealName" placeholder="请输入真实姓名" required /></div>'+
+        '<div class="me-field"><label>姓名</label><input type="text" id="meRealName" value="'+esc(currentUser.realName||currentUser.username)+'" readonly style="background:#f5f5f7;color:#86868b" /></div>'+
         '<div class="me-field"><label>工号 *</label><input type="text" id="meStudentId" placeholder="请输入工号" required /></div>'+
         '<div class="me-field"><label>联系电话 *</label><input type="tel" id="mePhone" placeholder="请输入手机号" required /></div>'+
         '<div class="me-field"><label>邮箱 *</label><input type="email" id="meEmail" placeholder="请输入邮箱地址" required /></div>'+
@@ -2420,7 +2424,7 @@ function mePage(){
     }else{
         fields='<div class="me-grid">'+
         '<div class="me-field"><label>身份</label><input type="text" value="'+ri.name+'" readonly /></div>'+
-        '<div class="me-field"><label>姓名 *</label><input type="text" id="meRealName" placeholder="请输入真实姓名" required /></div>'+
+        '<div class="me-field"><label>姓名</label><input type="text" id="meRealName" value="'+esc(currentUser.realName||currentUser.username)+'" readonly style="background:#f5f5f7;color:#86868b" /></div>'+
         '<div class="me-field"><label>学号 *</label><input type="text" id="meStudentId" placeholder="请输入学号" required /></div>'+
         '<div class="me-field"><label>年级 *</label><input type="text" id="meGrade" placeholder="如：2024级" required /></div>'+
         '<div class="me-field"><label>学院 *</label><select id="meCollege" style="width:100%;padding:10px;border:1px solid #e8e8f0;border-radius:10px;font-size:0.88em;color:#1a1a2e;background:#fff" required>'+collegeOptions('')+'</select></div>'+
@@ -3273,7 +3277,6 @@ function saveProfile(){
     var newPhone=phoneInput?phoneInput.value.trim():'';
     var newEmail=emailInput?emailInput.value.trim():'';
     var newRealName=realName?realName.value.trim():'';
-    if(!newRealName){toast('请填写姓名','error');return}
     if(!newPhone){toast('请填写联系电话','error');return}
     if(!newEmail){toast('请填写邮箱','error');return}
     if(role==='teacher'||role==='user'||role==='student'){
@@ -3873,9 +3876,11 @@ function scCropGetCroppedBlob(callback){
     tc.toBlob(function(blob){callback(blob)},'image/jpeg',0.92);
 }
 
+var scCropDragInited=false;
 function initScCropDrag(){
     var canvas=document.getElementById('scCropCanvas');
-    if(!canvas)return;
+    if(!canvas||scCropDragInited)return;
+    scCropDragInited=true;
     var dragging=false;
     var dragType='';
     var startX=0,startY=0;
@@ -3883,8 +3888,10 @@ function initScCropDrag(){
     var HANDLE=10;
     function getPos(e){
         var rect=canvas.getBoundingClientRect();
-        var x=(e.clientX||e.touches[0].clientX)-rect.left;
-        var y=(e.clientY||e.touches[0].clientY)-rect.top;
+        var clientX=e.touches?e.touches[0].clientX:e.clientX;
+        var clientY=e.touches?e.touches[0].clientY:e.clientY;
+        var x=(clientX-rect.left)*(canvas.width/rect.width);
+        var y=(clientY-rect.top)*(canvas.height/rect.height);
         return {x:x,y:y};
     }
     function getZone(x,y){
@@ -4682,8 +4689,7 @@ function renderActivityList(search){
         if(a.planText||a.planPath){
             h+='<div style="margin-top:6px">';
             if(a.planPath){
-                var planFilename=a.planPath.replace(/^.*[\\\/]/,'');
-                h+='<a href="'+api+'/api/activity-plan-file/'+encodeURIComponent(planFilename)+'" target="_blank" style="display:inline-block;font-size:0.78em;color:#667eea;text-decoration:none;padding:5px 12px;background:rgba(102,126,234,0.06);border-radius:6px;border:1px solid rgba(102,126,234,0.15)">📎 下载活动计划文件</a>';
+                h+='<a href="'+api+'/api/activity-plan-file/'+encodeURIComponent(a.planPath)+'" target="_blank" style="display:inline-block;font-size:0.78em;color:#667eea;text-decoration:none;padding:5px 12px;background:rgba(102,126,234,0.06);border-radius:6px;border:1px solid rgba(102,126,234,0.15)">📎 下载活动计划文件</a>';
             }else{
                 h+='<button class="btn btn-sm" style="font-size:0.78em;color:#667eea;background:rgba(102,126,234,0.06);border:1px solid rgba(102,126,234,0.15);padding:5px 12px;border-radius:6px;cursor:pointer" onclick="downloadPlanText('+a.id+')">📎 下载活动计划</button>';
             }
@@ -4693,8 +4699,7 @@ function renderActivityList(search){
             h+='<div style="margin-top:6px;font-size:0.78em;color:#6b6d8a;background:#fafaff;padding:6px 10px;border-radius:6px;max-height:200px;overflow-y:auto;word-break:break-word"><strong>活动总结：</strong>'+renderText(a.summaryText.substring(0,500))+(a.summaryText.length>500?'...':'')+'</div>';
         }
         if(a.summaryPath){
-            var summaryFilename=a.summaryPath.replace(/^.*[\\\/]/,'');
-            h+='<div style="margin-top:4px"><a href="'+api+'/api/activity-summary-file/'+encodeURIComponent(summaryFilename)+'" target="_blank" style="font-size:0.76em;color:#667eea;text-decoration:none">下载活动总结文件</a></div>';
+            h+='<div style="margin-top:4px"><a href="'+api+'/api/activity-summary-file/'+encodeURIComponent(a.summaryPath)+'" target="_blank" style="font-size:0.76em;color:#667eea;text-decoration:none">下载活动总结文件</a></div>';
         }
         if(a.completionPhoto){
             var photoFilename=a.completionPhoto.replace(/^.*[\\\/]/,'');
@@ -4814,7 +4819,6 @@ function loadAdminUsers(page){
             '<th style="padding:8px 10px;text-align:left;color:#6b6d8a;font-weight:600;white-space:nowrap">用户</th>'+
             '<th style="padding:8px 10px;text-align:left;color:#6b6d8a;font-weight:600;white-space:nowrap">角色</th>'+
             '<th style="padding:8px 10px;text-align:left;color:#6b6d8a;font-weight:600;white-space:nowrap">社团</th>'+
-            '<th style="padding:8px 10px;text-align:left;color:#6b6d8a;font-weight:600;white-space:nowrap">真实姓名</th>'+
             '<th style="padding:8px 10px;text-align:left;color:#6b6d8a;font-weight:600;white-space:nowrap">学号/工号</th>'+
             '<th style="padding:8px 10px;text-align:left;color:#6b6d8a;font-weight:600;white-space:nowrap">学院</th>'+
             '<th style="padding:8px 10px;text-align:left;color:#6b6d8a;font-weight:600;white-space:nowrap">班级</th>'+
@@ -4834,7 +4838,6 @@ function loadAdminUsers(page){
                 clubDisplay=esc(u.clubName||'-');
             }
             h+='<td style="padding:8px 10px;color:#1a1a2e;font-size:0.82em">'+clubDisplay+'</td>';
-            h+='<td style="padding:8px 10px;color:#1a1a2e">'+esc(u.realName||'-')+'</td>';
             var idDisplay=esc(u.studentId||'-');
             if(u.role==='teacher')idDisplay=esc(u.workId||'-');
             h+='<td style="padding:8px 10px;color:#6b6d8a">'+idDisplay+'</td>';
@@ -4933,7 +4936,7 @@ function submitResetPwd(uid){
     var pwd=(document.getElementById('rpNewPwd')||{}).value||'';
     var adminPass=(document.getElementById('rpAdminPass')||{}).value||'';
     if(!adminPass){toast('请输入您的管理员密码','error');return}
-    if(!pwd||pwd.length<4){toast('密码至少4位','error');return}
+    if(!pwd||pwd.length<4 || !/[a-zA-Z]/.test(pwd) || !/[0-9]/.test(pwd)){toast('密码至少4位且需同时包含字母和数字','error');return}
     fetch(api+'/api/admin/reset-password/'+uid,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:pwd,adminPassword:adminPass})})
     .then(function(r){return r.json()}).then(function(res){
         if(res.success){toast('密码已重置','success');var o=document.getElementById('resetPwdOverlay');if(o)o.remove()}
@@ -5677,12 +5680,7 @@ function loadCommonHomeData(){
         if(res.success&&res.data&&res.data.length){
             renderActCarousel(res.data);
         }else{
-            fetch(api+'/api/all-materials').then(function(r2){return r2.json()}).then(function(res2){
-                if(!res2.success||!res2.data||!res2.data.length){renderActCarousel([]);return}
-                var approved=res2.data.filter(function(m){return m.status==='approved'}).slice(0,8);
-                if(!approved.length){renderActCarousel([]);return}
-                renderActCarousel(approved.map(function(m){return{groupId:m.groupId,clubName:m.clubName,title:m.title||m.clubName+'的活动',time:m.time||''}}));
-            });
+            renderActCarousel([]);
         }
     });
     fetch(api+'/api/excellent-clubs').then(function(r){return r.json()}).then(function(res){
@@ -5910,7 +5908,7 @@ function pollUnreadNotif(){
     fetch(api+'/api/nav-badges').then(function(r){return r.json()}).then(function(res){
         if(!res.success)return;
         var badges=res.badges||{};
-        var featureKeys=['materials','offcampus','feedback','scoringRules','workload','recruit','joint','clubnotice','volunteer','member','enroll','checkin','quitManage','scoring'];
+        var featureKeys=['materials','offcampus','feedback','scoringRules','workload','recruit','joint','volunteer','member','enroll','checkin','quitManage','scoring'];
         var alwaysShowKeys=['scoring','quitManage','scoringRules'];
         featureKeys.forEach(function(key){
             if(key in badges){
@@ -6997,8 +6995,8 @@ function applySemester(){
 function renderScoringRulesTable(){
     var h='<table class="scoring-rules-table" style="width:100%;border-collapse:collapse;font-size:0.86em"><thead><tr><th style="text-align:left;padding:10px 12px;border-bottom:2px solid #f0f0f8;color:#6b6d8a;font-size:0.78em">星级</th><th style="text-align:left;padding:10px 12px;border-bottom:2px solid #f0f0f8;color:#6b6d8a;font-size:0.78em">集体赋分上限（总分池）</th><th style="text-align:left;padding:10px 12px;border-bottom:2px solid #f0f0f8;color:#6b6d8a;font-size:0.78em">个人赋分上限（分/人）</th><th style="text-align:left;padding:10px 12px;border-bottom:2px solid #f0f0f8;color:#6b6d8a;font-size:0.78em">操作</th></tr></thead><tbody>';
     scoringRulesData.forEach(function(r){
+        if(r.star_level<=1)return;
         var stars='★'.repeat(r.star_level)+'☆'.repeat(5-r.star_level);
-        if(r.star_level===0)stars='零星';
         h+='<tr style="border-bottom:1px solid #f5f5ff"><td style="padding:10px 12px;font-weight:600;color:#f39c12">'+stars+'</td>';
         h+='<td style="padding:10px 12px"><input type="number" id="srColl_'+r.star_level+'" value="'+r.collective_limit+'" min="0" step="0.1" style="width:120px;padding:6px 10px;border-radius:6px;border:1px solid #eee;font-size:0.9em" /></td>';
         h+='<td style="padding:10px 12px"><input type="number" id="srIndiv_'+r.star_level+'" value="'+r.individual_limit+'" min="0" step="0.1" style="width:120px;padding:6px 10px;border-radius:6px;border:1px solid #eee;font-size:0.9em" /></td>';
@@ -7085,6 +7083,7 @@ function removeClubOverride(clubName,starLevel){
 
 function saveScoringRules(){
     var rules=scoringRulesData.map(function(r){
+        if(r.star_level<=1)return {star_level:r.star_level,collective_limit:0,individual_limit:0};
         var collEl=document.getElementById('srColl_'+r.star_level);
         var indivEl=document.getElementById('srIndiv_'+r.star_level);
         return {star_level:r.star_level,collective_limit:collEl?parseFloat(collEl.value)||0:0,individual_limit:indivEl?parseFloat(indivEl.value)||0:0};
@@ -7643,7 +7642,7 @@ function checkAlerts(){
 }
 
 function sendAlerts(){
-    if(!confirm('将预警通知发送给所有管理员？'))return;
+    if(!confirm('将预警通知发送给相关社团的指导老师？'))return;
     fetch(api+'/api/agent/notification/send',{method:'POST'}).then(function(r){return r.json()}).then(function(res){
         if(res.success)toast(res.data.message,'success');
         else toast('发送失败','error');

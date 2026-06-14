@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -137,11 +137,11 @@ a{text-decoration:none;color:inherit}
     <button class="tab-btn" onclick="switchPanel('profileTeacher',this)">👨‍🏫 指导老师</button>
     <button class="tab-btn" onclick="switchPanel('profileDept',this)">🏢 部门结构</button>
     <button class="tab-btn" onclick="switchPanel('activity',this)">📋 活动开展</button>
-    <button class="tab-btn" onclick="switchPanel('recruit',this)">🎯 社团管理</button>
     <button class="tab-btn" onclick="switchPanel('tools',this)">🛠️ 协助工具</button>
     <button class="tab-btn" onclick="switchPanel('joint',this)">🤝 联合活动</button>
     <button class="tab-btn" onclick="switchPanel('complaints',this)">🗣️ 吐槽管理</button>
     <button class="tab-btn" onclick="switchPanel('finance',this)">💰 财务登记</button>
+    <button class="tab-btn" onclick="switchPanel('recruit',this)">🎯 社团管理</button>
     <button class="tab-btn" onclick="switchPanel('workload',this)">📊 工作量审核</button>
     <button class="tab-btn" onclick="switchPanel('scoring',this)">⚖️ 社团赋分管理</button>
     <button class="tab-btn" onclick="switchPanel('notif',this)">🔔 消息 <span id="clubNotifBadge" style="display:none;background:#e74c3c;color:#fff;border-radius:50%;font-size:0.6em;padding:1px 5px;margin-left:2px;vertical-align:top"></span></button>
@@ -869,8 +869,10 @@ initStars();
 var urlParams=new URLSearchParams(window.location.search);
 var initPanel=urlParams.get('panel')||'';
 var overrideClub=urlParams.get('club')||'';
+var sectionFilter=urlParams.get('section')||'';
 var inIframe=window.self!==window.top;
 if(inIframe){document.querySelector('.header').style.display='none';document.querySelector('.tabs').style.display='none';document.querySelector('.main').style.padding='16px 20px'}
+if(sectionFilter==='member'){var recruitPanel=document.getElementById('panel-recruit');if(recruitPanel){var cards=recruitPanel.querySelectorAll('.card');cards.forEach(function(c,i){if(i<cards.length-1)c.style.display='none'})}}
 function notifyParentHeight(){if(!inIframe)return;try{var h=document.documentElement.scrollHeight;window.parent.postMessage({type:'resize-iframe',height:h},'*')}catch(e){}}
 window.addEventListener('resize',function(){setTimeout(notifyParentHeight,100)});
 
@@ -2616,6 +2618,11 @@ function loadScoringResult(){
     fetch(api+'/api/scoring/calculate').then(function(r){return r.json()}).then(function(res){
         if(!res.success){toast(res.error,'error');return}
         var d=res;
+        // 检查是否设置了赋分规则（没有设置日期范围则视为未设置完整规则）
+        if((!d.date_start && !d.date_end) || (d.collective_limit==0 && d.individual_limit==0)){
+            document.getElementById('scoringResult').innerHTML='<div class="empty">该学期还未设置赋分规则</div>';
+            return;
+        }
         if(!d.data.length){document.getElementById('scoringResult').innerHTML='<div class="empty">暂无成员数据</div>';return}
         var dateRangeH='';
         if(d.date_start||d.date_end){

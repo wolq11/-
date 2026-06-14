@@ -7,15 +7,21 @@
 <link rel="icon" href="images/1.png" type="image/png">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Microsoft YaHei','PingFang SC',sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;background:url('images/school-bg.png') center/cover no-repeat;overflow-x:hidden;position:relative}
+html,body{overflow:hidden;height:100%;touch-action:none}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Display','SF Pro Text','Microsoft YaHei','PingFang SC',sans-serif;display:flex;align-items:center;justify-content:center;background:url('images/school-bg.png') center/cover no-repeat;position:relative}
 body::before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,rgba(0,0,0,0.2) 0%,rgba(0,0,0,0.5) 60%,rgba(0,0,0,0.75) 100%);z-index:0}
 body::after{content:'';position:absolute;inset:0;background:radial-gradient(ellipse at 50% 0%,rgba(102,126,234,0.1) 0%,transparent 70%);z-index:0}
 
-.top-logo{position:fixed;top:-80px;left:20px;z-index:10;height:192px;width:auto;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.35))}
+.top-logo{position:fixed;top:-60px;left:0;z-index:10;height:180px;width:auto;filter:drop-shadow(0 2px 8px rgba(0,0,0,0.35))}
+@media(max-width:480px){
+  .top-logo{display:none!important}
+  body{align-items:center;padding-top:0}
+  .login-card{margin-top:0;height:auto;min-height:520px;max-height:calc(100vh - 40px);overflow-y:auto}
+}
 
 .bottom-text{position:fixed;bottom:20px;left:0;right:0;text-align:center;z-index:10;color:rgba(255,255,255,0.55);font-size:0.75em;letter-spacing:0.5px}
 
-.login-card{position:relative;z-index:5;width:420px;max-width:calc(100vw - 32px);background:rgba(255,255,255,0.92);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border-radius:24px;padding:40px 36px;box-shadow:0 25px 80px rgba(0,0,0,0.25),0 8px 24px rgba(0,0,0,0.15),inset 0 1px 0 rgba(255,255,255,0.6);border:1px solid rgba(255,255,255,0.3);height:590px;overflow-y:hidden}
+.login-card{position:relative;z-index:5;width:420px;max-width:calc(100vw - 32px);background:rgba(255,255,255,0.92);backdrop-filter:saturate(180%) blur(20px);-webkit-backdrop-filter:saturate(180%) blur(20px);border-radius:24px;padding:40px 36px;box-shadow:0 25px 80px rgba(0,0,0,0.25),0 8px 24px rgba(0,0,0,0.15),inset 0 1px 0 rgba(255,255,255,0.6);border:1px solid rgba(255,255,255,0.3);height:590px;overflow-y:hidden;touch-action:none}
 
 .card-header{text-align:center;margin-bottom:18px}
 .card-header img{height:44px;width:auto;margin-bottom:8px}
@@ -71,7 +77,7 @@ body::after{content:'';position:absolute;inset:0;background:radial-gradient(elli
 
 @media(max-width:768px){
   .login-card{padding:32px 24px;border-radius:20px;height:auto;min-height:590px}
-  .top-logo{height:144px}
+  .top-logo{height:260px}
   .bottom-text{display:none}
 }
 @media(max-width:480px){
@@ -126,7 +132,7 @@ body::after{content:'';position:absolute;inset:0;background:radial-gradient(elli
     </form>
     <form id="registerForm">
         <div class="form-group"><label>用户名</label><input type="text" id="regUser" placeholder="请输入真实姓名" autocomplete="username" /></div>
-        <div class="form-group"><label>密码</label><input type="password" id="regPass" placeholder="至少4个字符" autocomplete="new-password" /></div>
+        <div class="form-group"><label>密码</label><input type="password" id="regPass" placeholder="至少4位，需同时包含字母和数字" autocomplete="new-password" /></div>
         <div class="form-group"><label>确认密码</label><input type="password" id="regPass2" placeholder="再次输入密码" autocomplete="new-password" /></div>
         <div class="form-group student-user-field" id="studentIdField"><label>学号</label><input type="text" id="regStudentId" placeholder="请输入学号" /></div>
         <div class="form-group teacher-field" id="workIdField"><label>工号</label><input type="text" id="regWorkId" placeholder="请输入工号" /></div>
@@ -159,6 +165,8 @@ var api=window.location.origin;
 var selectedRole='user';
 var allClubs=[];
 
+var testAccounts={admin:{user:'0066',pass:'0000'},user:{user:'张三',pass:'admin123'},teacher:{user:'孙七',pass:'456789'},student:{user:'张宇婷',pass:'123456'}};
+
 function selectRole(role){
     selectedRole=role;
     document.querySelectorAll('.id-card').forEach(function(c){c.classList.toggle('active',c.dataset.role===role)});
@@ -180,6 +188,12 @@ function selectRole(role){
         tabReg.style.display='';
         tabRow.style.display='';
     }
+    // 自动填充测试账号
+    var acc=testAccounts[role];
+    if(acc){
+        document.getElementById('loginUser').value=acc.user;
+        document.getElementById('loginPass').value=acc.pass;
+    }
 }
 
 function switchTab(tab){
@@ -190,7 +204,9 @@ function switchTab(tab){
     document.getElementById('tabRegister').className='tab-btn'+(tab==='register'?' active':'');
     document.getElementById('errorMsg').style.display='none';
     var card=document.querySelector('.login-card');
-    card.style.overflowY=(tab==='register'||tab==='forgot')?'auto':'hidden';
+    var allowScroll=(tab==='register'||tab==='forgot');
+    card.style.overflowY=allowScroll?'auto':'hidden';
+    card.style.touchAction=allowScroll?'pan-y':'none';
     // 重置忘记密码表单状态
     if(tab==='forgot'){
         document.getElementById('forgotPwdFields').style.display='none';
@@ -258,6 +274,7 @@ document.getElementById('registerForm').addEventListener('submit',function(e){
     var u=document.getElementById('regUser').value.trim(),p=document.getElementById('regPass').value.trim(),p2=document.getElementById('regPass2').value.trim();
     if(!u||!p){showError('请输入姓名和密码');return}
     if(p!==p2){showError('两次密码不一致');return}
+    if(p.length<4 || !/[a-zA-Z]/.test(p) || !/[0-9]/.test(p)){showError('密码至少4位，需同时包含字母和数字');return}
     if(selectedRole==='teacher'){
         var wid=document.getElementById('regWorkId').value.trim();
         if(!wid){showError('请输入工号');return}
@@ -331,7 +348,7 @@ document.getElementById('forgotForm').addEventListener('submit',function(e){
     var p2=document.getElementById('forgotNewPass2').value.trim();
     if(!em||!c||!p){showError('请填写完整信息');return}
     if(p!==p2){showError('两次密码不一致');return}
-    if(p.length<4){showError('新密码至少4个字符');return}
+    if(p.length<4 || !/[a-zA-Z]/.test(p) || !/[0-9]/.test(p)){showError('新密码至少4位，需同时包含字母和数字');return}
     fetch(api+'/api/reset-password',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({email:em,code:c,newPassword:p})})
     .then(function(r){return r.json()}).then(function(res){
         if(res.error){showError(res.error);return}

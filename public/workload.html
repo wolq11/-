@@ -528,7 +528,12 @@ function filterClubTable(){
     rows.forEach(function(tr){
         if(tr.classList.contains('detail-row'))return;
         var s=(tr.getAttribute('data-search')||'').toLowerCase();
-        tr.style.display=s.indexOf(kw)>=0?'':'none';
+        var visible=s.indexOf(kw)>=0;
+        tr.style.display=visible?'':'none';
+        var next=tr.nextElementSibling;
+        if(next&&next.classList.contains('detail-row')){
+            next.style.display=visible?'':'none';
+        }
     });
 }
 
@@ -549,7 +554,7 @@ function loadPending(){
                 h+='<div class="review-row" data-agent-id="'+d.id+'">';
                 h+='<div class="rr-top"><span class="rr-name">'+esc(d.student_name)+'</span><span class="rr-item">'+esc(d.item_name)+'</span><span class="rr-score">'+d.score+'分</span><span class="agent-slot" id="agent-slot-'+d.id+'"></span></div>';
                 h+='<div style="display:flex;justify-content:space-between;align-items:center"><span class="rr-time">'+(d.created_at||'')+'</span>';
-                h+='<div class="rr-actions"><button class="btn btn-success btn-sm" onclick="openReviewModal('+d.id+',\''+esc(d.student_name)+'\',\''+esc(d.item_name)+'\','+d.score+')">审核</button></div></div>';
+                h+='<div class="rr-actions"><button class="btn btn-success btn-sm" data-id="'+d.id+'" data-name="'+esc(d.student_name)+'" data-item="'+esc(d.item_name)+'" data-score="'+d.score+'" onclick="openReviewModal(+this.dataset.id,this.dataset.name,this.dataset.item,+this.dataset.score)">审核</button></div></div></div>';
                 h+='</div>';
             });
         }
