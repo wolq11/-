@@ -773,7 +773,7 @@ function buildPages(){
             overview:adminHome(),
             activityList:adminActivityListPage(),
             statsUpload:'<iframe src="/stats.html" class="iframe-wrap"></iframe>',
-            materials:'<iframe src="/upload.html" class="iframe-wrap"></iframe>',
+            materials:'<iframe src="/upload.html?v=2" class="iframe-wrap"></iframe>',
             offcampus:offcampusPage(),
             adminNotify:adminNotifyPage(),
             feedback:adminFeedbackPage(),
@@ -804,7 +804,7 @@ function buildPages(){
             profileTeacher:'<iframe src="/club-tools.html?panel=profileTeacher" class="iframe-wrap"></iframe>',
             profileDept:'<iframe src="/club-tools.html?panel=profileDept" class="iframe-wrap"></iframe>',
             activity:'<iframe src="/club-tools.html?panel=activity" class="iframe-wrap"></iframe>',
-            materials:'<iframe src="/upload.html" class="iframe-wrap"></iframe>',
+            materials:'<iframe src="/upload.html?v=2" class="iframe-wrap"></iframe>',
             offcampus:offcampusPage(),
             recruit:recruitManagePage(),
             recruitOld:'<iframe src="/club-tools.html?panel=recruit" class="iframe-wrap"></iframe>',
@@ -1307,7 +1307,7 @@ function studentTreehole(){
     return '<div class="pg-title">树洞</div><div class="pg-desc">匿名吐槽，畅所欲言</div>'+
     '<div class="card"><div class="th-tabs"><div class="th-tab active" data-scope="public" onclick="switchTHScope(\'public\')">🌍 公共</div><div class="th-tab" data-scope="club" onclick="switchTHScope(\'club\')">🏠 社团内部</div></div>'+
     '<div id="thClubSection" style="display:none;margin-bottom:10px"><select id="thClubSelect" style="width:100%;padding:8px 10px;border-radius:8px;border:1.5px solid #eee;background:#fafaff;color:#1a1a2e;font-size:0.82em;outline:none;cursor:pointer"><option value="">选择社团</option></select></div>'+
-    '<div class="th-post"><textarea id="thContent" placeholder="说点什么吧...（完全匿名）"></textarea><div class="th-row"><span style="font-size:0.7em;color:#c8cade">匿名发布，请文明发言</span><button class="th-submit" onclick="postTreeHole()">发表</button></div></div>'+
+    '<div class="th-post"><textarea id="thContent" placeholder="说点什么吧...（完全匿名，发布前 NLP 模型会进行内容审核）"></textarea><div class="th-row"><span style="font-size:0.7em;color:#c8cade">🔍 NLP智能审核 · 匿名发布，请文明发言</span><button class="th-submit" id="thPostBtn" onclick="postTreeHole()">发表</button></div></div>'+
     '<div class="th-list" id="thList"><div class="empty">加载中...</div></div></div>';
 }
 
@@ -2105,20 +2105,24 @@ function showWeeklyReportPopup(report){
 }
 
 function docIndexPage(){
-    return '<div class="pg-title">资料库</div><div class="pg-desc">智能索引，一秒调取所需文件</div>'+
+    return '<div class="pg-title">资料库</div><div class="pg-desc">RAG 语义检索 · 支持同义词/近义词搜索，不再依赖字面匹配</div>'+
+    '<div style="margin-bottom:12px;padding:10px 14px;background:linear-gradient(135deg,rgba(102,126,234,0.06),rgba(118,75,162,0.06));border:1px solid rgba(102,126,234,0.15);border-radius:10px;font-size:0.78em;color:#6b6d8a;line-height:1.6">'+
+    '<span style="color:#667eea;font-weight:600">🤖 RAG 架构已接入：</span>'+
+    '文件入库时自动调用 LLM 生成同义词标签 + 调用嵌入模型生成语义向量；搜索时基于向量相似度检索，支持同义词、近义词语义匹配（如搜"毛笔"可找到"书法"相关文件）。'+
+    '<span style="color:#a0a3bd">首次使用请先点击"重建索引"初始化语义向量库。</span></div>'+
     '<div class="doc-search-bar" style="margin-bottom:16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">'+
     '<div class="doc-search-input" style="flex:1;min-width:260px;position:relative">'+
-    '<input type="text" id="docSearchInput" placeholder="输入关键词搜索，如：书法活动照片、财务报表、报名表..." style="width:100%;padding:10px 16px 10px 40px;border-radius:12px;border:2px solid #e8e8f8;background:#fafaff;font-size:0.88em;outline:none;transition:border .2s" onfocus="this.style.borderColor=\'#667eea\'" onblur="this.style.borderColor=\'#e8e8f8\'" onkeydown="if(event.key===\'Enter\')smartSearchDoc()" />'+
+    '<input type="text" id="docSearchInput" placeholder="语义搜索：输入自然语言即可，如 书法比赛现场、社团开销账目、招新登记..." style="width:100%;padding:10px 16px 10px 40px;border-radius:12px;border:2px solid #e8e8f8;background:#fafaff;font-size:0.88em;outline:none;transition:border .2s" onfocus="this.style.borderColor=\'#667eea\'" onblur="this.style.borderColor=\'#e8e8f8\'" onkeydown="if(event.key===\'Enter\')smartSearchDoc()" />'+
     '<span style="position:absolute;left:14px;top:50%;transform:translateY(-50%);color:#a0a3bd;font-size:0.9em">&#128269;</span>'+
     '</div>'+
-    '<button class="btn btn-primary doc-search-btn" style="white-space:nowrap" onclick="smartSearchDoc()">搜索</button>'+
+    '<button class="btn btn-primary doc-search-btn" style="white-space:nowrap" onclick="smartSearchDoc()">语义搜索</button>'+
     '<select id="docClubFilter" class="doc-filter-select" style="padding:8px 12px;border-radius:8px;border:1px solid #eee;background:#fafaff;font-size:0.82em" onchange="filterDocIndex()"><option value="">全部社团</option></select>'+
     '<select id="docCatFilter" class="doc-filter-select" style="padding:8px 12px;border-radius:8px;border:1px solid #eee;background:#fafaff;font-size:0.82em" onchange="filterDocIndex()"><option value="">全部分类</option></select>'+
-    '<button class="btn doc-rebuild-btn" style="background:#f0f0f8;color:#6b6d8a;white-space:nowrap" onclick="rebuildDocIndex()">重建索引</button>'+
+    '<button class="btn doc-rebuild-btn" style="background:#f0f0f8;color:#6b6d8a;white-space:nowrap" onclick="rebuildDocIndex()">重建语义索引</button>'+
     '</div>'+
     '<div id="docAiSummary" style="display:none;margin-bottom:12px;padding:12px 16px;background:linear-gradient(135deg,#667eea,#764ba2);border-radius:12px;color:#fff;font-size:0.84em;line-height:1.6"></div>'+
     '<div id="docStatsBar" style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap"></div>'+
-    '<div id="docResults"><div class="empty">输入关键词开始搜索，或点击"重建索引"初始化资料库</div></div>';
+    '<div id="docResults"><div class="empty">输入关键词开始语义搜索，或点击"重建语义索引"初始化向量库</div></div>';
 }
 
 function alertCenterPage(){
@@ -3224,10 +3228,39 @@ function postTreeHole(){
         else{var sel=document.getElementById('thClubSelect');club=sel?sel.value:''}
         if(!club){toast('请选择社团','error');return}
     }
+    // NLP 预检查：发布前调用 NLP 模型分析内容（隐喻/骚扰/隐晦违规检测）
+    var nlpBtn=document.getElementById('thPostBtn');var origText='';
+    if(nlpBtn){origText=nlpBtn.innerHTML;nlpBtn.innerHTML='🔍 NLP分析中...';nlpBtn.disabled=true}
+    fetch(api+'/api/tree-hole/nlp-check',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:content})})
+    .then(function(r){return r.json()}).then(function(res){
+        if(nlpBtn){nlpBtn.innerHTML=origText;nlpBtn.disabled=false}
+        if(res.error){toast(res.error,'error');return}
+        var a=res.analysis||{};
+        if(a.safe===false){
+            // 违规拦截，显示详细原因
+            var vMap={'metaphor_metaphor':'隐喻违规','harassment':'骚扰内容','obscene':'色情低俗','insult':'辱骂攻击','advertise':'广告引流','spam':'垃圾信息'};
+            var vs=a.violations||[];var labels=vs.map(function(v){return vMap[v]||v});
+            var msg='🚫 内容审核未通过'+(labels.length?('('+labels.join('、')+')'):'')+'\n'+(a.reason||'检测到隐晦违规内容');
+            toast(msg,'error');return;
+        }
+        // 安全校验通过，执行发布
+        doPostTreeHole(content,scope,club);
+    }).catch(function(){
+        if(nlpBtn){nlpBtn.innerHTML=origText;nlpBtn.disabled=false}
+        // NLP 服务异常时降级直接发布（后端会再次审核）
+        doPostTreeHole(content,scope,club);
+    });
+}
+
+function doPostTreeHole(content,scope,club){
     fetch(api+'/api/tree-hole',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:content,scope:scope,clubName:club})})
     .then(function(r){return r.json()}).then(function(res){
         if(res.error){toast(res.error,'error');return}
-        toast('发表成功','success');document.getElementById('thContent').value='';loadTreeHole();
+        var extra='';
+        if(res.sentiment==='positive'){extra='，情感😊积极'}
+        else if(res.sentiment==='negative'){extra='，情感😔低落'}
+        else if(res.sentiment==='toxic'){extra='，情感⚠️负面'}
+        toast('发表成功'+extra,'success');document.getElementById('thContent').value='';loadTreeHole();
     }).catch(function(){toast('发表失败','error')});
 }
 
@@ -5614,10 +5647,14 @@ function renderActCarousel(data){
     pages.forEach(function(page){
         h+='<div class="act-carousel-page">';
         page.forEach(function(d){
-            var icon='🎯';
-            if(d.clubName){icon=d.clubName[0]}
+            var emblemHtml='<span>'+esc(d.clubName?d.clubName[0]:'🎯')+'</span>';
+            var actIconStyle='';
+            if(d.emblemUrl){
+                emblemHtml='<img src="'+d.emblemUrl+'" style="width:100%;height:100%;border-radius:10px;object-fit:cover" />';
+                actIconStyle=' style="background:none"';
+            }
             h+='<div class="act-card" onclick="showMaterialDetail(\''+esc(d.groupId)+'\')">';
-            h+='<div class="act-icon">'+esc(icon)+'</div>';
+            h+='<div class="act-icon"'+actIconStyle+'>'+emblemHtml+'</div>';
             h+='<div class="act-info">';
             h+='<div class="act-title">'+esc(d.title||d.clubName+'的活动')+'</div>';
             h+='<div class="act-meta"><span class="act-club">'+esc(d.clubName||'')+'</span> · '+esc(d.time||'')+'</div>';
@@ -6410,12 +6447,19 @@ function autoSelectExcellent(){
 }
 
 function saveExcellentClubs(){
-    fetch(api+'/api/excellent-clubs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clubs:excellentSelected})})
+    var clubsData=excellentSelected.map(function(cn){
+        var sc=(excellentScoreData||[]).find(function(d){return d.clubName===cn});
+        if(sc){
+            return {clubName:cn,starRating:sc.starRating||0,activityCount:sc.activityCount||0,teacherGuidedCount:sc.teacherGuidedCount||0,materialApprovedCount:sc.materialApprovedCount||0,excellentActivityCount:sc.excellentActivityCount||0,combinedScore:sc.combinedScore||0};
+        }
+        return {clubName:cn};
+    });
+    fetch(api+'/api/excellent-clubs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({clubs:clubsData})})
     .then(function(r){return r.json()}).then(function(res){
         if(res.success){
             excellentScoreData=null;
             renderExcellentSelect();
-            toast('优秀社团保存成功','success');
+            toast('优秀社团保存成功，评分数据已入库','success');
         }
         else{toast(res.error||'保存失败','error')}
     }).catch(function(){toast('保存失败','error')});
@@ -7580,7 +7624,8 @@ function renderDocResults(items){
         h+='<div style="padding:12px 14px;background:#fafaff;border-radius:10px;border:1px solid #f0f0f8;margin-bottom:6px">';
         h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">';
         h+='<div style="font-weight:600;color:#1a1a2e;font-size:0.88em">'+esc(item.file_name||item.description||'未知文件')+'</div>';
-        if(item.relevance>0)h+='<span style="font-size:0.7em;color:#667eea;background:rgba(102,126,234,0.06);padding:2px 6px;border-radius:4px">相关度 '+item.relevance+'</span>';
+        if(item.search_type==='semantic'&&item.similarity!==undefined){h+='<span style="font-size:0.7em;color:#00b894;background:rgba(0,184,148,0.08);padding:2px 6px;border-radius:4px">语义相似度 '+(item.similarity*100).toFixed(1)+'%</span>';}
+        else if(item.relevance>0)h+='<span style="font-size:0.7em;color:#667eea;background:rgba(102,126,234,0.06);padding:2px 6px;border-radius:4px">相关度 '+item.relevance+'</span>';
         h+='</div>';
         if(item.description&&item.file_name)h+='<div style="font-size:0.78em;color:#6b6d8a;margin-bottom:4px">'+esc(item.description.substring(0,100))+'</div>';
         h+='<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">';
@@ -7610,11 +7655,17 @@ function renderDocResults(items){
 }
 
 function rebuildDocIndex(){
-    if(!confirm('重建索引将重新扫描所有文件并更新标签，确认？'))return;
+    if(!confirm('重建语义索引将重新扫描所有文件，调用 LLM 生成同义词标签 + 调用嵌入模型生成语义向量。文件较多时可能耗时较长，确认？'))return;
+    var btn=document.querySelector('.doc-rebuild-btn');if(btn){btn.disabled=true;btn.textContent='重建中...';}
     fetch(api+'/api/agent/doc-index/rebuild',{method:'POST'}).then(function(r){return r.json()}).then(function(res){
-        if(res.success){toast('索引重建完成，共索引 '+res.indexed+' 份文件','success');docIndexInited=false;initDocIndexPage()}
+        if(btn){btn.disabled=false;btn.textContent='重建语义索引';}
+        if(res.success){
+            var msg='索引重建完成，共索引 '+res.indexed+' 份文件';
+            if(res.embedded!==undefined)msg+='，其中 '+res.embedded+' 份已生成语义向量';
+            toast(msg,'success');docIndexInited=false;initDocIndexPage();
+        }
         else toast('索引重建失败','error');
-    });
+    }).catch(function(){if(btn){btn.disabled=false;btn.textContent='重建语义索引';}toast('索引重建失败','error')});
 }
 
 function checkAlerts(){
@@ -7672,6 +7723,6 @@ function loadInsightReport(){
     <div class="modal-box" id="toolModalContent"></div>
 </div>
 <style>.modal-bg{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.3);backdrop-filter:blur(4px);z-index:10001;justify-content:center;align-items:center}.modal-bg.show{display:flex}.modal-box{background:#fff;border:1px solid #f0f0f8;border-radius:14px;padding:24px;width:90%;max-width:600px;max-height:80vh;overflow-y:auto;box-shadow:0 12px 40px rgba(0,0,0,0.1)}.modal-box h3{font-size:0.95em;color:#1a1a2e;margin-bottom:14px}</style>
-<script src="/ai-chat.js?v=4"></script>
+<script src="/ai-chat.js?v=5"></script>
 </body>
 </html>

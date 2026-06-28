@@ -1,4 +1,4 @@
-﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
+﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -1767,16 +1767,31 @@ function submitCloseSession(){
         }).catch(function(){resolve()});
     }):Promise.resolve();
     Promise.all([uploadPhoto,uploadSummary]).then(function(){
+        if(photoPath){statusEl.textContent='🔍 智能识别活动照片中...';}
         return fetch(api+'/api/checkin-sessions/'+closingSessionId,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'close',completionPhoto:photoPath,summaryPath:summaryPath,summaryText:summaryText})});
     }).then(function(r3){if(!r3)return null;return r3.json()}).then(function(res3){
         if(!res3)return;
-        if(res3.error){toast(res3.error,'error');return}
+        if(res3.error){
+            statusEl.textContent='';
+            if(res3.photo_check_failed){
+                toast(res3.error,'error');
+                // 识别失败：清除已拍照片，允许重新拍摄/上传
+                capturedPhotoBlob=null;
+                var preview=document.getElementById('capturedPreview');
+                if(preview){preview.style.display='none';}
+                var camView=document.getElementById('cameraView');
+                if(camView){camView.style.display='block';startCamera();}
+                return;
+            }
+            toast(res3.error,'error');return;
+        }
+        statusEl.textContent='';
         toast('活动材料已提交！','success');
         closeCloseModal();
         document.getElementById('checkinQrCard').style.display='none';
         currentCheckinId=null;
         loadCheckinSessions();
-    }).catch(function(e){toast('操作失败，请重试','error')});
+    }).catch(function(e){statusEl.textContent='';toast('操作失败，请重试','error')});
 }
 function deleteCheckin(){
     if(!currentCheckinId)return;if(!confirm('确定删除该活动及所有签到记录？此操作不可恢复！'))return;
@@ -2797,6 +2812,9 @@ setTimeout(pollClubNotifBadge,2000);
         <h3 style="font-size:1em;color:#1a1a2e;margin-bottom:16px">📝 提交活动材料</h3>
         <div style="background:rgba(102,126,234,0.04);border:1px solid rgba(102,126,234,0.1);border-radius:8px;padding:10px;margin-bottom:14px;font-size:0.78em;color:#667eea">
             💡 活动结束后需上传活动照片和活动总结，未上传将标记为不规范社团活动。至少上传一项才能提交。<span id="closeTeacherHint" style="color:#e84393"></span>
+        </div>
+        <div style="background:rgba(243,156,18,0.06);border:1px solid rgba(243,156,18,0.2);border-radius:8px;padding:8px 10px;margin-bottom:14px;font-size:0.74em;color:#f39c12">
+            🔍 活动照片将进行 AI 智能识别，未识别到人物的照片将无法结束活动，请拍摄包含活动参与人员的现场照片。
         </div>
         <div style="margin-bottom:14px">
             <label style="display:block;color:#6b6d8a;font-size:0.76em;margin-bottom:6px;font-weight:600">📸 活动结束照片（现场拍摄）</label>

@@ -200,6 +200,7 @@ body{font-family:'Microsoft YaHei','PingFang SC',sans-serif;background:#f4f5fb;m
                     <option value="honor">🏆 一类：社团校内外荣誉奖项</option>
                     <option value="activity">🎯 二类：校社联活动参与情况</option>
                     <option value="innovation">💡 三类：创新亮点</option>
+                    <option value="other">📋 四类：其他</option>
                 </select>
             </div>
             <div id="categoryHint" style="display:none;background:rgba(0,184,148,0.08);border:1px solid rgba(0,184,148,0.2);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:0.82em;color:#4a4d6a;line-height:1.7"></div>
@@ -324,7 +325,8 @@ var currentCategory='';
 var categoryHints={
     'honor':'<b>🏆 一类：社团校内外荣誉奖项</b><br>📌 格式要求：<b>颁发单位+荣誉全称+年/月/日</b><br>📎 图片要求：电子版荣誉证书/软件扫描图',
     'activity':'<b>🎯 二类：校社联活动参与情况</b><br>📌 例如：百团大战、社团展演、"一站式"学生社区开展活动情况等',
-    'innovation':'<b>💡 三类：创新亮点</b><br>📌 突出本学期核心创新点，如"引入\'活动众筹\'模式筹集物资，提升成员参与感；开发社团专属小程序，反馈一体化"，结合数据说明效果'
+    'innovation':'<b>💡 三类：创新亮点</b><br>📌 突出本学期核心创新点，如"引入\'活动众筹\'模式筹集物资，提升成员参与感；开发社团专属小程序，反馈一体化"，结合数据说明效果',
+    'other':'<b>📋 四类：其他</b><br>📌 不属于以上三类的材料，请在此类别上传，并在活动总结中说明材料内容'
 };
 
 function onCategoryChange(){
@@ -434,7 +436,7 @@ document.getElementById('btnSubmit').addEventListener('click',function(){
     var title=document.getElementById('titleInput').value.trim();
     var body=bodyQuill?bodyQuill.root.innerHTML:'';
     var groupId='g_'+Date.now()+'_'+Math.random().toString(36).substr(2,6);
-    var completed=0,total=selectedPhotos.length;
+    var completed=0,failed=0,total=selectedPhotos.length;
     selectedPhotos.forEach(function(file){
         var descPrefix='[照片]';
         if(!file.type.startsWith('image/')){
@@ -445,20 +447,23 @@ document.getElementById('btnSubmit').addEventListener('click',function(){
         }
         var fd=new FormData();fd.append('file',file);fd.append('description',descPrefix+title);fd.append('groupId',groupId);fd.append('category',currentCategory);
         fetch(api+'/api/club-upload/'+currentToken,{method:'POST',body:fd}).then(function(r){return r.json()}).then(function(res){
+            if(!res.success){failed++}
             completed++;
             if(completed===total){
+                if(failed>0){self.disabled=false;toast('提交失败，'+failed+'个文件上传失败','error');return}
                 var summary=title+'\n\n'+body;
                 var sfd=new FormData();var blob=new Blob([summary],{type:'text/plain'});
                 sfd.append('file',blob,'活动总结_'+title+'.txt');sfd.append('description','[总结]'+title.replace(/\|\|\|/g,'｜')+'|||'+body);sfd.append('groupId',groupId);sfd.append('category',currentCategory);
-                fetch(api+'/api/club-upload/'+currentToken,{method:'POST',body:sfd}).then(function(r){return r.json()}).then(function(){
+                fetch(api+'/api/club-upload/'+currentToken,{method:'POST',body:sfd}).then(function(r2){return r2.json()}).then(function(res2){
+                    if(!res2.success){self.disabled=false;toast('提交失败：'+(res2.error||'总结上传失败'),'error');return}
                     toast('材料提交成功，等待管理员审批','success');
                     document.getElementById('titleInput').value='';if(bodyQuill)bodyQuill.setText('');
                     selectedPhotos=[];renderPhotoPreview();document.getElementById('photoInput').value='';
                     document.getElementById('categorySelect').value='';currentCategory='';document.getElementById('categoryHint').style.display='none';
                     self.disabled=true;loadMyMaterials();
-                });
+                }).catch(function(){self.disabled=false;toast('提交失败，网络错误','error')});
             }
-        }).catch(function(){completed++;if(completed===total){self.disabled=false;toast('提交失败','error')}});
+        }).catch(function(){failed++;completed++;if(completed===total){self.disabled=false;toast('提交失败，网络错误','error')}});
     });
 });
 

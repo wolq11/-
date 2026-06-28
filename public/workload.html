@@ -3,6 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <title>工作量统计</title>
     <link rel="icon" href="images/1.png" type="image/png">
 <style>
@@ -245,7 +248,7 @@ function buildUI(){
 function fetchMyClubs(cb){
     fetch(api+'/api/workload/my-clubs').then(function(r){return r.json()}).then(function(res){
         if(!res.success){if(cb)cb();return}
-        myClubs=res.clubs||[];
+        myClubs=res.data||[];
         if(myClubs.length>1){
             var sel=document.getElementById('clubSelector');
             sel.innerHTML='';
@@ -291,10 +294,10 @@ function switchTab(id,btn){
 function loadMyStats(){
     var url=api+'/api/workload/club-stats';
     if(selectedClub)url+='?club='+encodeURIComponent(selectedClub);
-    fetch(url).then(function(r){return r.json()}).then(function(res){
+    fetch(url,{cache:'no-store'}).then(function(r){return r.json()}).then(function(res){
         if(!res.success)return;
         var me=res.data.find(function(d){return d.user_id===currentUser.id});
-        var actScore=me?me.activity_score:0;
+        var actScore=me?(me.activity_count!==undefined?me.activity_count:me.activity_score):0;
         var otherScore=me?me.other_score:0;
         var total=me?me.total_score:0;
         var h='<div class="card"><div class="card-title">📊 我的工作量总览'+(selectedClub?' <span class="badge">'+esc(selectedClub)+'</span>':'')+'</div>';
@@ -416,16 +419,15 @@ function submitWorkload(){
     var score=document.getElementById('wlScore').value;
     if(!itemName){toast('请填写活动/事项名称','error');return}
     if(!score||parseFloat(score)<=0){toast('请输入有效的分数','error');return}
-    var payload={item_name:itemName,score:parseFloat(score)};
-    if(selectedClub)payload.club_name=selectedClub;
+    var payload={item_name:itemName,score:parseFloat(score),club_name:selectedClub||''};
     fetch(api+'/api/workload/submit',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify(payload)
     }).then(function(r){return r.json()}).then(function(res){
         if(res.success){toast(res.message,'success');document.getElementById('wlItemName').value='';document.getElementById('wlScore').value='';loadMyStats();loadMyHistory()}
-        else toast(res.error,'error');
-    });
+        else toast(res.error||'提交失败','error');
+    }).catch(function(){toast('提交失败，网络错误','error')});
 }
 
 function loadMyHistory(){

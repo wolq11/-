@@ -468,6 +468,7 @@ function renderClubSwitch(){
 
 function switchClub(cn){
     currentClub=cn;
+    if(window.currentUser)window.currentUser.clubName=cn;
     renderClubSwitch();
     var sbUser=document.getElementById('sbUser');
     if(sbUser){
@@ -576,8 +577,11 @@ function loadTeacherHomeData(){
         var box=document.getElementById('homeActivities');if(!box)return;
         if(res.success&&res.data&&res.data.length){
             var h='';res.data.forEach(function(d){
-                h+='<div class="cn-item" style="cursor:pointer" onclick="showMaterialDetail(\''+esc(d.groupId)+'\')">';
-                h+='<div class="cn-title">'+esc(d.title||d.clubName+'的活动')+'</div><div class="cn-meta">'+esc(d.clubName||'')+' · '+esc(d.time||'')+'</div></div>';
+                var emblemHtml='<span style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center;font-size:0.88em;color:#fff;flex-shrink:0">'+esc((d.clubName||'社')[0])+'</span>';
+                if(d.emblemUrl){emblemHtml='<img src="'+d.emblemUrl+'" style="width:32px;height:32px;border-radius:8px;object-fit:cover;flex-shrink:0" />'}
+                h+='<div class="cn-item" style="cursor:pointer;display:flex;align-items:center;gap:10px" onclick="showMaterialDetail(\''+esc(d.groupId)+'\')">';
+                h+=emblemHtml;
+                h+='<div style="flex:1;min-width:0"><div class="cn-title">'+esc(d.title||d.clubName+'的活动')+'</div><div class="cn-meta">'+esc(d.clubName||'')+' · '+esc(d.time||'')+'</div></div></div>';
             });box.innerHTML=h;
         }else{
             fetch(api+'/api/all-materials').then(function(r2){return r2.json()}).then(function(res2){
@@ -585,8 +589,9 @@ function loadTeacherHomeData(){
                 var approved=res2.data.filter(function(m){return m.status==='approved'}).slice(0,8);
                 if(!approved.length){box.innerHTML='<div class="empty">暂无优秀活动</div>';return}
                 var h='';approved.forEach(function(m){
-                    h+='<div class="cn-item" style="cursor:pointer" onclick="showMaterialDetail(\''+esc(m.groupId)+'\')">';
-                    h+='<div class="cn-title">'+esc(m.title||m.clubName+'的活动')+'</div><div class="cn-meta">'+esc(m.clubName||'')+' · '+esc(m.time||'')+'</div></div>';
+                    h+='<div class="cn-item" style="cursor:pointer;display:flex;align-items:center;gap:10px" onclick="showMaterialDetail(\''+esc(m.groupId)+'\')">';
+                    h+='<span style="width:32px;height:32px;border-radius:8px;background:linear-gradient(135deg,#667eea,#764ba2);display:flex;align-items:center;justify-content:center;font-size:0.88em;color:#fff;flex-shrink:0">'+esc((m.clubName||'社')[0])+'</span>';
+                    h+='<div style="flex:1;min-width:0"><div class="cn-title">'+esc(m.title||m.clubName+'的活动')+'</div><div class="cn-meta">'+esc(m.clubName||'')+' · '+esc(m.time||'')+'</div></div></div>';
                 });box.innerHTML=h;
             });
         }
@@ -845,15 +850,15 @@ function cadresPage(){
 }
 
 function loadCadres(){
-    var club=currentClub||'';
     var url=api+'/api/club-cadres';
-    if(club)url+='?club='+encodeURIComponent(club);
+    if(currentClub)url+='?club='+encodeURIComponent(currentClub);
     fetch(url).then(function(r){return r.json()}).then(function(res){
-        if(res.error){document.getElementById('cadreList').innerHTML='<div class="empty">'+esc(res.error)+'</div>';return}
+        if(res.error){var box=document.getElementById('cadreList');if(box)box.innerHTML='<div class="empty">'+esc(res.error)+'</div>';return}
         var list=res.data||[];
         var el=document.getElementById('cadreCount');
         if(el)el.textContent=list.length;
         var box=document.getElementById('cadreList');
+        if(!box)return;
         if(!list.length){box.innerHTML='<div class="empty">暂无骨干成员</div>';return}
         var h='<table class="data-table cadre-table"><thead><tr><th>姓名</th><th>学号</th><th>添加时间</th><th>操作</th></tr></thead><tbody>';
         list.forEach(function(c){
@@ -862,6 +867,9 @@ function loadCadres(){
         });
         h+='</tbody></table>';
         box.innerHTML=h;
+    }).catch(function(){
+        var box=document.getElementById('cadreList');
+        if(box)box.innerHTML='<div class="empty">加载失败，请重试</div>';
     });
 }
 
@@ -869,8 +877,8 @@ function addCadre(){
     var name=document.getElementById('cadreName').value.trim();
     var sid=document.getElementById('cadreSid').value.trim();
     if(!name||!sid){toast('请填写姓名和学号','error');return}
-    var body={real_name:name,student_id_num:sid};
-    if(currentClub)body.clubName=currentClub;
+    if(!currentClub){toast('未关联社团，无法添加骨干','error');return}
+    var body={real_name:name,student_id_num:sid,clubName:currentClub};
     fetch(api+'/api/club-cadres',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)})
     .then(function(r){return r.json()}).then(function(res){
         if(res.error){toast(res.error,'error');return}
@@ -878,7 +886,7 @@ function addCadre(){
         document.getElementById('cadreName').value='';
         document.getElementById('cadreSid').value='';
         loadCadres();
-    });
+    }).catch(function(){toast('添加失败，请重试','error')});
 }
 
 function removeCadre(id){
@@ -887,7 +895,7 @@ function removeCadre(id){
         if(res.error){toast(res.error,'error');return}
         toast('已移除','success');
         loadCadres();
-    });
+    }).catch(function(){toast('移除失败，请重试','error')});
 }
 
 function memberAnalysisPage(){
@@ -922,6 +930,14 @@ function financePage(){
 function feedbackPage(){
     return '<div class="pg-title">💬 问题反馈</div><div class="pg-desc">提交问题或建议</div>'+
     '<div class="card"><div class="card-title">📝 提交反馈</div>'+
+    '<div class="form-row"><div class="field"><label>问题类型 *</label><select id="fbType" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid #eee;font-size:0.88em">'+
+    '<option value="bug">系统故障</option>'+
+    '<option value="suggestion">功能建议</option>'+
+    '<option value="activity">活动问题</option>'+
+    '<option value="data">数据异常</option>'+
+    '<option value="account">账号问题</option>'+
+    '<option value="other">其他</option>'+
+    '</select></div></div>'+
     '<div class="form-row"><div class="field" style="flex:1 1 100%;min-width:100%"><label>反馈内容 *</label><textarea id="fbContent" placeholder="请描述您遇到的问题或建议" rows="4"></textarea></div></div>'+
     '<button class="btn btn-primary" onclick="submitFeedback()">📤 提交反馈</button></div>'+
     '<div class="card"><div class="card-title">📋 我的反馈</div>'+
@@ -1001,7 +1017,7 @@ function personalPage(){
 
 function loadCheckinSessions(){
     if(!currentClub&&!myClubs.length)return;
-    var clubs=myClubs.length?myClubs:[currentClub];
+    var clubs=currentClub?[currentClub]:myClubs;
     var allSessions=[];
     var pending=clubs.length;
     clubs.forEach(function(cn){
@@ -1009,6 +1025,9 @@ function loadCheckinSessions(){
             if(res.success&&res.data){
                 res.data.forEach(function(s){allSessions.push(s)});
             }
+            pending--;
+            if(pending===0)renderCheckinSessions(allSessions);
+        }).catch(function(){
             pending--;
             if(pending===0)renderCheckinSessions(allSessions);
         });
@@ -1139,14 +1158,18 @@ function loadCheckinSessionDetail(sid){
         if(found)return;
         fetch(api+'/api/checkin-sessions?club='+encodeURIComponent(cn)).then(function(r){return r.json()}).then(function(res){
             if(found)return;
-            if(!res.success||!res.data)return;
-            var session=res.data.find(function(s){return String(s.id)===String(sid)});
-            if(session){found=session}
+            if(res.success&&res.data){
+                var session=res.data.find(function(s){return String(s.id)===String(sid)});
+                if(session){found=session}
+            }
             pending--;
             if(pending===0||found){
                 if(!found){detail.innerHTML='<div class="empty">会话不存在</div>';return}
                 renderCheckinSessionDetail(found,detail);
             }
+        }).catch(function(){
+            pending--;
+            if(pending===0&&!found){detail.innerHTML='<div class="empty">会话不存在</div>'}
         });
     });
 }
@@ -1551,6 +1574,9 @@ function quickCheckinOrCheckout(){
             }
             pending--;
             if(pending===0)handleQuickCheckinOrCheckout(code,allSessions,resultBox);
+        }).catch(function(){
+            pending--;
+            if(pending===0)handleQuickCheckinOrCheckout(code,allSessions,resultBox);
         });
     });
 }
@@ -1571,6 +1597,8 @@ function handleQuickCheckinOrCheckout(code,allSessions,resultBox){
         }else{
             resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#6b6d8a">您已完成签到签退</div>';
         }
+    }).catch(function(){
+        resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#e74c3c">查询状态失败，请重试</div>';
     });
 }
 
@@ -1701,6 +1729,9 @@ function quickCheckoutOnly(){
             }
             pending--;
             if(pending===0)handleQuickCheckout(code,allSessions,resultBox);
+        }).catch(function(){
+            pending--;
+            if(pending===0)handleQuickCheckout(code,allSessions,resultBox);
         });
     });
 }
@@ -1721,6 +1752,8 @@ function handleQuickCheckout(code,allSessions,resultBox){
         }else{
             resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#e74c3c;font-weight:600">您尚未签到，请先签到</div>';
         }
+    }).catch(function(){
+        resultBox.innerHTML='<div style="padding:12px;text-align:center;color:#e74c3c">查询状态失败，请重试</div>';
     });
 }
 
@@ -1798,6 +1831,11 @@ function startTeacherScanner(){
     var video=document.getElementById('teacherScanVideo');
     var canvas=document.getElementById('teacherScanCanvas');
     if(!video||!canvas)return;
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+        var res=document.getElementById('teacherScanResult');
+        if(res)res.innerHTML='<span style="color:#e74c3c">您的浏览器不支持摄像头扫码，请使用签到码方式</span>';
+        return;
+    }
     var constraints={video:{facingMode:'environment'}};
     navigator.mediaDevices.getUserMedia(constraints).then(function(stream){
         teacherScannerStream=stream;
@@ -1972,7 +2010,7 @@ function doTeacherDirectCheckout(sid){
 
 function loadActivityList(){
     if(!currentClub&&!myClubs.length)return;
-    var clubs=myClubs.length?myClubs:[currentClub];
+    var clubs=currentClub?[currentClub]:myClubs;
     var actStart=(document.getElementById('actStartDate')||{}).value||'';
     var actEnd=(document.getElementById('actEndDate')||{}).value||'';
     var allSessions=[];
@@ -2039,7 +2077,7 @@ function toggleActivityDetail(sid){
 
 function loadActivitySessionDetail(sid){
     var detail=document.getElementById('actDetail-'+sid);
-    var clubs=myClubs.length?myClubs:[currentClub];
+    var clubs=currentClub?[currentClub]:myClubs;
     var found=null;
     var pending=clubs.length;
     clubs.forEach(function(cn){
@@ -2089,9 +2127,10 @@ function loadGuidanceStats(){
     var gdStart=(document.getElementById('gdStartDate')||{}).value||'';
     var gdEnd=(document.getElementById('gdEndDate')||{}).value||'';
     var dp='';
+    if(currentClub)dp+=(dp?'&':'')+'club='+encodeURIComponent(currentClub);
     if(gdStart)dp+=(dp?'&':'')+'start_date='+encodeURIComponent(gdStart);
     if(gdEnd)dp+=(dp?'&':'')+'end_date='+encodeURIComponent(gdEnd);
-    fetch(api+'/api/teacher-guidance-stats?'+dp).then(function(r){return r.json()}).then(function(res){
+    fetch(api+'/api/teacher-guidance-stats?'+dp,{cache:'no-store'}).then(function(r){return r.json()}).then(function(res){
         if(!res.success)return;
         var data=res.data||{};
         var total=data.totalGuidance||0;
@@ -2105,7 +2144,7 @@ function loadGuidanceStats(){
             '<div class="stat-card"><div class="sc-num">'+totalHours+'</div><div class="sc-label">指导时长(h)</div></div>';
         renderGuidanceCharts(data);
     });
-    fetch(api+'/api/teacher-guidance-records?'+dp).then(function(r){return r.json()}).then(function(res){
+    fetch(api+'/api/teacher-guidance-records?'+dp,{cache:'no-store'}).then(function(r){return r.json()}).then(function(res){
         if(!res.success||!res.data||!res.data.length){document.getElementById('guidanceRecordList').innerHTML='<div class="empty">暂无指导记录</div>';return}
         var h='';
         res.data.forEach(function(rec){
@@ -2258,12 +2297,20 @@ function submitFinanceRecord(){
 function loadFeedbacks(){
     fetch(api+'/api/my-feedbacks').then(function(r){return r.json()}).then(function(res){
         if(!res.success||!res.data||!res.data.length){document.getElementById('feedbackList').innerHTML='<div class="empty">暂无反馈记录</div>';return}
+        var typeNames={'bug':'系统故障','suggestion':'功能建议','activity':'活动问题','data':'数据异常','account':'账号问题','other':'其他'};
+        var typeColors={'bug':'#e74c3c','suggestion':'#3498db','activity':'#f39c12','data':'#9b59b6','account':'#1abc9c','other':'#95a5a6'};
         var h='';
         res.data.forEach(function(fb){
             var statusCls=fb.status==='resolved'?'resolved':'pending';
             var statusText=fb.status==='resolved'?'✅ 已处理':'⏳ 待处理';
+            var t=fb.type||'other';
+            var tName=typeNames[t]||'其他';
+            var tColor=typeColors[t]||'#95a5a6';
             h+='<div class="feedback-item">';
+            h+='<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">';
+            h+='<span style="background:'+tColor+'18;color:'+tColor+';padding:2px 8px;border-radius:4px;font-size:0.76em;font-weight:600">'+esc(tName)+'</span>';
             h+='<span class="fb-status '+statusCls+'">'+statusText+'</span>';
+            h+='</div>';
             h+='<div class="fb-content">'+escHtml(fb.content||'')+'</div>';
             h+='<div class="fb-time">'+esc(fb.createdAt||'')+'</div>';
             if(fb.reply)h+='<div class="fb-reply">💬 '+escHtml(fb.reply)+'</div>';
@@ -2275,8 +2322,9 @@ function loadFeedbacks(){
 
 function submitFeedback(){
     var content=document.getElementById('fbContent').value.trim();
+    var fbType=(document.getElementById('fbType')||{}).value||'other';
     if(!content){toast('请输入反馈内容','error');return}
-    fetch(api+'/api/submit-feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:content,clubName:currentClub})})
+    fetch(api+'/api/submit-feedback',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:content,type:fbType,clubName:currentClub})})
     .then(function(r){return r.json()}).then(function(res){
         if(res.error){toast(res.error,'error');return}
         toast('反馈提交成功','success');
@@ -2417,6 +2465,7 @@ function uploadAvatar(input){
 fetch(api+'/api/current-user').then(function(r){return r.json()}).then(function(res){
     if(!res.loggedIn||res.user.role!=='teacher'){window.location.replace('/');return}
     currentUser=res.user;
+    window.currentUser=currentUser;
     buildSidebar();
     startLocationWatch();
     pollTeacherAdminNotifyBadge();
@@ -2578,7 +2627,9 @@ function scoringReviewPage(){
 }
 
 function loadScoringReviewList(){
-    fetch(api+'/api/scoring/teacher-reviews').then(function(r){return r.json()}).then(function(res){
+    var srp='';
+    if(currentClub)srp='club='+encodeURIComponent(currentClub);
+    fetch(api+'/api/scoring/teacher-reviews'+(srp?'?'+srp:'')).then(function(r){return r.json()}).then(function(res){
         if(!res.success){document.getElementById('scoringReviewList').innerHTML='<div class="empty">加载失败</div>';return}
         var data=res.data;
         if(!data.length){document.getElementById('scoringReviewList').innerHTML='<div class="empty">暂无待审核的赋分</div>';return}
@@ -2701,6 +2752,41 @@ function scoringReviewAction(reviewId,action){
     if(action==='reject'){setTimeout(function(){ta.focus()},100)}
 }
 </script>
-<script src="/ai-chat.js?v=4"></script>
+<script src="/ai-chat.js?v=5"></script>
+<script>
+// 全屏模式自动恢复（从登录页跳转后）
+(function(){
+    if(window.self!==window.top)return; // 在iframe内不执行，由父页面管理全屏
+    function isFs(){return !!(document.fullscreenElement||document.webkitFullscreenElement)}
+    function enterFs(){
+        var el=document.documentElement;
+        var req=el.requestFullscreen||el.webkitRequestFullscreen;
+        if(req){req.call(el).then(function(){sessionStorage.setItem('fullscreenMode','1')}).catch(function(){})}
+    }
+    if(sessionStorage.getItem('fullscreenMode')==='1' && !isFs()){
+        var hint=document.createElement('div');
+        hint.id='fsHint';
+        hint.style.cssText='position:fixed;top:0;left:0;right:0;z-index:99999;background:linear-gradient(180deg,rgba(0,0,0,0.75),rgba(0,0,0,0.55));color:#fff;text-align:center;padding:12px 16px;font-size:14px;cursor:pointer;font-family:Microsoft YaHei,sans-serif;letter-spacing:0.5px';
+        hint.innerHTML='🖥️ 点击此处或页面任意位置进入全屏模式';
+        hint.onclick=function(){enterFs()};
+        document.body.appendChild(hint);
+        var firstClick=function(){
+            if(!isFs()){enterFs()}
+            document.removeEventListener('click',firstClick);
+        };
+        setTimeout(function(){document.addEventListener('click',firstClick)},200);
+    }
+    document.addEventListener('fullscreenchange',function(){
+        if(!isFs()){
+            sessionStorage.removeItem('fullscreenMode');
+            var h=document.getElementById('fsHint');
+            if(h)h.remove();
+        }else{
+            var h=document.getElementById('fsHint');
+            if(h)h.remove();
+        }
+    });
+})();
+</script>
 </body>
 </html>

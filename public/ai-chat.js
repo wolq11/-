@@ -2,6 +2,14 @@
 if(window._aiChatLoaded)return;
 window._aiChatLoaded=true;
 var inIframe=(window.self!==window.top);
+// 全屏应用iframe内时（父页面有#appFrame），视为顶层页面让AI助手正常工作
+if(inIframe){
+    try{
+        if(window.parent&&window.parent.document&&window.parent.document.getElementById('appFrame')){
+            inIframe=false;
+        }
+    }catch(e){}
+}
 if(inIframe)return;
 var api=window.location.origin;
 var chatOpen=false;
@@ -22,7 +30,9 @@ var TOOL_ICONS={
     generate_report:'📑',
     ai_generate:'🎨',
     recommend:'💡',
-    analyze_photo:'🖼️'
+    analyze_photo:'🖼️',
+    remind_non_voters:'🗳️',
+    generate_dashboard:'📊'
 };
 var TOOL_NAMES={
     check_approval:'审批查询',
@@ -38,14 +48,16 @@ var TOOL_NAMES={
     generate_report:'报告生成',
     ai_generate:'AI生成',
     recommend:'智能推荐',
-    analyze_photo:'图片分析'
+    analyze_photo:'图片分析',
+    remind_non_voters:'催促未投票',
+    generate_dashboard:'可视化看板'
 };
 
 var PAGE_SUGGESTIONS={
     'upload.html':{admin:[{text:'📋 待审批材料',msg:'帮我看看有哪些待审批的材料'},{text:'🔍 搜文件',msg:'搜索活动相关文件'}],default:[{text:'📋 待审批材料',msg:'帮我看看有哪些待审批的材料'},{text:'🔍 搜文件',msg:'搜索活动相关文件'}]},
     'workload.html':{admin:[{text:'📋 工作量审核',msg:'查看工作量审核情况'},{text:'📊 数据报告',msg:'生成工作量统计报告'}],teacher:[{text:'📋 工作量审核',msg:'查看待审核的工作量'},{text:'📊 指导情况',msg:'查看指导老师指导情况'}],default:[{text:'📋 工作量审核',msg:'查看工作量审核情况'},{text:'📊 数据报告',msg:'生成数据分析报告'}]},
     'dashboard.html':{admin:[{text:'🏫 社团列表',msg:'有哪些社团'},{text:'⚠️ 系统预警',msg:'系统有什么预警吗'},{text:'📊 全校报告',msg:'生成全校数据分析报告'}],user:[{text:'💰 财务数据',msg:'查看社团财务数据'},{text:'📊 数据报告',msg:'生成社团数据分析报告'},{text:'✨ 创建活动',msg:'帮我创建一个新活动'}],teacher:[{text:'📋 赋分审核',msg:'查看待审核的赋分'},{text:'📊 指导情况',msg:'查看指导情况'}],student:[{text:'💡 推荐社团',msg:'推荐我可能感兴趣的社团'},{text:'🎯 推荐活动',msg:'推荐我可能感兴趣的活动'},{text:'📊 我的数据',msg:'查看我的工作量和学分'}]},
-    'club-tools.html':{user:[{text:'💰 财务数据',msg:'查看社团财务数据'},{text:'📊 数据报告',msg:'生成数据分析报告'},{text:'✨ 创建活动',msg:'帮我创建一个新活动'},{text:'📢 发通知',msg:'给社团成员发通知'}],teacher:[{text:'📋 赋分审核',msg:'查看待审核的赋分'},{text:'📊 数据报告',msg:'生成数据分析报告'}],student:[{text:'📊 我的数据',msg:'查看我的工作量和学分'},{text:'💡 推荐活动',msg:'推荐我可能感兴趣的活动'}],default:[{text:'💰 财务数据',msg:'查看社团财务数据'},{text:'📊 数据报告',msg:'生成数据分析报告'}]},
+    'club-tools.html':{user:[{text:'📊 成员活跃度',msg:'我想看成员活跃度的可视化看板'},{text:'💰 财务数据',msg:'查看社团财务数据'},{text:'📊 数据报告',msg:'生成数据分析报告'},{text:'✨ 创建活动',msg:'帮我创建一个新活动'},{text:'📢 发通知',msg:'给社团成员发通知'},{text:'🗳️ 催促未投票',msg:'催促未投票的成员'}],teacher:[{text:'📋 赋分审核',msg:'查看待审核的赋分'},{text:'📊 数据报告',msg:'生成数据分析报告'}],student:[{text:'📊 我的数据',msg:'查看我的工作量和学分'},{text:'💡 推荐活动',msg:'推荐我可能感兴趣的活动'}],default:[{text:'💰 财务数据',msg:'查看社团财务数据'},{text:'📊 数据报告',msg:'生成数据分析报告'}]},
     'club-detail.html':{default:[{text:'👥 成员数据',msg:'查看社团成员数据'},{text:'🎯 活动数据',msg:'查看社团活动数据'}]},
     'stats.html':{admin:[{text:'📊 数据报告',msg:'生成数据分析报告'},{text:'🏫 社团列表',msg:'有哪些社团'}],default:[{text:'📊 数据报告',msg:'生成数据分析报告'},{text:'🏫 社团列表',msg:'有哪些社团'}]},
     'club-teacher.html':{teacher:[{text:'📋 赋分审核',msg:'查看待审核的赋分'},{text:'📊 指导情况',msg:'查看指导情况'},{text:'👥 成员分析',msg:'分析社团成员活跃度'},{text:'⚠️ 预警检查',msg:'检查系统预警'}],default:[{text:'📋 赋分审核',msg:'查看待审核的赋分'},{text:'📊 数据报告',msg:'生成数据分析报告'}]},
@@ -329,7 +341,7 @@ function loadHistory(){
             var body=document.getElementById('fcBody');
             body.innerHTML='';
             d.history.forEach(function(m){
-                appendMessage(m.role,m.content,null,false);
+                appendMessage(m.role,m.content,m.tool_calls||null,false);
             });
             scrollBottom();
         }else{
@@ -337,6 +349,101 @@ function loadHistory(){
         }
     }).catch(function(){
         showWelcome();
+    });
+}
+
+// === 可视化看板渲染 ===
+var chartJsLoaded=false;
+var chartJsLoading=false;
+function ensureChartJs(callback){
+    if(typeof Chart!=='undefined'){chartJsLoaded=true;callback();return;}
+    if(chartJsLoaded){callback();return;}
+    if(chartJsLoading){
+        var waitTimer=setInterval(function(){
+            if(typeof Chart!=='undefined'){clearInterval(waitTimer);chartJsLoaded=true;callback();}
+        },100);
+        return;
+    }
+    chartJsLoading=true;
+    var script=document.createElement('script');
+    script.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';
+    script.onload=function(){chartJsLoaded=true;chartJsLoading=false;callback();};
+    script.onerror=function(){chartJsLoading=false;callback();};
+    document.head.appendChild(script);
+}
+var CHART_COLORS=['rgba(54,162,235,0.7)','rgba(255,99,132,0.7)','rgba(75,192,192,0.7)','rgba(255,206,86,0.7)','rgba(153,102,255,0.7)','rgba(255,159,64,0.7)','rgba(199,199,199,0.7)','rgba(83,102,255,0.7)'];
+var CHART_BORDERS=['rgba(54,162,235,1)','rgba(255,99,132,1)','rgba(75,192,192,1)','rgba(255,206,86,1)','rgba(153,102,255,1)','rgba(255,159,64,1)','rgba(199,199,199,1)','rgba(83,102,255,1)'];
+function renderDashboard(bubble,toolCalls){
+    if(!toolCalls)return;
+    toolCalls.forEach(function(tc){
+        if(tc.name!=='generate_dashboard'||!tc.dashboard)return;
+        var dash=tc.dashboard;
+        var dashDiv=document.createElement('div');
+        dashDiv.className='fc-dashboard';
+        dashDiv.style.cssText='margin-top:10px;padding:12px;border:1px solid #e0e0e0;border-radius:10px;background:#fafafa;';
+        var titleDiv=document.createElement('div');
+        titleDiv.style.cssText='font-weight:bold;font-size:14px;color:#333;margin-bottom:8px;display:flex;align-items:center;gap:6px;';
+        titleDiv.innerHTML='📊 '+esc(dash.title||'可视化看板');
+        dashDiv.appendChild(titleDiv);
+        if(dash.summary){
+            var sumDiv=document.createElement('div');
+            sumDiv.style.cssText='font-size:12px;color:#666;margin-bottom:10px;';
+            sumDiv.textContent=dash.summary;
+            dashDiv.appendChild(sumDiv);
+        }
+        var charts=dash.charts||[];
+        charts.forEach(function(chartCfg,idx){
+            var chartWrapper=document.createElement('div');
+            chartWrapper.style.cssText='margin-bottom:12px;';
+            var chartTitle=document.createElement('div');
+            chartTitle.style.cssText='font-size:12px;font-weight:600;color:#555;margin-bottom:4px;';
+            chartTitle.textContent=chartCfg.title||'';
+            chartWrapper.appendChild(chartTitle);
+            var canvas=document.createElement('canvas');
+            canvas.id='fc-chart-'+Date.now()+'-'+idx;
+            canvas.style.cssText='max-height:200px;width:100%!important;';
+            chartWrapper.appendChild(canvas);
+            dashDiv.appendChild(chartWrapper);
+            ensureChartJs(function(){
+                if(typeof Chart==='undefined'){
+                    chartWrapper.innerHTML='<div style="color:#999;font-size:12px;">图表库加载失败，请刷新重试</div>';
+                    return;
+                }
+                var datasets=(chartCfg.datasets||[]).map(function(ds,i){
+                    var colorIdx=i%CHART_COLORS.length;
+                    var baseColor=CHART_COLORS[colorIdx];
+                    var borderColor=CHART_BORDERS[colorIdx];
+                    var chartType=chartCfg.chart_type||'bar';
+                    var dataset={
+                        label:ds.label||('数据'+(i+1)),
+                        data:ds.data||[],
+                        backgroundColor:chartType==='line'?baseColor:(chartType==='doughnut'||chartType==='pie'?CHART_COLORS:baseColor),
+                        borderColor:ds.borderColor||borderColor,
+                        borderWidth:2
+                    };
+                    if(chartType==='line'){dataset.fill=false;dataset.tension=ds.tension||0.3;}
+                    if(ds.yAxisID){dataset.yAxisID=ds.yAxisID;}
+                    return dataset;
+                });
+                var config={
+                    type:chartCfg.chart_type||'bar',
+                    data:{labels:chartCfg.labels||[],datasets:datasets},
+                    options:{
+                        responsive:true,
+                        maintainAspectRatio:false,
+                        plugins:{legend:{display:datasets.length>1,position:'top',labels:{font:{size:10}}},tooltip:{enabled:true}},
+                        scales:chartCfg.chart_type==='doughnut'||chartCfg.chart_type==='pie'?{}:{
+                            x:{ticks:{font:{size:9},maxRotation:45,minRotation:0},grid:{display:false}},
+                            y:{ticks:{font:{size:9}},grid:{color:'rgba(0,0,0,0.05)'}},
+                            y1:{position:'right',ticks:{font:{size:9}},grid:{display:false}}
+                        }
+                    }
+                };
+                try{new Chart(canvas.getContext('2d'),config);}
+                catch(ex){chartWrapper.innerHTML='<div style="color:#999;font-size:12px;">图表渲染失败</div>';}
+            });
+        });
+        bubble.appendChild(dashDiv);
     });
 }
 
@@ -367,10 +474,12 @@ function appendMessage(role,content,toolCalls,animate){
             typewriterEffect(bubble,html,Math.min(html.length*2,600),function(){
                 // 打字机动画完成后添加工具卡片
                 addToolCards(bubble,toolCalls);
+                renderDashboard(bubble,toolCalls);
             });
         }else{
             bubble.innerHTML=html;
             addToolCards(bubble,toolCalls);
+            renderDashboard(bubble,toolCalls);
         }
     }
 
